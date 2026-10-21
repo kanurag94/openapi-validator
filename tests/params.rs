@@ -434,3 +434,31 @@ fn exploded_object_with_nested_values() {
         "query.f/meta/k",
     );
 }
+
+// Documents that break a parameter MUST still load (refusing them would
+// refuse every call to the API); each break is a load warning and has a
+// fixed reading (see SPEC_DECISIONS.md).
+#[test]
+fn parameter_must_violations_load_with_warnings() {
+    let s = spec(
+        "/q/{id}",
+        r#"{"name": "id", "in": "path", "required": false, "schema": {"type": "integer"}},
+           {"name": "a", "in": "query", "schema": {"type": "integer"}, "content": {"application/json": {"schema": {"type": "string"}}}},
+           {"name": "b", "in": "query", "content": {"application/json": {"schema": {"type": "integer"}}, "text/plain": {}}},
+           {"name": "c", "in": "query", "schema": {"type": "string"}},
+           {"name": "c", "in": "query", "schema": {"type": "integer"}}"#,
+    );
+    let w: Vec<&str> = s.warnings().iter().map(|w| w.message.as_str()).collect();
+    assert!(w.iter().any(|m| m.contains("must be required")), "{w:?}");
+    assert!(
+        w.iter().any(|m| m.contains("both schema and content")),
+        "{w:?}"
+    );
+    assert!(w.iter().any(|m| m.contains("exactly one entry")), "{w:?}");
+    assert!(w.iter().any(|m| m.contains("duplicate parameter")), "{w:?}");
+    bad(get(&s, "/q/x", "", &[]), "path.id");
+    ok(get(&s, "/q/1", "a=5&b=5&c=5", &[]));
+    bad(get(&s, "/q/1", "a=x", &[]), "query.a");
+    bad(get(&s, "/q/1", "b=x", &[]), "query.b");
+    bad(get(&s, "/q/1", "c=x", &[]), "query.c");
+}

@@ -298,6 +298,28 @@ impl Builder<'_> {
             Some(Value::Bool(b)) => *b,
             _ => style == Style::Form,
         };
+        if p.get("schema").is_some() && p.get("content").is_some() {
+            // §4.8.12.2: a parameter MUST have schema or content, not both.
+            self.warn(
+                &pptr,
+                "parameter has both schema and content; schema is used",
+            );
+        }
+        if p.get("content")
+            .and_then(Value::as_object)
+            .is_some_and(|c| c.len() > 1)
+        {
+            self.warn(
+                &pptr,
+                "content must have exactly one entry; the first is used",
+            );
+        }
+        if location == In::Path && p.get("required") != Some(&Value::Bool(true)) {
+            self.warn(
+                &pptr,
+                "path parameters must be required; treated as required",
+            );
+        }
         let value = if let Some(s) = p.get("schema") {
             let id = self.roots.id(dir, &doc::join(&pptr, "schema"));
             ParamValue::Schema {
@@ -354,6 +376,7 @@ impl Builder<'_> {
                 continue;
             };
             let lptr = doc::join(cptr, "parameters");
+            let mut seen_here: Vec<(In, String)> = Vec::new();
             for (i, v) in list.iter().enumerate() {
                 let Some(p) = self.param(
                     v,
@@ -379,6 +402,22 @@ impl Builder<'_> {
                             q.name == p.name
                         }
                 };
+                let key = (
+                    p.location,
+                    if p.location == In::Header {
+                        p.name.to_ascii_lowercase()
+                    } else {
+                        p.name.clone()
+                    },
+                );
+                if seen_here.contains(&key) {
+                    // §4.8.10.1: the list MUST NOT hold duplicates.
+                    self.warn(
+                        &doc::join(&lptr, &i.to_string()),
+                        "duplicate parameter (same name and location); the last one is used",
+                    );
+                }
+                seen_here.push(key);
                 if let Some(pos) = out.iter().position(same) {
                     out[pos] = p;
                 } else {
