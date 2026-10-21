@@ -133,7 +133,7 @@ impl Param {
 // ---------------------------------------------------------------- shapes
 
 /// Follows `$ref` (3.0 ignores siblings) up to the chain limit.
-fn resolve<'a>(root: &'a Value, mut s: &'a Value) -> &'a Value {
+pub(crate) fn resolve<'a>(root: &'a Value, mut s: &'a Value) -> &'a Value {
     for _ in 0..doc::MAX_REF_CHAIN {
         match s
             .get("$ref")
@@ -240,7 +240,7 @@ fn default_style(location: In) -> Style {
     }
 }
 
-fn parse_style(s: &str) -> Option<Style> {
+pub(crate) fn parse_style(s: &str) -> Option<Style> {
     Some(match s {
         "matrix" => Style::Matrix,
         "label" => Style::Label,

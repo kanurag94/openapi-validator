@@ -54,6 +54,19 @@ impl MediaType {
         (self.ty == "application" && self.sub == "json") || self.sub.ends_with("+json")
     }
 
+    pub fn is_xml(&self) -> bool {
+        ((self.ty == "application" || self.ty == "text") && self.sub == "xml")
+            || self.sub.ends_with("+xml")
+    }
+
+    pub fn is_form(&self) -> bool {
+        self.ty == "application" && self.sub == "x-www-form-urlencoded"
+    }
+
+    pub fn is_multipart_form(&self) -> bool {
+        self.ty == "multipart" && self.sub == "form-data"
+    }
+
     /// How specifically `self`, used as a range, matches `actual`: 3 for the
     /// same type with matching parameters, 2 for the same type, 1 for
     /// `type/*`, 0 for `*/*`, `None` when it does not match.

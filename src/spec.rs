@@ -86,7 +86,7 @@ impl Spec {
         let version = doc::version(&root)?;
         let mut warnings = Vec::new();
         let doc_bases = base_paths(root.get("servers"), "#/servers", &mut warnings);
-        let mut b = Builder::new(&root);
+        let mut b = Builder::new(&root, version);
         let schemes = b.schemes()?;
         let doc_security = b.requirements(root.get("security"), "#/security", &schemes)?;
         let mut paths = PathIndex::default();

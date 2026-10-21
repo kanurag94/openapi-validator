@@ -2,13 +2,14 @@
 
 use serde_json::Value;
 
+use crate::body;
 use crate::http::Request;
 use crate::json;
 use crate::media::{best_match, MediaType};
 use crate::model::{Body, MediaEntry};
 use crate::params::{
-    decode, header_index, header_value, path_value, query_value, readings, split_cookies,
-    split_query, Found, In, Pair, Param, ParamValue,
+    coerce, decode, header_index, header_value, path_value, query_value, readings, split_cookies,
+    split_query, Found, In, Pair, Param, ParamValue, Shape, Types,
 };
 use crate::path::Vars;
 use crate::report::{ProblemKind, Report};
@@ -125,22 +126,48 @@ impl Spec {
         location: &str,
         report: &mut Report,
     ) {
-        if actual.is_json() {
-            let limits = json::Limits {
-                max_depth: self.options.max_body_depth,
-            };
-            match json::parse(bytes, limits) {
-                Ok(v) => {
-                    if let Some(id) = entry.schema {
-                        self.check_value(id, &v, location, ProblemKind::SchemaViolation, report);
-                    }
-                }
-                Err(e) => report.push(
-                    ProblemKind::MalformedBody,
-                    location,
-                    format!("the body is not valid JSON: {e}"),
-                ),
+        let depth = self.options.max_body_depth;
+        let parsed: Result<Option<Value>, String> = if actual.is_json() {
+            json::parse(bytes, json::Limits { max_depth: depth })
+                .map(Some)
+                .map_err(|e| format!("the body is not valid JSON: {e}"))
+        } else if actual.is_form() {
+            match std::str::from_utf8(bytes) {
+                Ok(t) => body::form(t, &entry.props, &entry.encodings, depth).map(Some),
+                Err(_) => Err("the body is not valid UTF-8".into()),
             }
+        } else if actual.is_multipart_form() {
+            body::multipart(bytes, actual, &entry.props, &entry.encodings, depth).map(Some)
+        } else if actual.is_xml() {
+            body::xml(bytes, actual, depth).map(|()| None)
+        } else if actual.ty == "text" {
+            body::text(bytes, actual).map(|t| Some(coerce_text(t, &entry.shape)))
+        } else {
+            // Other media types (binary, images, ...) are not parsed.
+            Ok(None)
+        };
+        match parsed {
+            Ok(Some(v)) => {
+                if let Some(id) = entry.schema {
+                    // JSON carries its own types; only values read from text
+                    // get a second, all-strings reading.
+                    if actual.is_json() {
+                        self.check_value(id, &v, location, ProblemKind::SchemaViolation, report);
+                        return;
+                    }
+                    let all = readings(v, &entry.shape);
+                    if all.len() > 1
+                        && all[1..]
+                            .iter()
+                            .any(|r| self.store.is_valid(id, r) == Ok(true))
+                    {
+                        return;
+                    }
+                    self.check_value(id, &all[0], location, ProblemKind::SchemaViolation, report);
+                }
+            }
+            Ok(None) => {}
+            Err(m) => report.push(ProblemKind::MalformedBody, location, m),
         }
     }
 
@@ -480,4 +507,13 @@ pub(crate) struct Declared {
     pub query: Vec<String>,
     pub headers: Vec<String>,
     pub cookies: Vec<String>,
+}
+
+/// A text body read as the schema's type allows (so `text/plain` "5" can
+/// meet an integer schema).
+fn coerce_text(t: String, shape: &Shape) -> Value {
+    match shape {
+        Shape::Primitive(types) if *types != Types::ANY => coerce(&t, *types),
+        _ => Value::String(t),
+    }
 }
