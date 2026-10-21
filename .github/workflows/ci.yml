@@ -45,3 +45,5 @@ jobs:
         with:
           key: ${{ matrix.toolchain }}
       - run: cargo test --workspace
+      - name: Stack and work limits (release)
+        run: cargo test --release --test limits

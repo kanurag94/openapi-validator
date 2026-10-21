@@ -126,7 +126,7 @@ impl Spec {
         location: &str,
         report: &mut Report,
     ) {
-        let depth = self.options.max_body_depth;
+        let depth = self.store.depth_limit(self.options.max_body_depth);
         let parsed: Result<Option<Value>, String> = if actual.is_json() {
             json::parse(bytes, json::Limits { max_depth: depth })
                 .map(Some)
@@ -260,7 +260,7 @@ impl Spec {
             match json::parse(
                 text.as_bytes(),
                 json::Limits {
-                    max_depth: self.options.max_body_depth,
+                    max_depth: self.store.depth_limit(self.options.max_body_depth),
                 },
             ) {
                 Ok(v) => v,

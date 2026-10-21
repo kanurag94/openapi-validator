@@ -17,7 +17,7 @@ use crate::format;
 use crate::number::{self, Decimal};
 
 const STEP_BUDGET: usize = 20_000;
-const MAX_DEPTH: usize = 192;
+const MAX_DEPTH: usize = 96;
 
 pub(crate) fn explain(
     store: &SchemaStore,

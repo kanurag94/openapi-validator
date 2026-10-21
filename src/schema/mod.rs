@@ -15,6 +15,7 @@
 //! `jsonschema` again for the branches of `anyOf`, `oneOf`, `not` and `if`.
 //! The explanation never changes the verdict.
 
+mod depth;
 pub(crate) mod explain;
 pub(crate) mod translate;
 
@@ -57,6 +58,8 @@ pub(crate) struct SchemaStore {
     response: DirStore,
     /// Compiled patterns by translated text, shared by both directions.
     patterns: RwLock<HashMap<String, Arc<regex::Regex>>>,
+    /// Longest in-place applicator chain in the document.
+    in_place_depth: usize,
 }
 
 pub(crate) struct StoreOptions {
@@ -224,6 +227,31 @@ impl SchemaStore {
         let mut roots = request_roots.clone();
         roots.extend(response_roots.iter().cloned());
         let t = translate::translate(root, version, &roots, &topts)?;
+        let starts: Vec<&Value> = roots
+            .iter()
+            .filter_map(|p| crate::doc::lookup(&t.resource, p))
+            .collect();
+        let m = depth::measure(&t.resource, &starts);
+        if m.depth > depth::MAX_IN_PLACE {
+            return Err(LoadError::Invalid {
+                location: "#".into(),
+                message: format!(
+                    "schemas nest {} in-place applicators ($ref, allOf, anyOf, ...) deep; at most {} are allowed",
+                    m.depth,
+                    depth::MAX_IN_PLACE
+                ),
+            });
+        }
+        if m.work > depth::MAX_IN_PLACE_WORK {
+            return Err(LoadError::Invalid {
+                location: "#".into(),
+                message: format!(
+                    "schemas apply up to {} subschemas to one value through repeated references; at most {} are allowed",
+                    m.work,
+                    depth::MAX_IN_PLACE_WORK
+                ),
+            });
+        }
         let registry = Registry::new()
             .draft(Draft::Draft202012)
             .add(DOC_URI, t.resource)
@@ -238,9 +266,18 @@ impl SchemaStore {
                 request: DirStore::new(Direction::Request, request_roots, opts.assert_formats),
                 response: DirStore::new(Direction::Response, response_roots, opts.assert_formats),
                 patterns: RwLock::new(HashMap::new()),
+                in_place_depth: m.depth,
             },
             t.warnings,
         ))
+    }
+
+    /// The deepest value that can be checked within the frame budget, so
+    /// that recursion stays bounded whatever the schemas' shape.
+    pub(crate) fn depth_limit(&self, configured: usize) -> usize {
+        configured
+            .min(depth::FRAME_BUDGET / (self.in_place_depth + 3))
+            .max(1)
     }
 
     pub(crate) fn dir(&self, d: Direction) -> &DirStore {
