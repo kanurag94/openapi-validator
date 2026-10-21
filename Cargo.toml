@@ -25,6 +25,8 @@ categories = ["web-programming", "parser-implementations"]
 jsonschema = { version = "0.59", default-features = false, features = ["arbitrary-precision"] }
 serde_json = { version = "1", features = ["arbitrary_precision"] }
 regex = "1"
+num-bigint = "0.4"
+num-traits = "0.2"
 
 [profile.bench]
 debug = true

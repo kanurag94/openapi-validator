@@ -399,6 +399,8 @@ name = "openapi-validator"
 version = "0.1.0"
 dependencies = [
  "jsonschema",
+ "num-bigint",
+ "num-traits",
  "regex",
  "serde_json",
 ]
