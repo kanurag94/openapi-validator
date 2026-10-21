@@ -3,6 +3,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod format;
 pub mod json;
 pub mod number;
 pub mod pattern;
