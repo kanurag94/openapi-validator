@@ -229,6 +229,42 @@ impl<'a> Lint<'a> {
         here || all_of || branches
     }
 
+    /// OpenAPI 3.2 §4.26.1: `attribute` and `wrapped` MUST NOT be used
+    /// with `nodeType`. Walks the schema's subschemas.
+    fn xml_objects(&mut self, s: &Value, ptr: &str, depth: usize) {
+        if depth > 32 {
+            return;
+        }
+        match s {
+            Value::Object(m) => {
+                if let Some(x) = m.get("xml").filter(|x| x.get("nodeType").is_some()) {
+                    for k in ["attribute", "wrapped"] {
+                        if x.get(k).is_some() {
+                            self.warn(
+                                &doc::join(ptr, "xml"),
+                                format!("`{k}` MUST NOT be present with `nodeType` (§4.26.1)"),
+                            );
+                        }
+                    }
+                }
+                for (k, v) in m {
+                    if !matches!(
+                        k.as_str(),
+                        "enum" | "const" | "default" | "example" | "examples" | "xml"
+                    ) {
+                        self.xml_objects(v, &doc::join(ptr, k), depth + 1);
+                    }
+                }
+            }
+            Value::Array(a) => {
+                for (i, v) in a.iter().enumerate() {
+                    self.xml_objects(v, &doc::join(ptr, &i.to_string()), depth + 1);
+                }
+            }
+            _ => {}
+        }
+    }
+
     /// OpenAPI 3.2 §4.25.1: an optional discriminating property needs a
     /// `defaultMapping`.
     fn discriminator(&mut self, s: &Value, ptr: &str) {
@@ -629,7 +665,9 @@ pub(crate) fn check(root: &Value, version: Version) -> Vec<Warning> {
             .into_iter()
             .flatten()
         {
-            l.discriminator(s, &doc::join("#/components/schemas", name));
+            let ptr = doc::join("#/components/schemas", name);
+            l.discriminator(s, &ptr);
+            l.xml_objects(s, &ptr, 0);
         }
     }
     if version == Version::V30 {

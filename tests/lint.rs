@@ -228,3 +228,16 @@ fn discriminator_default_mapping() {
     let branches = format!("{HEAD32}paths: {{}}\ncomponents:\n  schemas:\n    Pet:\n      oneOf: [{{$ref: '#/components/schemas/A'}}]\n      discriminator: {{propertyName: kind}}\n    A: {{type: object, required: [kind]}}\n");
     assert!(warnings(&branches).is_empty(), "{:?}", warnings(&branches));
 }
+
+// OpenAPI 3.2.0 §4.26.1: nodeType replaces attribute and wrapped.
+#[test]
+fn xml_node_type() {
+    let d = |xml: &str| {
+        format!("{HEAD32}paths: {{}}\ncomponents:\n  schemas:\n    S:\n      type: object\n      properties:\n        a: {{type: string, xml: {xml}}}\n")
+    };
+    assert!(warnings(&d("{nodeType: attribute}")).is_empty());
+    warns(
+        &d("{nodeType: attribute, attribute: true}"),
+        "`attribute` MUST NOT be present",
+    );
+}

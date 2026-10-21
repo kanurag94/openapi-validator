@@ -1,0 +1,32 @@
+title: "An XML body is read through nodeType: attributes, text and nulls"
+ref: "OpenAPI 3.2.0 §4.26.2, §4.26.5"
+document: |
+  openapi: 3.2.0
+  info: {title: t, version: "1"}
+  paths:
+    /products:
+      post:
+        requestBody:
+          content:
+            application/xml:
+              schema: {$ref: "#/components/schemas/product"}
+        responses:
+          "201": {description: ok}
+  components:
+    schemas:
+      product:
+        type: object
+        required: [count, description, price]
+        properties:
+          count:
+            type: [number, "null"]
+            xml: {nodeType: attribute}
+          description: {type: string}
+          price:
+            type: object
+            required: [currency, amount]
+            properties:
+              currency: {type: string, xml: {nodeType: attribute}}
+              amount: {type: number, minimum: 0, xml: {nodeType: text}}
+request: {method: POST, path: /products, headers: [["Content-Type", "application/xml"]], body: '<product><description>Thing</description><price currency="EUR">12.5</price></product>'}
+expect: {valid: true}
