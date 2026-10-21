@@ -986,10 +986,17 @@ impl Translator<'_> {
                 }
             }
         }
-        if values.is_empty() {
+        // OpenAPI 3.2 §4.25.4: the schema for a payload without the
+        // property, or with a value nothing maps.
+        let default = d
+            .get("defaultMapping")
+            .and_then(Value::as_str)
+            .filter(|_| self.version >= Version::V32)
+            .map(mapping_target);
+        if values.is_empty() && default.is_none() {
             return Ok(());
         }
-        for (_, target) in &values {
+        for target in values.iter().map(|(_, t)| t).chain(&default) {
             if doc::lookup(self.root, target).is_none() {
                 return Err(LoadError::BrokenRef {
                     reference: target.clone(),
@@ -1015,15 +1022,23 @@ impl Translator<'_> {
             .collect();
         let selects = all_mapped;
         let mut then = Map::new();
-        if branch_key.is_none() || all_mapped {
-            let mut allowed = names;
-            if branch_key.is_none() && ptr == ctx.root_ptr {
-                // The base itself may be named by its own schema name.
-                if let Some(own) = ptr.strip_prefix("#/components/schemas/") {
-                    allowed.push(Value::String(own.replace("~1", "/").replace("~0", "~")));
-                }
+        let mut allowed = names;
+        if branch_key.is_none() && ptr == ctx.root_ptr {
+            // The base itself may be named by its own schema name.
+            if let Some(own) = ptr.strip_prefix("#/components/schemas/") {
+                allowed.push(Value::String(own.replace("~1", "/").replace("~0", "~")));
             }
-            then.insert("properties".into(), json!({ prop: {"enum": allowed} }));
+        }
+        match &default {
+            // An unmapped value goes to the default schema.
+            Some(target) => rules.push(json!({
+                "if": {"properties": {prop: {"enum": allowed}}},
+                "else": {"$ref": target}
+            })),
+            None if branch_key.is_none() || all_mapped => {
+                then.insert("properties".into(), json!({ prop: {"enum": allowed} }));
+            }
+            None => {}
         }
         if !rules.is_empty() {
             then.insert("allOf".into(), Value::Array(rules));
@@ -1031,7 +1046,15 @@ impl Translator<'_> {
         let mut dispatch = Map::new();
         dispatch.insert("if".into(), json!({"required": [prop]}));
         dispatch.insert("then".into(), Value::Object(then));
-        if selects {
+        if let Some(target) = &default {
+            // Without the property, the default schema decides.
+            if selects {
+                if let Some(k) = branch_key {
+                    out.remove(k);
+                }
+            }
+            dispatch.insert("else".into(), json!({"$ref": target}));
+        } else if selects {
             if let Some(k) = branch_key {
                 if let Some(branches) = out.remove(k) {
                     let mut e = Map::new();
@@ -1059,15 +1082,19 @@ fn mapping_entries(d: &Value) -> Vec<(String, String)> {
             let Some(t) = target.as_str() else {
                 continue;
             };
-            let ptr = if t.starts_with('#') {
-                doc::canonical_pointer(t).unwrap_or_else(|| t.to_owned())
-            } else {
-                doc::join("#/components/schemas", t)
-            };
-            out.push((value.clone(), ptr));
+            out.push((value.clone(), mapping_target(t)));
         }
     }
     out
+}
+
+/// The pointer a `mapping` or `defaultMapping` value names.
+fn mapping_target(t: &str) -> String {
+    if t.starts_with('#') {
+        doc::canonical_pointer(t).unwrap_or_else(|| t.to_owned())
+    } else {
+        doc::join("#/components/schemas", t)
+    }
 }
 
 /// Every `$anchor`/`$dynamicAnchor` name, and every `$id` without its

@@ -202,6 +202,50 @@ impl<'a> Lint<'a> {
         }
     }
 
+    /// Whether `prop` is required by `s`: by `required` here or in an
+    /// `allOf` member, or by every `oneOf`/`anyOf` branch.
+    fn requires(&self, s: &Value, prop: &str, depth: usize) -> bool {
+        if depth > 16 {
+            return true;
+        }
+        let s = s
+            .get("$ref")
+            .and_then(Value::as_str)
+            .and_then(|r| doc::lookup_ref(self.root, r))
+            .unwrap_or(s);
+        let here = s
+            .get("required")
+            .and_then(Value::as_array)
+            .is_some_and(|r| r.iter().any(|x| x == prop));
+        let all_of = s
+            .get("allOf")
+            .and_then(Value::as_array)
+            .is_some_and(|a| a.iter().any(|m| self.requires(m, prop, depth + 1)));
+        let branches = ["oneOf", "anyOf"].iter().any(|k| {
+            s.get(*k).and_then(Value::as_array).is_some_and(|a| {
+                !a.is_empty() && a.iter().all(|m| self.requires(m, prop, depth + 1))
+            })
+        });
+        here || all_of || branches
+    }
+
+    /// OpenAPI 3.2 §4.25.1: an optional discriminating property needs a
+    /// `defaultMapping`.
+    fn discriminator(&mut self, s: &Value, ptr: &str) {
+        let Some(d) = s.get("discriminator") else {
+            return;
+        };
+        let Some(prop) = d.get("propertyName").and_then(Value::as_str) else {
+            return;
+        };
+        if d.get("defaultMapping").is_none() && !self.requires(s, prop, 0) {
+            self.warn(
+                &doc::join(ptr, "discriminator"),
+                format!("{prop:?} is optional, so the discriminator MUST have a defaultMapping (§4.25.1)"),
+            );
+        }
+    }
+
     fn property_names(&self, s: &Value, depth: usize) -> Vec<String> {
         if depth > 16 {
             return Vec::new();
@@ -576,6 +620,16 @@ pub(crate) fn check(root: &Value, version: Version) -> Vec<Warning> {
         for it in crate::spec::item_operations(item, &iptr, version) {
             l.servers(it.op.get("servers"), &doc::join(&it.ptr, "servers"));
             l.operation(key, item, &iptr, it.op, &it.ptr, &mut ids);
+        }
+    }
+    if version >= Version::V32 {
+        for (name, s) in root
+            .pointer("/components/schemas")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+        {
+            l.discriminator(s, &doc::join("#/components/schemas", name));
         }
     }
     if version == Version::V30 {

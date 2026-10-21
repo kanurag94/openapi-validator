@@ -1,0 +1,49 @@
+title: "Before 3.2, defaultMapping does not exist: an unmapped value is refused when enforcing"
+ref: "OpenAPI 3.1.1 §4.8.25"
+options: {discriminator: enforce}
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /pets:
+      post:
+        requestBody:
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/Cat"
+                  - $ref: "#/components/schemas/Dog"
+                  - $ref: "#/components/schemas/OtherPet"
+                discriminator:
+                  propertyName: petType
+                  mapping:
+                    cat: Cat
+                    dog: Dog
+                  defaultMapping: OtherPet
+        responses:
+          "201": {description: ok}
+  components:
+    schemas:
+      Cat:
+        type: object
+        required: [petType, lives]
+        properties:
+          petType: {const: cat}
+          lives: {type: integer}
+      Dog:
+        type: object
+        required: [petType, bark]
+        properties:
+          petType: {const: dog}
+          bark: {type: string}
+      OtherPet:
+        type: object
+        required: [name]
+        properties:
+          name: {type: string}
+          petType:
+            not:
+              enum: [cat, dog]
+request: {method: POST, path: /pets, headers: [["Content-Type", "application/json"]], body: '{"petType": "parrot", "name": "polly"}'}
+expect: {valid: false, kind: schema_violation}

@@ -213,3 +213,18 @@ fn positional_encodings() {
         "need itemSchema or an array schema",
     );
 }
+
+// OpenAPI 3.2.0 §4.25.1: an optional discriminating property needs a
+// defaultMapping.
+#[test]
+fn discriminator_default_mapping() {
+    let d = |extra: &str, required: &str| {
+        format!("{HEAD32}paths: {{}}\ncomponents:\n  schemas:\n    Pet:\n      type: object\n      {required}\n      properties: {{kind: {{type: string}}}}\n      discriminator: {{propertyName: kind{extra}}}\n")
+    };
+    assert!(warnings(&d("", "required: [kind]")).is_empty());
+    assert!(warnings(&d(", defaultMapping: Pet", "required: []")).is_empty());
+    warns(&d("", "required: []"), "MUST have a defaultMapping");
+    // Required by every branch counts as required.
+    let branches = format!("{HEAD32}paths: {{}}\ncomponents:\n  schemas:\n    Pet:\n      oneOf: [{{$ref: '#/components/schemas/A'}}]\n      discriminator: {{propertyName: kind}}\n    A: {{type: object, required: [kind]}}\n");
+    assert!(warnings(&branches).is_empty(), "{:?}", warnings(&branches));
+}
