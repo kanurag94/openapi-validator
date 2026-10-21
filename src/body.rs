@@ -497,3 +497,53 @@ pub(crate) fn xml(body: &[u8], media: &MediaType, max_depth: usize) -> Result<()
         .map(|_| ())
         .map_err(|e| format!("the body is not well-formed XML: {e}"))
 }
+
+/// Undoes `Content-Encoding` (RFC 9110 §8.4): codings are listed in the
+/// order they were applied and undone in reverse. gzip, x-gzip, deflate
+/// (zlib, or raw deflate as some senders use) and br are decoded; output
+/// stops at `limit` bytes, so a compression bomb cannot exhaust memory.
+pub(crate) fn decode_content(body: &[u8], codings: &str, limit: usize) -> Result<Vec<u8>, String> {
+    use std::io::Read;
+    let list: Vec<String> = codings
+        .split(',')
+        .map(|c| c.trim().to_ascii_lowercase())
+        .filter(|c| !c.is_empty() && c != "identity")
+        .collect();
+    let mut data = body.to_vec();
+    for coding in list.iter().rev() {
+        let mut out = Vec::new();
+        let cap = limit as u64 + 1;
+        let read = match coding.as_str() {
+            "gzip" | "x-gzip" => flate2::read::MultiGzDecoder::new(&data[..])
+                .take(cap)
+                .read_to_end(&mut out),
+            "deflate" => {
+                let zlib = flate2::read::ZlibDecoder::new(&data[..])
+                    .take(cap)
+                    .read_to_end(&mut out);
+                if zlib.is_err() {
+                    out.clear();
+                    flate2::read::DeflateDecoder::new(&data[..])
+                        .take(cap)
+                        .read_to_end(&mut out)
+                } else {
+                    zlib
+                }
+            }
+            "br" => brotli_decompressor::Decompressor::new(&data[..], 4096)
+                .take(cap)
+                .read_to_end(&mut out),
+            other => {
+                return Err(format!(
+                    "content coding {other:?} is not supported, so the body cannot be checked"
+                ))
+            }
+        };
+        read.map_err(|e| format!("the body is not valid {coding}: {e}"))?;
+        if out.len() > limit {
+            return Err(format!("the decoded body is larger than {limit} bytes"));
+        }
+        data = out;
+    }
+    Ok(data)
+}

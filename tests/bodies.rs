@@ -237,3 +237,73 @@ fn body_limits_and_switch() {
         ProblemKind::MalformedBody,
     );
 }
+
+fn gzip(data: &[u8]) -> Vec<u8> {
+    use std::io::Write;
+    let mut e = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+    e.write_all(data).unwrap();
+    e.finish().unwrap()
+}
+
+fn post_encoded(s: &Spec, coding: &str, body: &[u8]) -> Report {
+    s.validate_request(&Request {
+        method: "POST",
+        path: "/b",
+        headers: &[
+            ("Content-Type", "application/json"),
+            ("Content-Encoding", coding),
+        ],
+        body,
+        ..Request::default()
+    })
+}
+
+// RFC 9110 §8.4: the body is checked after undoing its content codings.
+#[test]
+fn content_encoding_is_decoded() {
+    use std::io::Write;
+    let s = spec(r#""application/json": {"schema": {"type": "object", "required": ["a"]}}"#);
+    ok(post_encoded(&s, "gzip", &gzip(br#"{"a": 1}"#)));
+    bad(post_encoded(&s, "gzip", &gzip(b"{}")), "body/a");
+    let mut z = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
+    z.write_all(br#"{"a": 1}"#).unwrap();
+    ok(post_encoded(&s, "deflate", &z.finish().unwrap()));
+    // Codings are undone in reverse order of application.
+    let mut z = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
+    z.write_all(&gzip(br#"{"a": 1}"#)).unwrap();
+    ok(post_encoded(&s, "gzip, deflate", &z.finish().unwrap()));
+    kind(
+        &post_encoded(&s, "zstd", b"\x28\xb5\x2f\xfd"),
+        ProblemKind::UnsupportedMediaType,
+    );
+    kind(
+        &post_encoded(&s, "gzip", b"not gzip"),
+        ProblemKind::MalformedBody,
+    );
+    kind(
+        &post_encoded(&s, "br", b"not brotli at all"),
+        ProblemKind::MalformedBody,
+    );
+    // `{"a": 1}` compressed with brotli (RFC 7932).
+    let br = [
+        0x8f, 0x03, 0x80, 0x7b, 0x22, 0x61, 0x22, 0x3a, 0x20, 0x31, 0x7d, 0x03,
+    ];
+    ok(post_encoded(&s, "br", &br));
+}
+
+#[test]
+fn compression_bombs_stop_at_the_limit() {
+    let s = spec_opts(
+        r#""application/json": {"schema": {"type": "array"}}"#,
+        true,
+        Options {
+            max_body_bytes: 1 << 20,
+            ..Options::default()
+        },
+    );
+    let bomb = gzip(&vec![b' '; 8 << 20]);
+    assert!(bomb.len() < 1 << 20, "small on the wire");
+    let t = std::time::Instant::now();
+    kind(&post_encoded(&s, "gzip", &bomb), ProblemKind::BodyTooLarge);
+    assert!(t.elapsed().as_secs() < 2);
+}

@@ -211,7 +211,9 @@ impl Spec {
         }
         let ct = header_values(req.headers, "content-type").next();
         if let Some((actual, entry)) = self.select_media(&body.content, ct, report) {
-            self.check_payload(&actual, entry, req.body, "body", report);
+            if let Some(bytes) = self.decoded(req.headers, req.body, report) {
+                self.check_payload(&actual, entry, &bytes, "body", report);
+            }
         }
     }
 }
@@ -645,7 +647,9 @@ impl Spec {
         }
         let ct = header_values(resp.headers, "content-type").next();
         if let Some((actual, entry)) = self.select_media(&resp_obj.content, ct, report) {
-            self.check_payload(&actual, entry, resp.body, "body", report);
+            if let Some(bytes) = self.decoded(resp.headers, resp.body, report) {
+                self.check_payload(&actual, entry, &bytes, "body", report);
+            }
         }
     }
 }
@@ -716,6 +720,36 @@ impl Spec {
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+impl Spec {
+    /// The body with its `Content-Encoding` undone, or `None` after
+    /// reporting why it cannot be checked.
+    pub(crate) fn decoded<'b>(
+        &self,
+        headers: &[(&str, &str)],
+        body: &'b [u8],
+        report: &mut Report,
+    ) -> Option<std::borrow::Cow<'b, [u8]>> {
+        let codings: Vec<&str> = header_values(headers, "content-encoding").collect();
+        if codings.is_empty() {
+            return Some(std::borrow::Cow::Borrowed(body));
+        }
+        match body::decode_content(body, &codings.join(","), self.options.max_body_bytes) {
+            Ok(b) => Some(std::borrow::Cow::Owned(b)),
+            Err(m) => {
+                let kind = if m.contains("not supported") {
+                    ProblemKind::UnsupportedMediaType
+                } else if m.contains("larger than") {
+                    ProblemKind::BodyTooLarge
+                } else {
+                    ProblemKind::MalformedBody
+                };
+                report.push(kind, "header.content-encoding", m);
+                None
             }
         }
     }
