@@ -1,5 +1,5 @@
-//! Runtime validation of HTTP requests and responses against OpenAPI 3.0 and
-//! 3.1 documents, built to run on every request in a proxy.
+//! Runtime validation of HTTP requests and responses against OpenAPI 3.0,
+//! 3.1 and 3.2 documents, built to run on every request in a proxy.
 //!
 //! ```
 //! use openapi_validator::{Options, Request, Response, Spec};

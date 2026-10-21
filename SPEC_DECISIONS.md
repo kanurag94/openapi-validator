@@ -2,7 +2,7 @@
 
 This document lists where OpenAPI, JSON Schema or the HTTP RFCs are silent, say SHOULD, or leave a choice open, and what this library does in each case.
 
-The guiding rule is to never refuse a valid call. Where reasonable people differ, the behaviour is an option. Section numbers refer to OpenAPI 3.1.1 unless stated otherwise. OpenAPI 3.0.4 numbers the same objects one level lower: the Parameter Object is §4.8.12 in 3.1.1 and §4.7.12 in 3.0.4.
+The guiding rule is to never refuse a valid call. Where reasonable people differ, the behaviour is an option. Section numbers refer to OpenAPI 3.1.1 unless stated otherwise. OpenAPI 3.0.4 numbers the same objects one level lower, and 3.2.0 without the `.8`: the Parameter Object is §4.8.12 in 3.1.1, §4.7.12 in 3.0.4 and §4.12 in 3.2.0.
 
 The defaults follow the specification text. `Options::gateway_profile()` switches on stricter, gateway-oriented choices that go beyond it; each is noted below.
 
@@ -16,7 +16,8 @@ The defaults follow the specification text. `Options::gateway_profile()` switche
 - **Operation servers.** Following §4.8.10.1, the server path used must serve the matched operation itself, not just a sibling operation on the same path item.
 - **Server variables without `enum`.** The value is open, so any segment matches; `default` is only the value used when none is supplied (§4.8.6.1). A missing `default` is a load warning.
 - **Relative server URLs.** A relative URL such as `v1` is read as `/v1`, because there is no document URL at run time.
-- **Method case.** Methods are case-sensitive (RFC 9110 §9.1): `GET` matches the `get` operation and `get` does not.
+- **Method case.** Methods are case-sensitive (RFC 9110 §9.1): `GET` matches the `get` operation and `get` does not. A 3.2 `additionalOperations` key matches the method exactly as written.
+- **`additionalOperations` for fixed methods.** 3.2 §4.9.1 forbids an entry such as `POST`. The fixed field wins, the entry is ignored, and lint reports it.
 - **HEAD requests.** Without a `head` operation, HEAD is checked as GET (RFC 9110 §9.3.2). A response to HEAD must not carry content.
 - **Unexpected request bodies.** A body sent to an operation without a `requestBody` is not reported.
 
@@ -32,7 +33,8 @@ The defaults follow the specification text. `Options::gateway_profile()` switche
 - **Repeated parameters.** A non-exploded array sent twice has its items combined. A primitive sent twice has each value checked.
 - **Header lists.** Items in list-valued headers are trimmed, so `a, b` is accepted (RFC 9110 §5.6.1).
 - **Repeated header lines.** Every line is checked on its own (RFC 9110 §5.3).
-- **Cookie values.** Values are percent-decoded when the escapes are valid and taken as written otherwise (RFC 6265).
+- **Cookie values.** Values are percent-decoded when the escapes are valid and taken as written otherwise (RFC 6265). The 3.2 `style: cookie` removes no percent-encoding (3.2 Appendix D).
+- **`in: querystring` (3.2 §4.12.1).** Form content is read as written; any other media type is percent-decoded first (3.2 Appendix E). Problems are parameter problems at `querystring`. While one is declared, the query string is not split into pairs for unknown-parameter checks.
 - **`allowEmptyValue`.** The field is deprecated and changes nothing; the schema decides whether an empty value is valid.
 - **Documents that break a parameter MUST.** These load with a warning instead of being refused. With both `schema` and `content`, `schema` is used. With several `content` entries, the first is used. With duplicate parameters, the last is used. A path parameter with `required: false` is treated as required.
 - **Undeclared headers.** When `allow_unknown_headers` is false, `Accept`, `Content-Type`, `Authorization`, `Cookie` and the security schemes' header names always count as declared, as do the names in `ignored_headers` (by default `Host`, `Content-Length`, `Transfer-Encoding`, `Connection` and `User-Agent`).
@@ -53,7 +55,11 @@ The defaults follow the specification text. `Options::gateway_profile()` switche
 - **Missing Content-Type.** If the operation declares exactly one media type that is not a range, it is assumed (RFC 9110 §8.3). Otherwise the problem is reported.
 - **Media type matching.** The most specific key wins: `type/subtype`, then `type/*`, then `*/*`. Parameters such as `charset` do not prevent a match.
 - **Parsing.** Bodies are parsed by their actual media type: JSON (including `+json`, RFC 6839), form, multipart, XML and `text/*`. Other media types are not parsed.
-- **XML.** Only well-formedness is checked (§4.8.26). Document type definitions are allowed, and nesting is bounded.
+- **XML.** Bodies are mapped to JSON through the XML Object and checked against the schema (§4.8.26). Elements the schema does not declare are kept, so `additionalProperties` decides. Document type definitions are allowed, and nesting is bounded.
+- **XML in 3.2.** `nodeType` decides the node (3.2 §4.26.2), and `attribute` and `wrapped` apply only without it. `cdata` is read like `text`, because parsers merge CDATA into text. `xsi:nil="true"` is `null`, and a missing attribute is `null` when the schema allows it (3.2 §4.26.5). The root element's name is not checked.
+- **Compressed bodies.** `Content-Encoding` gzip, x-gzip, deflate (zlib or raw) and br are decoded, up to `max_body_bytes`. An unknown coding is reported.
+- **Sequential media types (3.2 §4.14.3.1).** JSON Lines and NDJSON skip blank lines. JSON text sequences skip empty records (RFC 7464 §2.1). Server-Sent Events follow the WHATWG parsing rules, and a final event without a blank line is kept. Before 3.2 these media types are not parsed.
+- **Positional multipart (3.2 §4.14.5.2).** Multipart types other than `form-data`, and `form-data` with `prefixEncoding` or `itemEncoding`, are read as an array of parts. A part without `Content-Type` takes the Encoding Object's type, then the default for its schema (3.2 §4.15.1), then `text/plain` (RFC 2046 §5.1). Nesting is followed four levels deep; the specification requires one.
 - **Text charsets.** UTF-8, US-ASCII and ISO-8859-1 are supported; other charsets are reported as malformed.
 - **Undeclared form fields.** They are kept as properties of the body, so `additionalProperties` decides whether they are allowed.
 - **Reserved characters in form values.** Unencoded reserved characters are accepted even when `allowReserved` is false, since the specification only says they SHOULD be encoded.
@@ -69,6 +75,15 @@ The defaults follow the specification text. `Options::gateway_profile()` switche
 - **Undeclared bodies.** A body where no content is declared is not reported.
 - **Header values.** Values are literal text in simple style and are never re-read as JSON (§4.8.21). Each repeated line is checked.
 - **Content-Type headers.** A declared `Content-Type` response header is ignored (§4.8.17.1).
+- **Set-Cookie.** Its lines are never split on commas (RFC 9110 §5.3). An object schema takes one property per line (`name=rest`), an array one item per line, and `content` sees the lines joined with LF (3.2 §4.21.3). This applies in every version.
+
+## Webhooks and callbacks
+
+- **Selection.** The caller names the webhook, or the operation's `operationId` and the callback. The method selects the operation, and HEAD falls back to GET.
+- **Paths.** The request path is not checked and path parameters are not read, because the receiver chooses the URL.
+- **Several callback expressions.** A request is valid if the operation under any expression accepts it.
+- **Webhooks in 3.0.** `webhooks` is a 3.1 field, so a 3.0 document's `webhooks` key is ignored.
+- **Callbacks without an `operationId`.** They cannot be named, so they are not indexed.
 
 ## Schemas
 
@@ -78,13 +93,14 @@ The defaults follow the specification text. `Options::gateway_profile()` switche
 - **Count keywords written as numbers.** Values such as `2.0` are counts. Beyond the 64-bit range, a maximum is unbounded and a minimum is unreachable. Negative or fractional counts are dropped with a warning.
 - **Formats.** Every JSON Schema 2020-12 format (§7.3) and OpenAPI's int32, int64, float, double and byte are implemented. In 3.1 they are annotations by default, as the format-annotation vocabulary requires (§7.2.1). In 3.0 they are asserted, which 3.0 allows. The option `formats` (`Always`, `Never`) overrides this; the gateway profile asserts them always. Unknown formats are always annotations.
 - **Host names.** `hostname` labels contain only letters, digits and hyphens (RFC 1123), and `xn--` labels must decode to valid IDNA2008 labels. `idn-hostname` follows UTS 46 processing (non-transitional, strict) plus the RFC 5892 contextual rules.
-- **Patterns.** Patterns are translated from ECMA-262 to the linear-time `regex` crate, keeping ECMA meanings. Lookaround and backreferences are a load error that names the pattern.
-- **Discriminator.** By default it is an annotation: it "MUST NOT change the validation outcome" (§4.8.25), so `oneOf` and `anyOf` decide alone and an allOf-style base never searches its children. The option `discriminator: Enforce` requires the value to be a mapped name and checks the payload against that schema alone (gateway profile).
+- **Patterns.** Patterns are translated from ECMA-262 to the linear-time `regex` crate, keeping ECMA meanings. Lookaround and backreferences run on `fancy-regex` with a limit of 100,000 steps per match; a match that hits the limit is reported, never accepted. The option `patterns: LinearOnly` makes them a load error that names the pattern (gateway profile).
+- **Discriminator.** By default it is an annotation: it "MUST NOT change the validation outcome" (§4.8.25), so `oneOf` and `anyOf` decide alone and an allOf-style base never searches its children. The option `discriminator: Enforce` requires the value to be a mapped name and checks the payload against that schema alone (gateway profile). With a 3.2 `defaultMapping`, a payload without the property, or with an unmapped value, is checked against the default schema instead (3.2 §4.25.4).
 - **Discriminator cycles.** When a base lists a child in `oneOf` or `anyOf` and the child extends the base through `allOf`, the child's reference uses a copy of the base without that `oneOf`/`anyOf`, so the schema does not refer to itself without end.
 - **readOnly and writeOnly.** In 3.0, a required readOnly property is required in responses only and a writeOnly one in requests only (3.0.4 §4.7.24.1), including through `$ref` and `allOf`. In 3.1 they are annotations and `required` applies in both directions (§4.8.24.3.2); the option `read_write_required: RelaxAlways` applies the 3.0 rule (gateway profile). Sending them is never refused.
 - **Equality.** `enum`, `const` and `uniqueItems` compare numbers by value and ignore the key order of objects (JSON Schema 2020-12 §4.2.2).
 - **Fragment references in 3.1.** A `#` reference in a schema without `$id` resolves against the OpenAPI document root.
 - **Metaschema references.** References to the JSON Schema metaschemas are allowed, because they are built in and nothing is fetched.
+- **Dialects.** A `$schema` naming an OpenAPI dialect, such as `https://spec.openapis.org/oas/3.2/dialect/2025-09-17`, is read as JSON Schema 2020-12 with the OpenAPI keywords (3.2 §4.24.7).
 
 ## Parsing and limits
 
@@ -92,7 +108,9 @@ The defaults follow the specification text. `Options::gateway_profile()` switche
 - **Large numbers.** Numbers with an exponent beyond ±4096 or more than 4096 digits are refused, so exact comparison stays bounded.
 - **Nesting.** Documents may nest 128 levels. Bodies may nest `max_body_depth` levels (128 by default), lowered per document so that body depth multiplied by schema depth stays within a fixed stack budget.
 - **In-place schema chains.** At most 64 nested `$ref`, `allOf`, `anyOf` and similar keywords, and at most 100,000 subschemas, may apply to one value. Larger documents are refused at load, because the schema engine would take exponential time.
-- **YAML.** YAML 1.2 core schema rules apply, so `yes` and `on` are strings. Duplicate keys, multiple documents and alias expansion beyond 4 million nodes are refused. `<<` is an ordinary key, and `.inf` and `.nan` become strings.
-- **External references.** These are a load error; the library never reads files or the network.
+- **YAML.** YAML 1.2 core schema rules apply, so `yes` and `on` are strings. Duplicate keys, multiple documents and alias expansion beyond 4 million nodes are refused. `.inf` and `.nan` become strings. `<<` merges mappings, as most YAML tools do; the option `yaml_merge_keys: false` reads it as an ordinary key, as YAML 1.2 does.
+- **External references.** With `Spec::load`, these are a load error; the library never reads files or the network. `Spec::load_documents` takes every document with its URI and resolves references against the document they appear in (RFC 3986 §5.2). A reference to a document not supplied is a load error.
+- **`$self` (3.2 §4.1).** It names the document and is its base URI. References may use it or the URI the document was supplied under.
+- **Documents that break a MUST.** They load, with each breach listed in `Spec::warnings()`. The option `strict_document` refuses them instead.
 - **Reports.** A report keeps at most `max_problems` (20) problems and `max_report_bytes` (8 KiB) of text, and counts the rest.
 - **Failed `anyOf` and `oneOf`.** The problem is reported at the `anyOf` or `oneOf` itself, or inside the one branch whose `type` fits the value.

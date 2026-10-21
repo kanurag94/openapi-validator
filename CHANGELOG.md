@@ -9,7 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- OpenAPI 3.2 documents: the `query` method, `additionalOperations`, `$self`, `components.mediaTypes`, `in: querystring` and `style: cookie` parameters, sequential media types with `itemSchema`, positional multipart with `prefixEncoding` and `itemEncoding`, discriminator `defaultMapping`, and XML `nodeType`.
 - `validate_webhook_request`, `validate_webhook_response`, `validate_callback_request` and `validate_callback_response` for operations the API calls, also in the C ABI and Go.
+- `Spec::load_documents` for descriptions spread over several documents, also in the C ABI and Go.
+- XML bodies are checked against their schemas through the XML Object.
+- Bodies with `Content-Encoding` gzip, deflate or br are decoded before they are checked.
+- Multipart parts are checked against their Encoding Objects' content types and headers.
+- Every JSON Schema 2020-12 format, and OpenAPI's byte, float and double.
+- Lint warnings for documents that break a MUST, listed by `Spec::warnings()`, and `Options::strict_document` to refuse them.
+- `Options::gateway_profile()`, which switches on the stricter choices the defaults no longer make.
+- Reports for repeated `Authorization` and `Content-Type` lines, and for content in responses to HEAD and in 204 and 304 responses.
+
+### Changed
+
+- Defaults follow the specification text: formats are annotations in 3.1 and 3.2, discriminators are annotations, 3.0 integers are mathematical, and readOnly/writeOnly relax `required` in 3.0 only. Each earlier choice is an option.
+- Lookaround and backreference patterns run on a bounded engine instead of refusing the document; `PatternEngine::LinearOnly` keeps the old behaviour.
+- YAML `<<` keys merge mappings by default; `Options::yaml_merge_keys` turns this off.
+- A server variable without `enum` matches any value.
+- `Set-Cookie` response headers are read one value per line, and never split on commas.
+- `Version` has a `V32` variant and is `#[non_exhaustive]`.
+- `MatchedOperation::method` is an `additionalOperations` key, as written, for those operations.
 
 ## [0.1.0] - 2026-10-21
 

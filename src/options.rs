@@ -52,8 +52,8 @@ pub enum ServerPaths {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum FormatAssertion {
     /// OpenAPI 3.0: asserted (3.0 lets tools validate formats).
-    /// OpenAPI 3.1: annotation only, as the format-annotation vocabulary
-    /// requires (§7.2.1).
+    /// OpenAPI 3.1 and 3.2: annotation only, as the format-annotation
+    /// vocabulary requires (§7.2.1).
     #[default]
     ByVersion,
     Always,
@@ -76,7 +76,7 @@ pub enum DiscriminatorMode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum IntegerSemantics {
     /// Any number with a zero fraction, so `1.0` is an integer (OpenAPI
-    /// 3.0.4 §4.4, and always in 3.1).
+    /// 3.0.4 §4.4, and always in 3.1 and 3.2).
     #[default]
     Mathematical,
     /// OpenAPI 3.0.3 §4.4: a JSON number without a fraction or exponent.
@@ -87,11 +87,12 @@ pub enum IntegerSemantics {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ReadWriteRequired {
     /// OpenAPI 3.0 (§4.7.24.1): `required` applies to responses only for
-    /// readOnly and to requests only for writeOnly. OpenAPI 3.1
-    /// (§4.8.24.3.2): they are annotations and `required` always applies.
+    /// readOnly and to requests only for writeOnly. OpenAPI 3.1 and 3.2
+    /// (3.1.1 §4.8.24.3.2): they are annotations and `required` always
+    /// applies.
     #[default]
     ByVersion,
-    /// Use the 3.0 rule for 3.1 documents too.
+    /// Use the 3.0 rule for 3.1 and 3.2 documents too.
     RelaxAlways,
 }
 

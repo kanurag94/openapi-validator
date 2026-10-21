@@ -11,7 +11,7 @@ repository = "https://github.com/kanurag94/openapi-validator"
 
 [package]
 name = "openapi-validator"
-description = "Validate HTTP requests and responses against OpenAPI 3.0 and 3.1 documents at runtime"
+description = "Validate HTTP requests and responses against OpenAPI 3.0, 3.1 and 3.2 documents at runtime"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

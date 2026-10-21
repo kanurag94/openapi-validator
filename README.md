@@ -2,18 +2,21 @@
 
 [![CI](https://github.com/kanurag94/openapi-validator/actions/workflows/ci.yml/badge.svg)](https://github.com/kanurag94/openapi-validator/actions/workflows/ci.yml)
 
-A Rust library that validates HTTP requests and responses against an OpenAPI 3.0 or 3.1 document at run time. It is built to run inside an API gateway on every call: it never panics, its time and memory are bounded for any input, and one loaded document can be shared by all threads.
+A Rust library that validates HTTP requests and responses against an OpenAPI 3.0, 3.1 or 3.2 document at run time. It is built to run inside an API gateway on every call: it never panics, its time and memory are bounded for any input, and one loaded document can be shared by all threads.
 
 ## Features
 
-- Supports OpenAPI 3.0.x and 3.1.x documents in JSON or YAML 1.2.
-- Routes requests by server path, path template and method.
-- Checks path, query, header and cookie parameters in every style and explode combination.
+- Supports OpenAPI 3.0.x, 3.1.x and 3.2.x documents in JSON or YAML 1.2, in one document or several.
+- Routes requests by server path, path template and method, including 3.2's `query` and `additionalOperations`.
+- Checks path, query, header and cookie parameters in every style and explode combination, and 3.2 `querystring` parameters.
 - Checks security requirements for credential presence, with a hook for your own verification.
-- Validates JSON, form, multipart and text bodies, and checks XML for well-formedness.
+- Validates JSON, form, multipart, XML and text bodies, compressed or not.
+- Validates 3.2 sequential bodies (JSON Lines, NDJSON, JSON text sequences, Server-Sent Events) and positional multipart bodies.
 - Validates response status, headers and bodies.
-- Handles 3.0 and 3.1 schema differences, readOnly/writeOnly, discriminators and exact numbers.
-- Runs ECMA-262 patterns in linear time.
+- Validates webhook and callback requests and responses.
+- Handles each version's schema rules, readOnly/writeOnly, discriminators and exact numbers.
+- Runs ECMA-262 patterns in linear time, and lookaround and backreferences on a bounded engine.
+- Warns about documents that break a MUST of the specification, or refuses them on request.
 - Provides a C ABI and a Go wrapper.
 
 ## Installation
@@ -47,7 +50,9 @@ for problem in report.problems() {
 
 Load the document once and share the `Spec`; it is `Send + Sync`. Pass the request as received, with the path still percent-encoded and header lines in arrival order. Use `validate_response` to check a response against the operation its request matches.
 
-Each problem has a kind, a location such as `query.limit` or `body/items/3`, and a one-sentence message. A report keeps at most 20 problems or 8 KiB of text and counts the rest as "and N more". `Options` controls these limits, body checking, unknown-parameter handling, server path matching and format assertion.
+A description spread over several documents loads with `Spec::load_documents`, which takes every document with its URI; nothing is fetched. Webhooks and callbacks are named rather than routed: use `validate_webhook_request` with the webhook's name, or `validate_callback_request` with the operation's `operationId` and the callback's name, and their `_response` counterparts.
+
+Each problem has a kind, a location such as `query.limit` or `body/items/3`, and a one-sentence message. A report keeps at most 20 problems or 8 KiB of text and counts the rest as "and N more". `Options` controls these limits, body checking, unknown-parameter handling, server path matching and the choices listed in [`SPEC_DECISIONS.md`](SPEC_DECISIONS.md). The defaults follow the specification text; `Options::gateway_profile()` switches on stricter choices for gateways.
 
 ### C and Go
 
@@ -63,27 +68,27 @@ cd ffi/go && go test ./...
 ## Safety and limits
 
 - Schema verdicts come from the [`jsonschema`](https://crates.io/crates/jsonschema) crate, compiled lazily per operation. Its error listing is exponential on recursive schemas, so problems are located by a separate, bounded pass that never changes the verdict.
-- Patterns that need backtracking (lookaround, backreferences) are refused at load, with an error that names the pattern.
+- Patterns run on the linear-time `regex` crate. Patterns that need lookaround or backreferences run on `fancy-regex` with a step limit per match, and a match that hits the limit is reported, never accepted. The `patterns: LinearOnly` option refuses them at load instead.
 - Numbers are compared as exact decimals, never as floats.
 - JSON with duplicate keys, invalid UTF-8 or lone surrogates is refused, to prevent parser differentials.
 - Nesting and in-place schema chains are bounded at load, so the worst accepted documents validate on a 256 KiB stack in release builds.
-- External `$ref`s are refused; the library never reads files or the network.
+- Compressed bodies are decoded up to `max_body_bytes`, so a compression bomb cannot exhaust memory.
+- The library never reads files or the network. External `$ref`s must be supplied to `Spec::load_documents`.
 
 Where the specifications leave a choice open, the library picks the behaviour that never refuses a valid call. Each choice is listed in [`SPEC_DECISIONS.md`](SPEC_DECISIONS.md).
 
 ## Not supported
 
-- Swagger 2.0 and OpenAPI 3.2 documents.
-- External references; bundle the document first.
-- Checking XML bodies against schemas.
-- IDNA rules for `hostname`, and formats other than date, time, date-time, email, uuid, uri, uri-reference, ipv4, ipv6, hostname, int32 and int64.
-- Credential verification beyond presence.
-- Callbacks, webhooks and links.
-- Compressed request or response bodies.
+- Swagger 2.0 documents.
+- Fetching external documents; supply them to `Spec::load_documents`.
+- Credential verification beyond presence; use `security_hook`.
+- Links, and evaluating callback runtime expressions; the caller names the callback.
+- Incremental validation of streams; sequential bodies are validated whole.
+- Custom metaschema vocabularies in `$schema`.
 
 ## Performance
 
-Measured with `cargo bench` on an Apple M-series machine, using the synthetic document in `benches/support/synthetic.rs`.
+Measured with `cargo bench` at v0.1.0 on an Apple M-series machine, using the synthetic document in `benches/support/synthetic.rs`.
 
 | Measure | Target | Result |
 |---|---|---|
@@ -101,13 +106,14 @@ Where correctness and speed conflict, correctness wins. For example, `enum`, `co
 
 | Suite | Result |
 |---|---|
-| Unit and integration tests | 147 passing |
-| Conformance cases in `tests/cases/` | 949 of 949 |
-| JSON-Schema-Test-Suite, draft 2020-12 | 1,257 of 1,302 (96.5%) |
+| Unit and integration tests | 191 passing |
+| Conformance cases in `tests/cases/` | 1,075 of 1,075 |
+| JSON-Schema-Test-Suite, draft 2020-12 | 1,301 of 1,302 (99.9%) |
+| JSON-Schema-Test-Suite, optional formats | 890 of 890 |
 | Property tests | 3 properties, 1,000 cases each |
 | Fuzzing | 2.5 hours, no crashes |
 
-Of the JSON-Schema-Test-Suite failures, 44 need remote documents, which are refused by design, and one needs a custom metaschema vocabulary.
+The JSON-Schema-Test-Suite failure needs a custom metaschema vocabulary.
 
 ```sh
 cargo test                                               # all tests
