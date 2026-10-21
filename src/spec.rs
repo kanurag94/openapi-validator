@@ -5,8 +5,8 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use serde_json::Value;
 
 use crate::doc::{self, LoadError, Version, Warning};
-use crate::http::Request;
-use crate::model::{Body, Builder};
+use crate::http::{Request, Response};
+use crate::model::{Body, Builder, Responses};
 use crate::options::{Options, ServerPaths};
 use crate::params::Param;
 use crate::path::{split_path, Match, PathIndex, RawSegment, Template, Vars};
@@ -37,6 +37,7 @@ pub(crate) struct Operation {
     /// `None`: no security applies.
     pub security: Option<Vec<Requirement>>,
     pub declared: Declared,
+    pub responses: Responses,
 }
 
 /// A validator for one OpenAPI document. Load once and share: `Spec` is
@@ -153,6 +154,8 @@ impl Spec {
                         None => doc_security.clone(),
                     };
                     let declared = security::declared(&schemes, sec.as_deref());
+                    let responses =
+                        b.responses(op.get("responses"), &doc::join(&op_ptr, "responses"))?;
                     pi.ops.push((m, ops.len()));
                     ops.push(Operation {
                         template: tid,
@@ -165,6 +168,7 @@ impl Spec {
                         params,
                         security: sec,
                         declared,
+                        responses,
                     });
                 }
                 if pi.bases.is_empty() {
@@ -412,6 +416,49 @@ impl Spec {
             ),
         }
         report
+    }
+
+    /// Validates a response against the operation its request matches.
+    pub fn validate_response(&self, req: &Request<'_>, resp: &Response<'_>) -> Report {
+        let guarded = catch_unwind(AssertUnwindSafe(|| {
+            let mut r = self.new_report();
+            let mut scratch = self.new_report();
+            let Some((op, _vars, head)) = self.route_into(req, &mut scratch) else {
+                let why = scratch
+                    .problems()
+                    .first()
+                    .map(|p| p.message.clone())
+                    .unwrap_or_else(|| "the request matches no operation".into());
+                r.push(
+                    ProblemKind::UndeclaredOperation,
+                    "request",
+                    format!("the response is for an undeclared operation: {why}"),
+                );
+                return r;
+            };
+            if let Some(m) = scratch.operation() {
+                r.set_operation(m.clone());
+            }
+            let o = &self.ops[op];
+            match o.responses.find(resp.status) {
+                Some(obj) => self.check_response(obj, req, head, resp, &mut r),
+                None => r.push(
+                    ProblemKind::UndeclaredStatus,
+                    "status",
+                    format!("status {} is not declared for this operation", resp.status),
+                ),
+            }
+            r
+        }));
+        guarded.unwrap_or_else(|_| {
+            let mut r = self.new_report();
+            r.push(
+                ProblemKind::Internal,
+                "response",
+                "internal error during validation",
+            );
+            r
+        })
     }
 }
 

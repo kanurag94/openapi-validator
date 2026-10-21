@@ -201,3 +201,92 @@ impl<'a> Builder<'a> {
         out
     }
 }
+
+/// A Response Object (§4.8.17).
+pub(crate) struct Resp {
+    pub headers: Vec<crate::params::Param>,
+    pub content: Vec<(MediaType, MediaEntry)>,
+}
+
+/// Responses Object (§4.8.16): exact codes, `1XX`–`5XX` ranges, `default`.
+#[derive(Default)]
+pub(crate) struct Responses {
+    pub exact: Vec<(u16, Resp)>,
+    pub ranges: Vec<(u16, Resp)>,
+    pub default: Option<Resp>,
+}
+
+impl Responses {
+    /// The response for a status: exact code, then range, then `default`.
+    pub fn find(&self, status: u16) -> Option<&Resp> {
+        self.exact
+            .iter()
+            .find(|(c, _)| *c == status)
+            .or_else(|| self.ranges.iter().find(|(c, _)| *c == status / 100))
+            .map(|(_, r)| r)
+            .or(self.default.as_ref())
+    }
+}
+
+impl Builder<'_> {
+    fn response(&mut self, v: &Value, ptr: &str) -> Result<Resp, LoadError> {
+        let (r, rptr) = doc::deref(self.root, v, ptr)?;
+        let mut headers = Vec::new();
+        if let Some(map) = r.get("headers").and_then(Value::as_object) {
+            let hptr = doc::join(&rptr, "headers");
+            for (name, h) in map {
+                // §4.8.17.1: a header named Content-Type is ignored.
+                if name.eq_ignore_ascii_case("content-type") {
+                    continue;
+                }
+                if let Some(p) = self.param(
+                    h,
+                    &doc::join(&hptr, name),
+                    Some(name),
+                    Direction::Response,
+                    self.version,
+                )? {
+                    headers.push(p);
+                }
+            }
+        }
+        let content = self.content(
+            r.get("content"),
+            &doc::join(&rptr, "content"),
+            Direction::Response,
+        );
+        Ok(Resp { headers, content })
+    }
+
+    pub(crate) fn responses(
+        &mut self,
+        v: Option<&Value>,
+        ptr: &str,
+    ) -> Result<Responses, LoadError> {
+        let mut out = Responses::default();
+        let Some(map) = v.and_then(Value::as_object) else {
+            return Ok(out);
+        };
+        for (key, r) in map {
+            if key.starts_with("x-") {
+                continue;
+            }
+            let rp = doc::join(ptr, key);
+            let resp = self.response(r, &rp)?;
+            let k = key.as_bytes();
+            if key == "default" {
+                out.default = Some(resp);
+            } else if k.len() == 3
+                && (b'1'..=b'5').contains(&k[0])
+                && k[1..].eq_ignore_ascii_case(b"xx")
+            {
+                out.ranges.push((u16::from(k[0] - b'0'), resp));
+            } else if let Ok(code) = key.parse::<u16>() {
+                out.exact.push((code, resp));
+            } else {
+                self.warn(&rp, "not a status code, range or default; ignored");
+            }
+        }
+        Ok(out)
+    }
+}

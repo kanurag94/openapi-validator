@@ -3,10 +3,10 @@
 use serde_json::Value;
 
 use crate::body;
-use crate::http::Request;
+use crate::http::{Request, Response};
 use crate::json;
 use crate::media::{best_match, MediaType};
-use crate::model::{Body, MediaEntry};
+use crate::model::{Body, MediaEntry, Resp};
 use crate::params::{
     coerce, decode, header_index, header_value, path_value, query_value, readings, split_cookies,
     split_query, Found, In, Pair, Param, ParamValue, Shape, Types,
@@ -515,5 +515,84 @@ fn coerce_text(t: String, shape: &Shape) -> Value {
     match shape {
         Shape::Primitive(types) if *types != Types::ANY => coerce(&t, *types),
         _ => Value::String(t),
+    }
+}
+
+impl Spec {
+    /// Checks a response's headers and body against the Response Object.
+    pub(crate) fn check_response(
+        &self,
+        resp_obj: &Resp,
+        req: &Request<'_>,
+        head: bool,
+        resp: &Response<'_>,
+        report: &mut Report,
+    ) {
+        let headers = header_index(resp.headers);
+        for p in &resp_obj.headers {
+            let label = p.label();
+            let Some(lines) = headers.get(&p.name.to_ascii_lowercase()) else {
+                if p.required {
+                    report.push(
+                        ProblemKind::MissingParameter,
+                        label.as_str(),
+                        "is a required response header",
+                    );
+                }
+                continue;
+            };
+            for line in lines {
+                match &p.value {
+                    // Header values are literal text in simple style; they are
+                    // never re-read as JSON.
+                    ParamValue::Schema { shape, .. } => self.check_param_value(
+                        p,
+                        header_value(line, shape, p.explode),
+                        &label,
+                        report,
+                    ),
+                    ParamValue::Content { media, id } => {
+                        self.check_content_param(media, *id, line, &label, report)
+                    }
+                    ParamValue::Any => {}
+                }
+            }
+        }
+        if !self.options.validate_body
+            || head
+            || req.method == "HEAD"
+            || resp_obj.content.is_empty()
+        {
+            return;
+        }
+        if resp.body.is_empty() {
+            // RFC 9110 §15.3.5, §15.4.5: 204 and 304 never carry content.
+            if resp.status != 204 && resp.status != 304 {
+                report.push(
+                    ProblemKind::MissingBody,
+                    "body",
+                    format!(
+                        "the response declares content for status {} but the body is empty",
+                        resp.status
+                    ),
+                );
+            }
+            return;
+        }
+        if resp.body.len() > self.options.max_body_bytes {
+            report.push(
+                ProblemKind::BodyTooLarge,
+                "body",
+                format!(
+                    "the body is larger than {} bytes",
+                    self.options.max_body_bytes
+                ),
+            );
+            return;
+        }
+        let ct = header_values(resp.headers, "content-type").next();
+        if let Some((actual, entry)) = self.select_media(&resp_obj.content, ct, report) {
+            self.check_payload(&actual, entry, resp.body, "body", report);
+        }
     }
 }
