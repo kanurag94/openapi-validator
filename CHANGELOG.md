@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `validate_webhook_request`, `validate_webhook_response`, `validate_callback_request` and `validate_callback_response` for operations the API calls, also in the C ABI and Go.
+
 ## [0.1.0] - 2026-10-21
 
 ### Added

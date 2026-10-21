@@ -94,7 +94,8 @@ impl fmt::Display for Problem {
 /// The operation a request was matched to.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MatchedOperation {
-    /// Path template as written in the document, such as `/pets/{id}`.
+    /// Path template as written in the document, such as `/pets/{id}`; for
+    /// a webhook its name, and for a callback its expression.
     pub path: String,
     /// Lower-case method key, such as `get`.
     pub method: String,

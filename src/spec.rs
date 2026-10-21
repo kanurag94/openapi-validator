@@ -1,5 +1,6 @@
 //! The loaded document and request routing.
 
+use std::collections::{HashMap, HashSet};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
 use serde_json::Value;
@@ -32,7 +33,8 @@ pub(crate) struct PathItem {
 }
 
 pub(crate) struct Operation {
-    pub template: usize,
+    /// The path template; a webhook's name, or a callback's expression.
+    pub path: String,
     pub method: &'static str,
     pub operation_id: Option<String>,
     /// Server base paths that serve this operation (OpenAPI 3.1.1
@@ -58,8 +60,46 @@ pub struct Spec {
     pub(crate) bases: Vec<BasePath>,
     pub(crate) store: SchemaStore,
     pub(crate) schemes: Schemes,
+    /// Webhook name to `(method key, operation index)` (OpenAPI 3.1.1 §4.8.1).
+    pub(crate) webhooks: HashMap<String, MethodOps>,
+    /// `(operationId, callback name)` to its expressions, each with
+    /// `(method key, operation index)` (§4.8.18).
+    pub(crate) callbacks: HashMap<(String, String), Vec<MethodOps>>,
     warnings: Vec<Warning>,
 }
+
+/// What an operation's Path Item is reached by.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Reached {
+    /// A path template: requests are routed to it.
+    Path,
+    /// A webhook or a callback: the caller names it, and there are no path
+    /// parameters to read.
+    Named,
+}
+
+/// The parts of the document every operation is built against.
+struct Ctx<'r> {
+    root: &'r Value,
+    version: Version,
+    schemes: Schemes,
+    doc_security: Option<Vec<Requirement>>,
+    ops: Vec<Operation>,
+    /// Callback objects still to index: `(owner operationId, operation, pointer)`.
+    pending: Vec<(String, &'r Value, String)>,
+}
+
+/// `(method key, operation index)` for each method of a Path Item.
+type MethodOps = Vec<(&'static str, usize)>;
+
+/// The Path Items a webhook or callback name selects, if declared.
+type Named<'a> = Option<Vec<&'a [(&'static str, usize)]>>;
+
+/// A problem to report: kind, location, message.
+type Problem = (ProblemKind, &'static str, String);
+
+/// Bounds on callbacks nested in callbacks.
+const MAX_CALLBACK_OPS: usize = 10_000;
 
 /// The result of routing a request.
 pub(crate) enum Route<'a> {
@@ -74,6 +114,121 @@ pub(crate) enum Route<'a> {
         template: usize,
     },
     MalformedPath,
+}
+
+impl<'r> Ctx<'r> {
+    /// Builds the operation under `method` of a Path Item, and queues its
+    /// callbacks. Returns its index.
+    #[allow(clippy::too_many_arguments)]
+    fn operation(
+        &mut self,
+        b: &mut Builder<'r>,
+        path: &str,
+        item: &'r Value,
+        item_ptr: &str,
+        method: &'static str,
+        bases: Vec<BasePath>,
+        reached: Reached,
+    ) -> Result<usize, LoadError> {
+        let op = &item[method];
+        let op_ptr = doc::join(item_ptr, method);
+        let body = b.request_body(op.get("requestBody"), &doc::join(&op_ptr, "requestBody"))?;
+        let mut params = b.params(item, item_ptr, op, &op_ptr, self.version)?;
+        if reached == Reached::Named {
+            params.retain(|p| p.location != crate::params::In::Path);
+        }
+        // Operation `security` replaces the document's, even when empty.
+        let security = match b.requirements(
+            op.get("security"),
+            &doc::join(&op_ptr, "security"),
+            &self.schemes,
+        )? {
+            Some(r) => Some(r),
+            None => self.doc_security.clone(),
+        };
+        let declared = security::declared(&self.schemes, security.as_deref());
+        let responses = b.responses(op.get("responses"), &doc::join(&op_ptr, "responses"))?;
+        let operation_id = op
+            .get("operationId")
+            .and_then(Value::as_str)
+            .map(str::to_owned);
+        if let (Some(id), Some(cbs)) = (&operation_id, op.get("callbacks")) {
+            self.pending
+                .push((id.clone(), cbs, doc::join(&op_ptr, "callbacks")));
+        }
+        self.ops.push(Operation {
+            path: path.to_owned(),
+            method,
+            operation_id,
+            bases,
+            body,
+            params,
+            security,
+            declared,
+            responses,
+        });
+        Ok(self.ops.len() - 1)
+    }
+
+    /// Builds every operation of a webhook's or a callback's Path Item.
+    fn named_item(
+        &mut self,
+        b: &mut Builder<'r>,
+        label: &str,
+        item: &'r Value,
+        item_ptr: &str,
+    ) -> Result<MethodOps, LoadError> {
+        let mut out = Vec::new();
+        for m in METHODS {
+            if item.get(m).is_some_and(Value::is_object) {
+                let o = self.operation(b, label, item, item_ptr, m, Vec::new(), Reached::Named)?;
+                out.push((m, o));
+            }
+        }
+        Ok(out)
+    }
+
+    /// Indexes the callbacks of every operation built so far, and of the
+    /// operations inside them. A callback reached twice is indexed once.
+    fn callbacks(
+        &mut self,
+        b: &mut Builder<'r>,
+    ) -> Result<HashMap<(String, String), Vec<MethodOps>>, LoadError> {
+        let root = self.root;
+        let mut out: HashMap<(String, String), Vec<MethodOps>> = HashMap::new();
+        let mut seen: HashSet<String> = HashSet::new();
+        while let Some((owner, cbs, ptr)) = self.pending.pop() {
+            let (cbs, ptr) = doc::deref(root, cbs, &ptr)?;
+            let Some(cbs) = cbs.as_object() else { continue };
+            for (name, cb) in cbs {
+                if name.starts_with("x-") {
+                    continue;
+                }
+                let (cb, cb_ptr) = doc::deref(root, cb, &doc::join(&ptr, name))?;
+                let key = (owner.clone(), name.clone());
+                if out.contains_key(&key) || self.ops.len() > MAX_CALLBACK_OPS {
+                    continue;
+                }
+                let mut exprs = Vec::new();
+                for (expr, item) in cb.as_object().into_iter().flatten() {
+                    if expr.starts_with("x-") {
+                        continue;
+                    }
+                    let (item, item_ptr) = doc::deref(root, item, &doc::join(&cb_ptr, expr))?;
+                    // A Path Item shared by several callbacks is built each
+                    // time, but its own callbacks are followed once.
+                    let first = seen.insert(item_ptr.clone());
+                    let before = self.pending.len();
+                    exprs.push(self.named_item(b, expr, item, &item_ptr)?);
+                    if !first {
+                        self.pending.truncate(before);
+                    }
+                }
+                out.insert(key, exprs);
+            }
+        }
+        Ok(out)
+    }
 }
 
 impl Spec {
@@ -114,9 +269,16 @@ impl Spec {
         let mut b = Builder::new(&root, version);
         let schemes = b.schemes()?;
         let doc_security = b.requirements(root.get("security"), "#/security", &schemes)?;
+        let mut cx = Ctx {
+            root: &root,
+            version,
+            schemes,
+            doc_security,
+            ops: Vec::new(),
+            pending: Vec::new(),
+        };
         let mut paths = PathIndex::default();
         let mut items: Vec<PathItem> = Vec::new();
-        let mut ops: Vec<Operation> = Vec::new();
         let mut all_bases: Vec<BasePath> = Vec::new();
 
         if let Some(path_map) = root.get("paths").and_then(Value::as_object) {
@@ -165,36 +327,9 @@ impl Spec {
                             pi.bases.push(base.clone());
                         }
                     }
-                    let body =
-                        b.request_body(op.get("requestBody"), &doc::join(&op_ptr, "requestBody"))?;
-                    let params = b.params(item, &item_ptr, op, &op_ptr, version)?;
-                    // Operation `security` replaces the document's, even when empty.
-                    let sec = match b.requirements(
-                        op.get("security"),
-                        &doc::join(&op_ptr, "security"),
-                        &schemes,
-                    )? {
-                        Some(r) => Some(r),
-                        None => doc_security.clone(),
-                    };
-                    let declared = security::declared(&schemes, sec.as_deref());
-                    let responses =
-                        b.responses(op.get("responses"), &doc::join(&op_ptr, "responses"))?;
-                    pi.ops.push((m, ops.len()));
-                    ops.push(Operation {
-                        template: tid,
-                        method: m,
-                        operation_id: op
-                            .get("operationId")
-                            .and_then(Value::as_str)
-                            .map(str::to_owned),
-                        bases: op_bases,
-                        body,
-                        params,
-                        security: sec,
-                        declared,
-                        responses,
-                    });
+                    let o =
+                        cx.operation(&mut b, key, item, &item_ptr, m, op_bases, Reached::Path)?;
+                    pi.ops.push((m, o));
                 }
                 if pi.bases.is_empty() {
                     pi.bases = item_bases;
@@ -209,6 +344,21 @@ impl Spec {
             }
         }
         all_bases.sort_by_key(|b| std::cmp::Reverse(b.len()));
+        let mut webhooks = HashMap::new();
+        // `webhooks` is new in 3.1; in 3.0 the key means nothing.
+        let hooks = root.get("webhooks").filter(|_| version != Version::V30);
+        if let Some(hooks) = hooks.and_then(Value::as_object) {
+            for (name, item) in hooks {
+                if name.starts_with("x-") {
+                    continue;
+                }
+                let (item, item_ptr) = doc::deref(&root, item, &doc::join("#/webhooks", name))?;
+                let ops = cx.named_item(&mut b, name, item, &item_ptr)?;
+                webhooks.insert(name.clone(), ops);
+            }
+        }
+        let callbacks = cx.callbacks(&mut b)?;
+        let Ctx { schemes, ops, .. } = cx;
         warnings.append(&mut b.warnings);
         let (store, mut schema_warnings) = SchemaStore::new(
             &root,
@@ -247,6 +397,8 @@ impl Spec {
             bases: all_bases,
             store,
             schemes,
+            webhooks,
+            callbacks,
             warnings,
         })
     }
@@ -395,7 +547,7 @@ impl Spec {
     pub(crate) fn matched(&self, op: usize) -> MatchedOperation {
         let o = &self.ops[op];
         MatchedOperation {
-            path: self.paths.template(o.template).text.clone(),
+            path: o.path.clone(),
             method: o.method.to_owned(),
             operation_id: o.operation_id.clone(),
         }
@@ -458,40 +610,16 @@ impl Spec {
 
     /// Validates a request against the operation it matches.
     pub fn validate_request(&self, req: &Request<'_>) -> Report {
-        let mut report = self.new_report();
-        let guarded = catch_unwind(AssertUnwindSafe(|| {
-            let mut r = self.new_report();
-            if let Some((op, vars, _head)) = self.route_into(req, &mut r) {
-                let o = &self.ops[op];
-                if self.options.check_security {
-                    if let Some(reqs) = &o.security {
-                        if let Some(why) = security::check(&self.schemes, reqs, req, &self.options)
-                        {
-                            r.push(ProblemKind::MissingCredentials, "security", why);
-                        }
-                    }
-                }
-                crate::validate::check_single_headers(req.headers, &mut r);
-                self.check_params(&o.params, &vars, req, &o.declared, &mut r);
-                self.check_request_body(o.body.as_ref(), req, &mut r);
+        self.guarded("request", |r| {
+            if let Some((op, vars, _head)) = self.route_into(req, r) {
+                self.check_request_op(op, &vars, req, r);
             }
-            r
-        }));
-        match guarded {
-            Ok(r) => report = r,
-            Err(_) => report.push(
-                ProblemKind::Internal,
-                "request",
-                "internal error during validation",
-            ),
-        }
-        report
+        })
     }
 
     /// Validates a response against the operation its request matches.
     pub fn validate_response(&self, req: &Request<'_>, resp: &Response<'_>) -> Report {
-        let guarded = catch_unwind(AssertUnwindSafe(|| {
-            let mut r = self.new_report();
+        self.guarded("response", |r| {
             let mut scratch = self.new_report();
             let Some((op, _vars, head)) = self.route_into(req, &mut scratch) else {
                 let why = scratch
@@ -504,31 +632,244 @@ impl Spec {
                     "request",
                     format!("the response is for an undeclared operation: {why}"),
                 );
-                return r;
+                return;
             };
             if let Some(m) = scratch.operation() {
                 r.set_operation(m.clone());
             }
-            let o = &self.ops[op];
-            match o.responses.find(resp.status) {
-                Some(obj) => self.check_response(obj, req, head, resp, &mut r),
-                None => r.push(
-                    ProblemKind::UndeclaredStatus,
-                    "status",
-                    format!("status {} is not declared for this operation", resp.status),
-                ),
-            }
+            self.check_response_op(op, req, head, resp, r);
+        })
+    }
+
+    /// Validates a request the API sends to a webhook (OpenAPI 3.1.1
+    /// §4.8.1 `webhooks`). The method selects the operation; the path is
+    /// not checked, since the receiver chooses it.
+    pub fn validate_webhook_request(&self, name: &str, req: &Request<'_>) -> Report {
+        self.guarded("request", |r| {
+            let found = self.webhooks.get(name).map(|ops| vec![ops.as_slice()]);
+            self.named_request(found, "webhook", name, req, r);
+        })
+    }
+
+    /// Validates the response a webhook receiver returned.
+    pub fn validate_webhook_response(
+        &self,
+        name: &str,
+        req: &Request<'_>,
+        resp: &Response<'_>,
+    ) -> Report {
+        self.guarded("response", |r| {
+            let found = self.webhooks.get(name).map(|ops| vec![ops.as_slice()]);
+            self.named_response(found, "webhook", name, req, resp, r);
+        })
+    }
+
+    /// Validates a request the API sends for the callback `callback` of the
+    /// operation `operation_id` (OpenAPI 3.1.1 §4.8.18). The callback URL
+    /// is the caller's to resolve, so the path is not checked; when the
+    /// callback has several expressions, any whose operation accepts the
+    /// request is enough.
+    pub fn validate_callback_request(
+        &self,
+        operation_id: &str,
+        callback: &str,
+        req: &Request<'_>,
+    ) -> Report {
+        self.guarded("request", |r| {
+            let found = self.callback(operation_id, callback);
+            self.named_request(found, "callback", callback, req, r);
+        })
+    }
+
+    /// Validates the response a callback receiver returned.
+    pub fn validate_callback_response(
+        &self,
+        operation_id: &str,
+        callback: &str,
+        req: &Request<'_>,
+        resp: &Response<'_>,
+    ) -> Report {
+        self.guarded("response", |r| {
+            let found = self.callback(operation_id, callback);
+            self.named_response(found, "callback", callback, req, resp, r);
+        })
+    }
+
+    fn callback(&self, operation_id: &str, callback: &str) -> Named<'_> {
+        self.callbacks
+            .get(&(operation_id.to_owned(), callback.to_owned()))
+            .map(|exprs| exprs.iter().map(Vec::as_slice).collect())
+    }
+
+    /// Runs `f` on a fresh report; a panic becomes an internal problem.
+    fn guarded(&self, what: &str, f: impl FnOnce(&mut Report)) -> Report {
+        let guarded = catch_unwind(AssertUnwindSafe(|| {
+            let mut r = self.new_report();
+            f(&mut r);
             r
         }));
         guarded.unwrap_or_else(|_| {
             let mut r = self.new_report();
             r.push(
                 ProblemKind::Internal,
-                "response",
+                what,
                 "internal error during validation",
             );
             r
         })
+    }
+
+    fn check_request_op(&self, op: usize, vars: &Vars<'_>, req: &Request<'_>, r: &mut Report) {
+        let o = &self.ops[op];
+        if self.options.check_security {
+            if let Some(reqs) = &o.security {
+                if let Some(why) = security::check(&self.schemes, reqs, req, &self.options) {
+                    r.push(ProblemKind::MissingCredentials, "security", why);
+                }
+            }
+        }
+        crate::validate::check_single_headers(req.headers, r);
+        self.check_params(&o.params, vars, req, &o.declared, r);
+        self.check_request_body(o.body.as_ref(), req, r);
+    }
+
+    fn check_response_op(
+        &self,
+        op: usize,
+        req: &Request<'_>,
+        head: bool,
+        resp: &Response<'_>,
+        r: &mut Report,
+    ) {
+        match self.ops[op].responses.find(resp.status) {
+            Some(obj) => self.check_response(obj, req, head, resp, r),
+            None => r.push(
+                ProblemKind::UndeclaredStatus,
+                "status",
+                format!("status {} is not declared for this operation", resp.status),
+            ),
+        }
+    }
+
+    /// The operations a named Path Item offers for the request's method,
+    /// one per expression; HEAD falls back to GET. `Err` is the problem.
+    fn named_ops(
+        &self,
+        found: Named<'_>,
+        kind: &str,
+        name: &str,
+        req: &Request<'_>,
+    ) -> Result<Vec<(usize, bool)>, Problem> {
+        let Some(items) = found else {
+            return Err((
+                ProblemKind::UndeclaredOperation,
+                if kind == "webhook" {
+                    "webhook"
+                } else {
+                    "callback"
+                },
+                format!(
+                    "the document declares no {kind} named {:?}",
+                    truncate(name, 200)
+                ),
+            ));
+        };
+        let key = METHODS
+            .iter()
+            .find(|k| k.to_ascii_uppercase() == req.method)
+            .copied();
+        let mut out = Vec::new();
+        for ops in &items {
+            let find = |k: &str| ops.iter().find(|(m, _)| *m == k).map(|(_, o)| *o);
+            match key.and_then(|k| find(k).map(|o| (o, false))) {
+                Some(hit) => out.push(hit),
+                None if key == Some("head") => out.extend(find("get").map(|o| (o, true))),
+                None => {}
+            }
+        }
+        if out.is_empty() {
+            let mut allowed: Vec<String> = items
+                .iter()
+                .flat_map(|ops| ops.iter().map(|(m, _)| m.to_ascii_uppercase()))
+                .collect();
+            allowed.dedup();
+            return Err((
+                ProblemKind::MethodNotAllowed,
+                "method",
+                format!(
+                    "{} is not allowed on the {kind} {:?}; allowed: {}",
+                    truncate(req.method, 32),
+                    truncate(name, 200),
+                    allowed.join(", ")
+                ),
+            ));
+        }
+        Ok(out)
+    }
+
+    /// Checks against each candidate; the first that accepts wins, and
+    /// otherwise the first candidate's problems are reported.
+    fn first_accepting(
+        &self,
+        candidates: &[(usize, bool)],
+        r: &mut Report,
+        check: impl Fn(usize, bool, &mut Report),
+    ) {
+        let mut first: Option<Report> = None;
+        for &(op, head) in candidates {
+            let mut c = self.new_report();
+            c.set_operation(self.matched(op));
+            check(op, head, &mut c);
+            if c.is_valid() {
+                *r = c;
+                return;
+            }
+            first.get_or_insert(c);
+        }
+        if let Some(c) = first {
+            *r = c;
+        }
+    }
+
+    fn named_request(
+        &self,
+        found: Named<'_>,
+        kind: &str,
+        name: &str,
+        req: &Request<'_>,
+        r: &mut Report,
+    ) {
+        match self.named_ops(found, kind, name, req) {
+            Err((k, loc, msg)) => r.push(k, loc, msg),
+            Ok(c) => self.first_accepting(&c, r, |op, _, c| {
+                self.check_request_op(op, &Vars::default(), req, c)
+            }),
+        }
+    }
+
+    fn named_response(
+        &self,
+        found: Named<'_>,
+        kind: &str,
+        name: &str,
+        req: &Request<'_>,
+        resp: &Response<'_>,
+        r: &mut Report,
+    ) {
+        match self.named_ops(found, kind, name, req) {
+            Err((k, loc, msg)) => r.push(
+                ProblemKind::UndeclaredOperation,
+                if k == ProblemKind::UndeclaredOperation {
+                    loc
+                } else {
+                    "request"
+                },
+                format!("the response is for an undeclared operation: {msg}"),
+            ),
+            Ok(c) => self.first_accepting(&c, r, |op, head, c| {
+                self.check_response_op(op, req, head, resp, c)
+            }),
+        }
     }
 }
 

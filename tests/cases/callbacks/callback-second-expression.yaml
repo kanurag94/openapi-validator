@@ -1,0 +1,43 @@
+title: "The method selects among a callback's expressions"
+ref: "OpenAPI 3.0.4 §4.7.18"
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /subscriptions:
+      post:
+        operationId: subscribe
+        requestBody:
+          content:
+            application/json:
+              schema: {type: object, required: [url], properties: {url: {type: string}}}
+        responses:
+          "201": {description: created}
+        callbacks:
+          onEvent:
+            "{$request.body#/url}":
+              post:
+                requestBody:
+                  required: true
+                  content:
+                    application/json:
+                      schema: {type: object, required: [event], properties: {event: {type: string, enum: [created, deleted]}}}
+                responses:
+                  "204": {description: received}
+            "{$request.body#/url}/status":
+              get:
+                parameters:
+                  - {name: since, in: query, required: true, schema: {type: integer}}
+                responses:
+                  "200": {description: ok}
+          shared: {$ref: "#/components/callbacks/Ping"}
+  components:
+    callbacks:
+      Ping:
+        "{$request.query.ping}":
+          head:
+            responses:
+              "200": {description: ok}
+callback: [subscribe, onEvent]
+request: {method: GET, path: /hooks/42/status, query: since=7}
+expect: {valid: true}

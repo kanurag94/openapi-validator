@@ -1,0 +1,34 @@
+title: "A webhook response body is checked against its schema"
+ref: "OpenAPI 3.1.1 §4.8.1, §4.8.17"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  webhooks:
+    newPet:
+      post:
+        parameters:
+          - {name: X-Signature, in: header, required: true, schema: {type: string, pattern: "^[0-9a-f]+$"}}
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Pet"}
+        responses:
+          "200": {description: ok}
+          "410":
+            description: gone
+            content:
+              application/json:
+                schema: {type: object, required: [reason]}
+  components:
+    schemas:
+      Pet:
+        type: object
+        required: [name]
+        properties:
+          name: {type: string}
+          id: {type: integer, readOnly: true}
+webhook: newPet
+request: {method: POST, path: /}
+response: {status: 410, headers: [["Content-Type", "application/json"]], body: "{}"}
+expect: {valid: false, kind: schema_violation}

@@ -15,6 +15,8 @@
 //!   query: ids=1&ids=2
 //!   headers: [["X-Tag", "a"]]
 //!   body: '{"a": 1}'
+//! webhook: newPet      # optional: the request goes to this webhook
+//! callback: [createSub, onEvent]  # or to this callback (operationId, name)
 //! response:           # optional: validates the response for the request
 //!   status: 200
 //!   headers: [["Content-Type", "application/json"]]
@@ -203,6 +205,12 @@ fn run(case: &Value) -> Result<(), String> {
         headers: &hs,
         body: req_body.as_bytes(),
     };
+    let webhook = case.get("webhook").and_then(Value::as_str);
+    let callback = match case.get("callback") {
+        Some(Value::Array(a)) if a.len() == 2 => Some((text(a.first()), text(a.get(1)))),
+        Some(_) => return Err("callback is [operationId, name]".into()),
+        None => None,
+    };
     let report = match case.get("response") {
         Some(r) => {
             let status = r
@@ -212,16 +220,22 @@ fn run(case: &Value) -> Result<(), String> {
             let rh = headers(r.get("headers"))?;
             let rhs: Vec<(&str, &str)> = rh.iter().map(|(a, b)| (a.as_str(), b.as_str())).collect();
             let body = text(r.get("body"));
-            spec.validate_response(
-                &req,
-                &Response {
-                    status,
-                    headers: &rhs,
-                    body: body.as_bytes(),
-                },
-            )
+            let resp = Response {
+                status,
+                headers: &rhs,
+                body: body.as_bytes(),
+            };
+            match (webhook, &callback) {
+                (Some(w), _) => spec.validate_webhook_response(w, &req, &resp),
+                (None, Some((o, c))) => spec.validate_callback_response(o, c, &req, &resp),
+                (None, None) => spec.validate_response(&req, &resp),
+            }
         }
-        None => spec.validate_request(&req),
+        None => match (webhook, &callback) {
+            (Some(w), _) => spec.validate_webhook_request(w, &req),
+            (None, Some((o, c))) => spec.validate_callback_request(o, c, &req),
+            (None, None) => spec.validate_request(&req),
+        },
     };
     let want_valid = expect
         .get("valid")
