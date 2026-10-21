@@ -1,0 +1,15 @@
+[package]
+name = "openapi-validator-ffi"
+description = "C ABI for openapi-validator"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+[dependencies]
+openapi-validator = { path = ".." }

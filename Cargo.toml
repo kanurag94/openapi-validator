@@ -1,0 +1,30 @@
+[workspace]
+members = [".", "ffi"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.88"
+license = "Apache-2.0"
+repository = "https://github.com/kanurag94/openapi-validator"
+
+[package]
+name = "openapi-validator"
+description = "Validate HTTP requests and responses against OpenAPI 3.0 and 3.1 documents at runtime"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+keywords = ["openapi", "validation", "json-schema", "gateway", "http"]
+categories = ["web-programming", "parser-implementations"]
+
+[dependencies]
+jsonschema = { version = "0.59", default-features = false, features = ["arbitrary-precision"] }
+serde_json = { version = "1", features = ["arbitrary_precision"] }
+regex = "1"
+
+[profile.bench]
+debug = true
