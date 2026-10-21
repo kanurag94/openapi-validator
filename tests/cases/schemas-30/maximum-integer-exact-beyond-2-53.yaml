@@ -1,0 +1,23 @@
+title: "maximum 2^53 rejects 2^53+1 (no float rounding)"
+ref: "JSON Schema Validation (Wright draft 00) §5.1.2 maximum"
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: integer, maximum: 9007199254740992}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "9007199254740993"
+expect:
+  valid: false
+  kind: schema_violation
+  location: body

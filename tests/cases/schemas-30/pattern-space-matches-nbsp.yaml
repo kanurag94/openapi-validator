@@ -1,0 +1,21 @@
+title: "\\s matches a no-break space (ECMA WhiteSpace)"
+ref: "JSON Schema Validation (Wright draft 00) §5.2.3 pattern (ECMA 262)"
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: string, pattern: '^\s$'}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "\"\\u00a0\""
+expect:
+  valid: true

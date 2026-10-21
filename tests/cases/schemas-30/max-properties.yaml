@@ -1,0 +1,23 @@
+title: "maxProperties 1 rejects two properties"
+ref: "JSON Schema Validation (Wright draft 00) §5.4.1 maxProperties"
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: object, maxProperties: 1}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "{\"a\": 1, \"b\": 2}"
+expect:
+  valid: false
+  kind: schema_violation
+  location: body

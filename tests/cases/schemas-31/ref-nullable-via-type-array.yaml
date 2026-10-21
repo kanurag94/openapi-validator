@@ -1,0 +1,24 @@
+title: "A referenced schema with type [integer, null] accepts null"
+ref: "JSON Schema Core 2020-12 §8.2.3.1 $ref; JSON Schema Validation 2020-12 §6.1.1 type"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: object, properties: {n: {$ref: '#/components/schemas/MaybeInt'}}}
+        responses: {"200": {description: ok}}
+  components:
+    schemas:
+      MaybeInt: {type: [integer, 'null']}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "{\"n\": null}"
+expect:
+  valid: true

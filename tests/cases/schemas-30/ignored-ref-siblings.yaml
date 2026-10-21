@@ -1,0 +1,24 @@
+title: "Keywords beside $ref are ignored in 3.0"
+ref: "OpenAPI 3.0.4 §4.8.24 (Reference Object)"
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Code', maxLength: 1}
+        responses: {"200": {description: ok}}
+  components:
+    schemas:
+      Code: {type: string}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "\"abc\""
+expect:
+  valid: true

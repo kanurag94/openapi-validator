@@ -1,0 +1,21 @@
+title: "unevaluatedItems false sees prefixItems inside allOf"
+ref: "JSON Schema Core 2020-12 §11.2 unevaluatedItems"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: array, allOf: [{prefixItems: [{type: string}]}], unevaluatedItems: false}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "[\"a\"]"
+expect:
+  valid: true

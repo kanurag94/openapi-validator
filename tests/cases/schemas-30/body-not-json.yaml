@@ -1,0 +1,22 @@
+title: "A body that is not JSON is malformed"
+ref: "RFC 8259 §2; OpenAPI 3.0.4 §4.8.14 (Media Type Object)"
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: object}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "{a: 1}"
+expect:
+  valid: false
+  kind: malformed_body

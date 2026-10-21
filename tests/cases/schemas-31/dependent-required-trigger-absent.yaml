@@ -1,0 +1,21 @@
+title: "dependentRequired does nothing when the trigger is absent"
+ref: "JSON Schema Validation 2020-12 §6.5.4 dependentRequired"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: object, dependentRequired: {credit: [billing]}}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "{\"billing\": 1}"
+expect:
+  valid: true

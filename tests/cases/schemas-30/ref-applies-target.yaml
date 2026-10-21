@@ -1,0 +1,26 @@
+title: "$ref applies the referenced schema"
+ref: "OpenAPI 3.0.4 §4.8.24 (Reference Object)"
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Code'}
+        responses: {"200": {description: ok}}
+  components:
+    schemas:
+      Code: {type: string}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "5"
+expect:
+  valid: false
+  kind: schema_violation
+  location: body

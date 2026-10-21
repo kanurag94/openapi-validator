@@ -1,0 +1,21 @@
+title: "contentEncoding is an annotation and does not reject bad base64"
+ref: "JSON Schema Validation 2020-12 §8.3 contentEncoding"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: string, contentEncoding: base64}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "\"!!!\""
+expect:
+  valid: true

@@ -1,0 +1,23 @@
+title: "A value outside enum fails"
+ref: "JSON Schema Validation (Wright draft 00) §5.5.1 enum"
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: string, enum: [a, b]}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "\"c\""
+expect:
+  valid: false
+  kind: schema_violation
+  location: body

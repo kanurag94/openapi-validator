@@ -1,0 +1,21 @@
+title: "dependentRequired is not a 3.0 keyword and constrains nothing"
+ref: "OpenAPI 3.0.4 §4.8.24 (JSON Schema keywords taken from the Wright draft; others are not part of the Schema Object)"
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: object, dependentRequired: {a: [b]}}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "{\"a\": 1}"
+expect:
+  valid: true

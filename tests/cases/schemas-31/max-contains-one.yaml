@@ -1,0 +1,23 @@
+title: "maxContains 1 rejects two matching elements"
+ref: "JSON Schema Validation 2020-12 §6.4.4 maxContains"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: array, contains: {type: string}, maxContains: 1}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "[\"a\", \"b\"]"
+expect:
+  valid: false
+  kind: schema_violation
+  location: body

@@ -1,0 +1,24 @@
+title: "Keywords beside $ref apply together with the target"
+ref: "JSON Schema Core 2020-12 §8.2.3.1 $ref; OpenAPI 3.1.1 §4.8.24"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Code', maxLength: 2}
+        responses: {"200": {description: ok}}
+  components:
+    schemas:
+      Code: {type: string}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "\"ab\""
+expect:
+  valid: true

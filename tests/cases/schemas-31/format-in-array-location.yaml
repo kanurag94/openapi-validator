@@ -1,0 +1,23 @@
+title: "A bad uuid in an array is reported at its index"
+ref: "JSON Schema Validation 2020-12 §7.3; RFC 4122 §3"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: array, items: {type: string, format: uuid}}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "[\"123e4567-e89b-12d3-a456-426614174000\", \"nope\"]"
+expect:
+  valid: false
+  kind: schema_violation
+  location: body/1

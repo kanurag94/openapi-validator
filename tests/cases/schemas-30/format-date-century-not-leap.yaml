@@ -1,0 +1,23 @@
+title: "format date: 1900 is not a leap year"
+ref: "OpenAPI 3.0.4 §4.8.24 (Data Types); RFC 3339 §5.6"
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: string, format: date}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "\"1900-02-29\""
+expect:
+  valid: false
+  kind: schema_violation
+  location: body

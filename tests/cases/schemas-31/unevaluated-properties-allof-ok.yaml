@@ -1,0 +1,21 @@
+title: "unevaluatedProperties false sees properties declared in allOf"
+ref: "JSON Schema Core 2020-12 §11.3 unevaluatedProperties"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: object, allOf: [{properties: {a: {type: integer}}}], unevaluatedProperties: false}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "{\"a\": 1}"
+expect:
+  valid: true

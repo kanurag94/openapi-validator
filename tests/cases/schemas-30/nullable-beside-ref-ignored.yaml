@@ -1,0 +1,26 @@
+title: "nullable beside $ref is ignored in 3.0, so null fails the referenced string"
+ref: "OpenAPI 3.0.4 §4.8.24 (Reference Object); OpenAPI 3.0.4 §4.8.24 (nullable)"
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Code', nullable: true}
+        responses: {"200": {description: ok}}
+  components:
+    schemas:
+      Code: {type: string}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "null"
+expect:
+  valid: false
+  kind: schema_violation
+  location: body

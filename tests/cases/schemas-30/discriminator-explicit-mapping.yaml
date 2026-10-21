@@ -1,0 +1,25 @@
+title: "An explicit mapping key selects its schema"
+ref: "OpenAPI 3.0.4 §4.8.25 (Discriminator Object)"
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {oneOf: [{$ref: '#/components/schemas/Cat'}, {$ref: '#/components/schemas/Dog'}], discriminator: {propertyName: petType, mapping: {kitty: '#/components/schemas/Cat', puppy: '#/components/schemas/Dog'}}}
+        responses: {"200": {description: ok}}
+  components:
+    schemas:
+      Cat: {type: object, required: [petType, meow], properties: {petType: {type: string}, meow: {type: boolean}}}
+      Dog: {type: object, required: [petType, bark], properties: {petType: {type: string}, bark: {type: boolean}}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "{\"petType\": \"puppy\", \"bark\": false}"
+expect:
+  valid: true

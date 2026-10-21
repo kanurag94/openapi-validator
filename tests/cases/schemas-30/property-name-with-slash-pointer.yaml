@@ -1,0 +1,23 @@
+title: "A property name containing '/' is escaped as ~1 in the location"
+ref: "JSON Schema Validation (Wright draft 00) §5.4.4 properties; RFC 6901"
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: object, properties: {'a/b': {type: integer}}}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "{\"a/b\": \"x\"}"
+expect:
+  valid: false
+  kind: schema_violation
+  location: body/a~1b

@@ -1,0 +1,21 @@
+title: "exclusiveMaximum 2^53+1 accepts 2^53"
+ref: "JSON Schema Validation 2020-12 §6.2.3 exclusiveMaximum"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: integer, exclusiveMaximum: 9007199254740993}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "9007199254740992"
+expect:
+  valid: true

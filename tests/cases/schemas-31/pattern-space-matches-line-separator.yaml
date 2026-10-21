@@ -1,0 +1,21 @@
+title: "\\s matches U+2028 (ECMA LineTerminator)"
+ref: "JSON Schema Validation 2020-12 §6.3.3 pattern; JSON Schema Core 2020-12 §6.4"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: string, pattern: '^\s$'}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "\"\\u2028\""
+expect:
+  valid: true

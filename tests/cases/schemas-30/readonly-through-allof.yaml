@@ -1,0 +1,24 @@
+title: "readOnly declared in an allOf member relaxes required in a request"
+ref: "OpenAPI 3.0.4 §4.8.24 (readOnly, writeOnly)"
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {allOf: [{$ref: '#/components/schemas/Base'}, {type: object, required: [name], properties: {name: {type: string}}}]}
+        responses: {"200": {description: ok}}
+  components:
+    schemas:
+      Base: {type: object, required: [id], properties: {id: {type: integer, readOnly: true}}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "{\"name\": \"x\"}"
+expect:
+  valid: true

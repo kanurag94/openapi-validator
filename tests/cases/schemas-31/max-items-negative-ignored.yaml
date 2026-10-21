@@ -1,0 +1,21 @@
+title: "A negative maxItems is ignored and the document loads"
+ref: "JSON Schema Validation 2020-12 §6.4.1 maxItems"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: array, maxItems: -1}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "[1, 2]"
+expect:
+  valid: true

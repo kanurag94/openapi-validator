@@ -1,0 +1,21 @@
+title: "minContains 0 lets contains pass on an empty array"
+ref: "JSON Schema Validation 2020-12 §6.4.5 minContains"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: array, contains: {type: string}, minContains: 0}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "[]"
+expect:
+  valid: true

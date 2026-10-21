@@ -1,0 +1,21 @@
+title: "All required properties present"
+ref: "JSON Schema Validation (Wright draft 00) §5.4.3 required"
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: object, required: [name], properties: {name: {type: string}}}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "{\"name\": \"x\"}"
+expect:
+  valid: true

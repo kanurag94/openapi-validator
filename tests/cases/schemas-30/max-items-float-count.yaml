@@ -1,0 +1,23 @@
+title: "maxItems written as 2.0 is a count of 2"
+ref: "JSON Schema Validation (Wright draft 00) §5.3.2 maxItems"
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: array, items: {}, maxItems: 2.0}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "[1, 2, 3]"
+expect:
+  valid: false
+  kind: schema_violation
+  location: body

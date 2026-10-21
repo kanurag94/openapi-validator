@@ -1,0 +1,23 @@
+title: "1.5 is not an integer"
+ref: "JSON Schema Validation 2020-12 §6.1.1 type; JSON Schema Core 2020-12 §4.2.1"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: integer}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "1.5"
+expect:
+  valid: false
+  kind: schema_violation
+  location: body

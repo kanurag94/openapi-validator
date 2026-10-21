@@ -1,0 +1,21 @@
+title: "format binary is an annotation and does not reject the value"
+ref: "OpenAPI 3.0.4 §4.8.24 (Data Types)"
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: string, format: binary}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "\"\\u0000\""
+expect:
+  valid: true

@@ -1,0 +1,23 @@
+title: "0.30000000000000004 is not a multiple of 0.1"
+ref: "JSON Schema Validation 2020-12 §6.2.1 multipleOf"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: number, multipleOf: 0.1}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "0.30000000000000004"
+expect:
+  valid: false
+  kind: schema_violation
+  location: body

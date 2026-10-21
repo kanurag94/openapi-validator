@@ -1,0 +1,23 @@
+title: "In 3.1 nullable has no effect, so null fails type string"
+ref: "OpenAPI 3.1.1 §4.8.24; OpenAPI 3.1.1 §4.8.24.1 (nullable removed)"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: string, nullable: true}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "null"
+expect:
+  valid: false
+  kind: schema_violation
+  location: body

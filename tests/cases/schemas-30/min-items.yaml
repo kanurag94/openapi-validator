@@ -1,0 +1,23 @@
+title: "minItems 2 rejects one element"
+ref: "JSON Schema Validation (Wright draft 00) §5.3.3 minItems"
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: array, items: {}, minItems: 2}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "[1]"
+expect:
+  valid: false
+  kind: schema_violation
+  location: body

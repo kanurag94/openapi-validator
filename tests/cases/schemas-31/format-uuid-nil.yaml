@@ -1,0 +1,21 @@
+title: "format uuid: the nil UUID"
+ref: "JSON Schema Validation 2020-12 §7.3; RFC 4122 §4.1.7"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: string, format: uuid}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "\"00000000-0000-0000-0000-000000000000\""
+expect:
+  valid: true

@@ -1,0 +1,26 @@
+title: "Base lists children in oneOf and children allOf the base: a valid Cat"
+ref: "OpenAPI 3.0.4 §4.8.25 (Discriminator Object)"
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Pet'}
+        responses: {"200": {description: ok}}
+  components:
+    schemas:
+      Pet: {type: object, required: [petType], properties: {petType: {type: string}}, discriminator: {propertyName: petType}, oneOf: [{$ref: '#/components/schemas/Cat'}, {$ref: '#/components/schemas/Dog'}]}
+      Cat: {allOf: [{$ref: '#/components/schemas/Pet'}, {type: object, required: [meow], properties: {meow: {type: boolean}}}]}
+      Dog: {allOf: [{$ref: '#/components/schemas/Pet'}, {type: object, required: [bark], properties: {bark: {type: boolean}}}]}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "{\"petType\": \"Cat\", \"meow\": true}"
+expect:
+  valid: true

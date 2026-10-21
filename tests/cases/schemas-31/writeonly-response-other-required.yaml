@@ -1,0 +1,23 @@
+title: "Other required properties still apply in a response"
+ref: "JSON Schema Validation 2020-12 §9.4 readOnly/writeOnly; OpenAPI 3.1.1 §4.8.24"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      get:
+        responses:
+          "200":
+            description: ok
+            content:
+              application/json:
+                schema: {type: object, required: [secret, name], properties: {secret: {type: string, writeOnly: true}, name: {type: string}}}
+request: {method: GET, path: /t}
+response:
+  status: 200
+  headers: [["Content-Type", "application/json"]]
+  body: "{}"
+expect:
+  valid: false
+  kind: schema_violation
+  location: body/name

@@ -1,0 +1,16 @@
+title: "A backreference in pattern makes the document refused"
+ref: "JSON Schema Validation (Wright draft 00) §5.2.3 pattern"
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: string, pattern: '^(a)\1$'}
+        responses: {"200": {description: ok}}
+expect:
+  load_error: true

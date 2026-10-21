@@ -1,0 +1,21 @@
+title: "A negative minLength is ignored and the document loads"
+ref: "JSON Schema Validation (Wright draft 00) §5.2.2 minLength"
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: string, minLength: -1}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "\"\""
+expect:
+  valid: true

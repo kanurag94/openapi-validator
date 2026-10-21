@@ -1,0 +1,22 @@
+title: "A trailing comma makes the body malformed"
+ref: "RFC 8259 §2"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: true
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "[1, 2,]"
+expect:
+  valid: false
+  kind: malformed_body

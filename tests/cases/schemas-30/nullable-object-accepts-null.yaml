@@ -1,0 +1,21 @@
+title: "A nullable object schema accepts null"
+ref: "OpenAPI 3.0.4 §4.8.24 (nullable)"
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: object, nullable: true, required: [a]}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "null"
+expect:
+  valid: true

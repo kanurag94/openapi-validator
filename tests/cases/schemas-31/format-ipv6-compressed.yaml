@@ -1,0 +1,21 @@
+title: "format ipv6: a compressed form"
+ref: "JSON Schema Validation 2020-12 §7.3; RFC 4291 §2.2"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: string, format: ipv6}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "\"2001:db8::8a2e:370:7334\""
+expect:
+  valid: true

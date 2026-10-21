@@ -1,0 +1,22 @@
+title: "Duplicate keys in a nested object make the body malformed"
+ref: "RFC 8259 §4; OpenAPI 3.1.1 §4.8.14 (Media Type Object)"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: true
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "{\"a\": {\"b\": 1, \"b\": 1}}"
+expect:
+  valid: false
+  kind: malformed_body

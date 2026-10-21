@@ -1,0 +1,23 @@
+title: "minContains 2 needs two matching elements"
+ref: "JSON Schema Validation 2020-12 §6.4.5 minContains"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: array, contains: {type: string}, minContains: 2}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "[\"a\", 1]"
+expect:
+  valid: false
+  kind: schema_violation
+  location: body

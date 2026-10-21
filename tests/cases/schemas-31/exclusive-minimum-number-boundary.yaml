@@ -1,0 +1,23 @@
+title: "Numeric exclusiveMinimum rejects the bound itself"
+ref: "JSON Schema Validation 2020-12 §6.2.5 exclusiveMinimum"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: number, exclusiveMinimum: 5}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "5"
+expect:
+  valid: false
+  kind: schema_violation
+  location: body

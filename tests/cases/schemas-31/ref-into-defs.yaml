@@ -1,0 +1,26 @@
+title: "A $ref can point into a component's $defs"
+ref: "JSON Schema Core 2020-12 §8.2.4 $defs; §8.2.3.1 $ref"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Order/$defs/Qty'}
+        responses: {"200": {description: ok}}
+  components:
+    schemas:
+      Order: {type: object, $defs: {Qty: {type: integer, minimum: 1}}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "0"
+expect:
+  valid: false
+  kind: schema_violation
+  location: body

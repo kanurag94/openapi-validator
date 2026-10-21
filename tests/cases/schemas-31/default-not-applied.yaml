@@ -1,0 +1,23 @@
+title: "A default does not satisfy required"
+ref: "JSON Schema Validation 2020-12 §9.2 default; §6.5.3 required"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: object, required: [a], properties: {a: {type: integer, default: 1}}}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "{}"
+expect:
+  valid: false
+  kind: schema_violation
+  location: body/a

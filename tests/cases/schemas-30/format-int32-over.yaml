@@ -1,0 +1,23 @@
+title: "int32 rejects 2147483648"
+ref: "OpenAPI 3.0.4 §4.8.24 (Data Types: int32)"
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: integer, format: int32}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "2147483648"
+expect:
+  valid: false
+  kind: schema_violation
+  location: body

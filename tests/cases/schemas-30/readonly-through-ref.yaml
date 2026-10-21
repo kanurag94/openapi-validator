@@ -1,0 +1,25 @@
+title: "readOnly in a referenced schema relaxes required in a request"
+ref: "OpenAPI 3.0.4 §4.8.24 (readOnly, writeOnly)"
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Item'}
+        responses: {"200": {description: ok}}
+  components:
+    schemas:
+      Item: {type: object, required: [id, name], properties: {id: {$ref: '#/components/schemas/Id'}, name: {type: string}}}
+      Id: {type: integer, readOnly: true}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "{\"name\": \"x\"}"
+expect:
+  valid: true

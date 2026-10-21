@@ -1,0 +1,21 @@
+title: "A nullable property accepts a null value"
+ref: "OpenAPI 3.0.4 §4.8.24 (nullable)"
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: object, properties: {age: {type: integer, nullable: true}}}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "{\"age\": null}"
+expect:
+  valid: true

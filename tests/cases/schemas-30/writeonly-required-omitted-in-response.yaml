@@ -1,0 +1,21 @@
+title: "A required writeOnly property may be omitted from a response"
+ref: "OpenAPI 3.0.4 §4.8.24 (readOnly, writeOnly)"
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      get:
+        responses:
+          "200":
+            description: ok
+            content:
+              application/json:
+                schema: {type: object, required: [password, name], properties: {password: {type: string, writeOnly: true}, name: {type: string}}}
+request: {method: GET, path: /t}
+response:
+  status: 200
+  headers: [["Content-Type", "application/json"]]
+  body: "{\"name\": \"x\"}"
+expect:
+  valid: true

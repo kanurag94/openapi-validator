@@ -1,0 +1,21 @@
+title: "In 3.1, 1.0 is an integer (zero fractional part)"
+ref: "JSON Schema Validation 2020-12 §6.1.1 type; JSON Schema Core 2020-12 §4.2.1"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: integer}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "1.0"
+expect:
+  valid: true

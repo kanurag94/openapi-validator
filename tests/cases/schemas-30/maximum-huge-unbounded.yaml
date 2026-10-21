@@ -1,0 +1,21 @@
+title: "maximum 1.79e308 leaves the range unbounded"
+ref: "JSON Schema Validation (Wright draft 00) §5.1.2 maximum"
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: number, maximum: 1.79e308}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "1e300"
+expect:
+  valid: true

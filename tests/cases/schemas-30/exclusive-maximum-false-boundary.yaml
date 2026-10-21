@@ -1,0 +1,21 @@
+title: "Boolean exclusiveMaximum false keeps the maximum inclusive"
+ref: "JSON Schema Validation (Wright draft 00) §5.1.2 exclusiveMaximum; OpenAPI 3.0.4 §4.8.24"
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: integer, maximum: 5, exclusiveMaximum: false}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "5"
+expect:
+  valid: true

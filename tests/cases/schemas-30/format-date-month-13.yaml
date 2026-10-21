@@ -1,0 +1,23 @@
+title: "format date: month 13 does not exist"
+ref: "OpenAPI 3.0.4 §4.8.24 (Data Types); RFC 3339 §5.6"
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: string, format: date}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "\"2024-13-01\""
+expect:
+  valid: false
+  kind: schema_violation
+  location: body

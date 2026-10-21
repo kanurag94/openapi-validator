@@ -1,0 +1,23 @@
+title: "A readOnly property sent in a request is still type-checked"
+ref: "OpenAPI 3.0.4 §4.8.24 (readOnly, writeOnly)"
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: object, properties: {id: {type: integer, readOnly: true}}}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "{\"id\": \"x\"}"
+expect:
+  valid: false
+  kind: schema_violation
+  location: body/id
