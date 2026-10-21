@@ -184,10 +184,11 @@ fn percent_decode_fragment(s: &str) -> Option<String> {
     String::from_utf8(out).ok()
 }
 
-/// Looks up a `#`-fragment JSON Pointer (RFC 6901 §6) in `root`.
-pub fn lookup<'a>(root: &'a Value, fragment: &str) -> Option<&'a Value> {
-    let ptr = fragment.strip_prefix('#')?;
-    let ptr = percent_decode_fragment(ptr)?;
+/// Looks up a plain JSON Pointer (RFC 6901 §5) written after `#`, as built
+/// by [`join`]. It is not percent-decoded; use [`lookup_ref`] for `$ref`
+/// values, which are URI fragments.
+pub fn lookup<'a>(root: &'a Value, ptr: &str) -> Option<&'a Value> {
+    let ptr = ptr.strip_prefix('#')?;
     if ptr.is_empty() {
         return Some(root);
     }
@@ -207,6 +208,12 @@ pub fn lookup<'a>(root: &'a Value, fragment: &str) -> Option<&'a Value> {
         };
     }
     Some(cur)
+}
+
+/// Looks up a `$ref` value that is a `#` fragment (RFC 6901 §6): the
+/// fragment is percent-decoded once, then read as a JSON Pointer.
+pub fn lookup_ref<'a>(root: &'a Value, reference: &str) -> Option<&'a Value> {
+    lookup(root, &canonical_pointer(reference)?)
 }
 
 /// Canonical `#`-pointer text (percent-decoded) for a reference, so that
@@ -242,7 +249,7 @@ pub fn deref<'a>(
                 location: ptr,
             });
         }
-        let Some(next) = lookup(root, r) else {
+        let Some(next) = lookup_ref(root, r) else {
             return Err(LoadError::BrokenRef {
                 reference: r.to_owned(),
                 location: ptr,
@@ -264,7 +271,12 @@ mod tests {
         let doc = json!({"a/b": {"m~n": [10, 20]}, "": 1, "p q": 2});
         assert_eq!(lookup(&doc, "#/a~1b/m~0n/1"), Some(&json!(20)));
         assert_eq!(lookup(&doc, "#/"), Some(&json!(1)));
-        assert_eq!(lookup(&doc, "#/p%20q"), Some(&json!(2)));
+        assert_eq!(lookup_ref(&doc, "#/p%20q"), Some(&json!(2)));
+        assert_eq!(
+            lookup(&doc, "#/p%20q"),
+            None,
+            "plain pointers are not decoded"
+        );
         assert_eq!(lookup(&doc, "#"), Some(&doc));
         assert_eq!(lookup(&doc, "#/a~1b/m~0n/01"), None);
         assert_eq!(lookup(&doc, "#/missing"), None);

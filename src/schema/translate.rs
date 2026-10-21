@@ -116,6 +116,8 @@ struct Ctx {
     root_ptr: String,
     /// Pointer of the innermost schema resource (`$id`), for `#/...` refs.
     resource_ptr: String,
+    /// Absolute base URI of that resource (JSON Schema 2020-12 §8.2.1).
+    base: String,
     /// Property flags `(readOnly, writeOnly)` visible from enclosing `allOf`
     /// siblings, for `required` filtering.
     inherited: HashMap<String, (bool, bool)>,
@@ -172,6 +174,7 @@ pub fn translate(
         let ctx = Ctx {
             root_ptr: ptr.clone(),
             resource_ptr: "#".into(),
+            base: DOC_URI.into(),
             inherited: HashMap::new(),
         };
         let out = t.schema(src, &ptr, &ctx)?;
@@ -186,6 +189,7 @@ pub fn translate(
         let ctx = Ctx {
             root_ptr: src_ptr.clone(),
             resource_ptr: "#".into(),
+            base: DOC_URI.into(),
             inherited: HashMap::new(),
         };
         let mut out = t.schema_inner(src, &src_ptr, &ctx, false)?;
@@ -205,6 +209,7 @@ pub fn translate(
             let ctx = Ctx {
                 root_ptr: p.clone(),
                 resource_ptr: "#".into(),
+                base: DOC_URI.into(),
                 inherited: HashMap::new(),
             };
             let out = t.schema(src, &p, &ctx)?;
@@ -406,7 +411,7 @@ impl Translator<'_> {
                 location: ptr.to_owned(),
             });
         }
-        if self.version == Version::V31 && self.embedded_id_exists(r) {
+        if self.version == Version::V31 && self.embedded_id_exists(&resolve(&ctx.base, r)) {
             return Ok(());
         }
         Err(LoadError::ExternalRef {
@@ -452,6 +457,7 @@ impl Translator<'_> {
             if let Some(id) = m.get("$id").and_then(Value::as_str) {
                 if !id.starts_with('#') {
                     ctx.resource_ptr = ptr.to_owned();
+                    ctx.base = resolve(&ctx.base, id);
                 }
             }
         }
@@ -822,7 +828,7 @@ impl Translator<'_> {
                 ro = false;
                 wo = false;
             }
-            if let Some(t) = doc::lookup(self.root, r) {
+            if let Some(t) = doc::lookup_ref(self.root, r) {
                 let (a, b) = self.access_flags(t, depth + 1);
                 ro |= a;
                 wo |= b;
@@ -852,7 +858,7 @@ impl Translator<'_> {
             return;
         };
         if let Some(r) = m.get("$ref").and_then(Value::as_str) {
-            if let Some(t) = doc::lookup(self.root, r) {
+            if let Some(t) = doc::lookup_ref(self.root, r) {
                 self.collect_props(t, into, depth + 1);
             }
             if self.version == Version::V30 {
@@ -1027,8 +1033,8 @@ fn mapping_entries(d: &Value) -> Vec<(String, String)> {
 fn collect_ids(root: &Value) -> (HashSet<String>, Vec<String>) {
     let mut anchors = HashSet::new();
     let mut ids = Vec::new();
-    let mut stack = vec![root];
-    while let Some(v) = stack.pop() {
+    let mut stack = vec![(root, DOC_URI.to_owned())];
+    while let Some((v, base)) = stack.pop() {
         match v {
             Value::Object(m) => {
                 for key in ["$anchor", "$dynamicAnchor"] {
@@ -1036,16 +1042,31 @@ fn collect_ids(root: &Value) -> (HashSet<String>, Vec<String>) {
                         anchors.insert(a.to_owned());
                     }
                 }
-                if let Some(id) = m.get("$id").and_then(Value::as_str) {
-                    ids.push(id.split('#').next().unwrap_or("").to_owned());
+                let mut base = base;
+                if let Some(id) = m
+                    .get("$id")
+                    .and_then(Value::as_str)
+                    .filter(|i| !i.starts_with('#'))
+                {
+                    base = resolve(&base, id);
+                    ids.push(base.split('#').next().unwrap_or("").to_owned());
                 }
-                stack.extend(m.values());
+                stack.extend(m.values().map(|c| (c, base.clone())));
             }
-            Value::Array(a) => stack.extend(a),
+            Value::Array(a) => stack.extend(a.iter().map(|c| (c, base.clone()))),
             _ => {}
         }
     }
     (anchors, ids)
+}
+
+/// Resolves a URI reference against a base (RFC 3986 §5.2); on failure the
+/// reference is returned as is.
+fn resolve(base: &str, reference: &str) -> String {
+    jsonschema::uri::from_str(base)
+        .ok()
+        .and_then(|b| jsonschema::uri::resolve_against(&b.borrow(), reference).ok())
+        .map_or_else(|| reference.to_owned(), |u| u.as_str().to_owned())
 }
 
 impl Translator<'_> {
@@ -1062,18 +1083,22 @@ impl Translator<'_> {
         self.anchors.as_ref().is_some_and(|a| a.contains(name))
     }
 
-    /// True when a non-fragment reference names an `$id` declared in the
-    /// document (compared by its last path segments, which is how relative
-    /// `$id`s are usually written).
-    fn embedded_id_exists(&mut self, r: &str) -> bool {
-        let (base, _) = r.split_once('#').unwrap_or((r, ""));
+    /// True when an absolute reference names a schema resource the engine
+    /// holds without retrieval: an `$id` declared in the document, or one
+    /// of the JSON Schema metaschemas, which are built in.
+    fn embedded_id_exists(&mut self, absolute: &str) -> bool {
+        let (base, _) = absolute.split_once('#').unwrap_or((absolute, ""));
         if base.is_empty() {
             return false;
         }
+        if base.starts_with("https://json-schema.org/")
+            || base.starts_with("http://json-schema.org/")
+        {
+            return true;
+        }
         self.ensure_ids();
-        let suffix = format!("/{base}");
         self.ids
             .as_ref()
-            .is_some_and(|ids| ids.iter().any(|id| id == base || id.ends_with(&suffix)))
+            .is_some_and(|ids| ids.iter().any(|id| id == base))
     }
 }

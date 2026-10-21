@@ -250,6 +250,38 @@ impl DirStore {
     }
 }
 
+/// `(absolute $id, schema)` for every `$id` not nested in another one.
+fn outermost_ids(resource: &Value) -> Vec<(String, Value)> {
+    let Ok(base) = jsonschema::uri::from_str(DOC_URI) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    let mut stack = vec![resource];
+    while let Some(v) = stack.pop() {
+        match v {
+            Value::Object(m) => {
+                if let Some(id) = m
+                    .get("$id")
+                    .and_then(Value::as_str)
+                    .filter(|id| !id.starts_with('#'))
+                {
+                    if let Ok(abs) = jsonschema::uri::resolve_against(&base.borrow(), id) {
+                        let uri = abs.as_str().split('#').next().unwrap_or("").to_owned();
+                        if !out.iter().any(|(u, _)| *u == uri) {
+                            out.push((uri, v.clone()));
+                        }
+                        continue;
+                    }
+                }
+                stack.extend(m.values());
+            }
+            Value::Array(a) => stack.extend(a),
+            _ => {}
+        }
+    }
+    out
+}
+
 /// The direction's name inside `x-oav-required`.
 fn dir_key(d: Direction) -> &'static str {
     match d {
@@ -307,9 +339,14 @@ impl SchemaStore {
                 ),
             });
         }
+        // Schemas with their own `$id` sit under OpenAPI objects, which are
+        // not schema keywords, so the registry would not find them while
+        // indexing the document; each outermost one is added on its own.
+        let embedded = outermost_ids(&t.resource);
         let registry = Registry::new()
             .draft(Draft::Draft202012)
             .add(DOC_URI, t.resource)
+            .and_then(|b| b.extend(embedded))
             .and_then(|b| b.prepare())
             .map_err(|e| LoadError::Invalid {
                 location: "#".into(),
@@ -411,8 +448,52 @@ impl SchemaStore {
                 opts = opts.with_format(*name, move |s: &str| format::check_str(name, s));
             }
         }
-        let root = json!({ "$ref": format!("{DOC_URI}#{}", fragment(pointer)) });
+        let root = json!({ "$ref": self.root_uri(pointer) });
         opts.build(&root).map_err(|e| e.to_string())
+    }
+
+    /// The URI of the schema at `pointer`, relative to the nearest enclosing
+    /// schema resource: a pointer that crosses an `$id` must continue from
+    /// that resource's URI (JSON Schema 2020-12 §8.2.1, §9.2.1), or `#`
+    /// references inside it would resolve against the document root.
+    fn root_uri(&self, pointer: &str) -> String {
+        let plain = || format!("{DOC_URI}#{}", fragment(pointer));
+        let Some(mut cur) = self.resource() else {
+            return plain();
+        };
+        let Ok(mut base) = jsonschema::uri::from_str(DOC_URI) else {
+            return plain();
+        };
+        let mut rest: Vec<String> = Vec::new();
+        let body = pointer.strip_prefix('#').unwrap_or(pointer);
+        for raw in body.split('/').skip(1) {
+            let token = raw.replace("~1", "/").replace("~0", "~");
+            let next = match cur {
+                Value::Object(m) => m.get(&token),
+                Value::Array(a) => token.parse::<usize>().ok().and_then(|i| a.get(i)),
+                _ => None,
+            };
+            let Some(next) = next else {
+                return plain();
+            };
+            cur = next;
+            rest.push(raw.to_owned());
+            if let Some(id) = cur
+                .get("$id")
+                .and_then(Value::as_str)
+                .filter(|id| !id.starts_with('#'))
+            {
+                if let Ok(b) = jsonschema::uri::resolve_against(&base.borrow(), id) {
+                    base = b;
+                    rest.clear();
+                }
+            }
+        }
+        let base_text = base.as_str().split('#').next().unwrap_or("").to_owned();
+        if rest.is_empty() {
+            return base_text;
+        }
+        format!("{base_text}#{}", fragment(&format!("#/{}", rest.join("/"))))
     }
 
     fn root_validator<'d>(

@@ -206,7 +206,7 @@ impl<'a> Explainer<'a> {
                 "$ref" => match kv.as_str() {
                     Some(r) if r.starts_with("#/") || r == "#" => {
                         let target_ptr = doc::canonical_pointer(r).unwrap_or_default();
-                        match doc::lookup(self.resource, r) {
+                        match doc::lookup_ref(self.resource, r) {
                             Some(t) => self.node(t, &target_ptr, inst, ipath, depth + 1),
                             None => opaque = true,
                         }
@@ -626,7 +626,7 @@ impl<'a> Explainer<'a> {
             match s
                 .get("$ref")
                 .and_then(Value::as_str)
-                .and_then(|r| doc::lookup(self.resource, r))
+                .and_then(|r| doc::lookup_ref(self.resource, r))
             {
                 Some(t) if s.get("type").is_none() => s = t,
                 _ => break,

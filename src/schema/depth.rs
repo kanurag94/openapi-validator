@@ -57,7 +57,7 @@ fn edges<'a>(root: &'a Value, s: &'a Value) -> (Vec<&'a Value>, Vec<&'a Value>) 
     if let Some(t) = m
         .get("$ref")
         .and_then(Value::as_str)
-        .and_then(|r| doc::lookup(root, r))
+        .and_then(|r| doc::lookup_ref(root, r))
     {
         same.push(t);
     }

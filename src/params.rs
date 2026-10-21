@@ -138,7 +138,7 @@ pub(crate) fn resolve<'a>(root: &'a Value, mut s: &'a Value) -> &'a Value {
         match s
             .get("$ref")
             .and_then(Value::as_str)
-            .and_then(|r| doc::lookup(root, r))
+            .and_then(|r| doc::lookup_ref(root, r))
         {
             Some(t) => s = t,
             None => break,
