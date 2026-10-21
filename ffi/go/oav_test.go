@@ -95,3 +95,56 @@ func TestLoadDocuments(t *testing.T) {
 		t.Fatal("expected a missing-document error")
 	}
 }
+
+const hooks = `
+openapi: 3.1.0
+info: {title: hooks, version: "1"}
+paths:
+  /subs:
+    post:
+      operationId: subscribe
+      responses: {"201": {description: ok}}
+      callbacks:
+        onEvent:
+          "{$request.body#/url}":
+            post:
+              requestBody:
+                required: true
+                content:
+                  application/json:
+                    schema: {type: object, required: [event]}
+              responses: {"204": {description: ok}}
+webhooks:
+  ping:
+    post:
+      responses: {"200": {description: ok}}
+`
+
+func TestWebhooksAndCallbacks(t *testing.T) {
+	s, err := Load([]byte(hooks))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	post := func(body string) *Request {
+		return &Request{Method: "POST", Path: "/", Headers: []Header{{"Content-Type", "application/json"}}, Body: []byte(body)}
+	}
+	if r, err := s.ValidateWebhookRequest("ping", &Request{Method: "POST", Path: "/"}); err != nil || !r.Valid() {
+		t.Fatalf("webhook request refused: %v %+v", err, r)
+	}
+	if r, _ := s.ValidateWebhookRequest("pong", &Request{Method: "POST", Path: "/"}); r.Valid() || r.Problems[0].Kind != "undeclared_operation" {
+		t.Fatalf("unknown webhook accepted: %+v", r)
+	}
+	if r, _ := s.ValidateWebhookResponse("ping", &Request{Method: "POST", Path: "/"}, &Response{Status: 500}); r.Valid() {
+		t.Fatalf("undeclared status accepted: %+v", r)
+	}
+	if r, err := s.ValidateCallbackRequest("subscribe", "onEvent", post(`{"event": "x"}`)); err != nil || !r.Valid() {
+		t.Fatalf("callback request refused: %v %+v", err, r)
+	}
+	if r, _ := s.ValidateCallbackRequest("subscribe", "onEvent", post(`{}`)); r.Valid() {
+		t.Fatalf("invalid callback body accepted: %+v", r)
+	}
+	if r, err := s.ValidateCallbackResponse("subscribe", "onEvent", post(`{}`), &Response{Status: 204}); err != nil || !r.Valid() {
+		t.Fatalf("callback response refused: %v %+v", err, r)
+	}
+}

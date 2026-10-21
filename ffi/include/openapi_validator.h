@@ -12,7 +12,7 @@
  *   - oav_spec_load hands back an oav_spec that the caller owns and frees
  *     with oav_spec_free. One oav_spec may be shared by any number of
  *     threads at once; it must not be freed while a call is using it.
- *   - oav_validate_request / oav_validate_response hand back an oav_report
+ *   - oav_validate_* functions hand back an oav_report
  *     that the caller owns and frees with oav_report_free. Problem strings
  *     read with oav_report_problem borrow from the report and stay valid
  *     until it is freed; they are NOT NUL-terminated (use the lengths).
@@ -160,6 +160,23 @@ int oav_validate_request(const oav_spec *spec, const oav_request *request,
                          oav_report **out);
 int oav_validate_response(const oav_spec *spec, const oav_request *request,
                           const oav_response *response, oav_report **out);
+
+/* Webhooks (OpenAPI 3.1 `webhooks`) and callbacks are named, not routed:
+ * the method selects the operation and the path is not checked. */
+int oav_validate_webhook_request(const oav_spec *spec, const char *name,
+                                 size_t name_len, const oav_request *request,
+                                 oav_report **out);
+int oav_validate_webhook_response(const oav_spec *spec, const char *name,
+                                  size_t name_len, const oav_request *request,
+                                  const oav_response *response, oav_report **out);
+int oav_validate_callback_request(const oav_spec *spec, const char *operation_id,
+                                  size_t operation_id_len, const char *callback,
+                                  size_t callback_len, const oav_request *request,
+                                  oav_report **out);
+int oav_validate_callback_response(const oav_spec *spec, const char *operation_id,
+                                   size_t operation_id_len, const char *callback,
+                                   size_t callback_len, const oav_request *request,
+                                   const oav_response *response, oav_report **out);
 
 /* 1 when the report has no problems, else 0. */
 int oav_report_valid(const oav_report *report);

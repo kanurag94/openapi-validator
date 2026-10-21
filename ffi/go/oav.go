@@ -203,17 +203,81 @@ func readReport(rep *C.oav_report) Report {
 func (s *Spec) ValidateRequest(r *Request) (Report, error) {
 	var pin runtime.Pinner
 	defer pin.Unpin()
-	req, free := s.cRequest(&pin, r)
-	defer free()
-	var rep *C.oav_report
-	if rc := C.oav_validate_request(s.p, &req, &rep); rc != C.OAV_OK {
-		return Report{}, fmt.Errorf("oav_validate_request: %d", int(rc))
-	}
-	return readReport(rep), nil
+	return s.request(&pin, r, "oav_validate_request",
+		func(req *C.oav_request, rep **C.oav_report) C.int {
+			return C.oav_validate_request(s.p, req, rep)
+		})
 }
 
 // ValidateResponse checks a response to a request.
 func (s *Spec) ValidateResponse(r *Request, w *Response) (Report, error) {
+	return s.response(r, w, "oav_validate_response",
+		func(req *C.oav_request, resp *C.oav_response, rep **C.oav_report) C.int {
+			return C.oav_validate_response(s.p, req, resp, rep)
+		})
+}
+
+// ValidateWebhookRequest checks a request sent to the webhook name. The
+// method selects the operation; the path is not checked.
+func (s *Spec) ValidateWebhookRequest(name string, r *Request) (Report, error) {
+	var pin runtime.Pinner
+	defer pin.Unpin()
+	n, nl := cstr(&pin, name)
+	return s.request(&pin, r, "oav_validate_webhook_request",
+		func(req *C.oav_request, rep **C.oav_report) C.int {
+			return C.oav_validate_webhook_request(s.p, n, nl, req, rep)
+		})
+}
+
+// ValidateWebhookResponse checks the response to a webhook request.
+func (s *Spec) ValidateWebhookResponse(name string, r *Request, w *Response) (Report, error) {
+	var pin runtime.Pinner
+	defer pin.Unpin()
+	n, nl := cstr(&pin, name)
+	return s.response(r, w, "oav_validate_webhook_response",
+		func(req *C.oav_request, resp *C.oav_response, rep **C.oav_report) C.int {
+			return C.oav_validate_webhook_response(s.p, n, nl, req, resp, rep)
+		})
+}
+
+// ValidateCallbackRequest checks a request sent for the callback named
+// callback of the operation operationID.
+func (s *Spec) ValidateCallbackRequest(operationID, callback string, r *Request) (Report, error) {
+	var pin runtime.Pinner
+	defer pin.Unpin()
+	o, ol := cstr(&pin, operationID)
+	c, cl := cstr(&pin, callback)
+	return s.request(&pin, r, "oav_validate_callback_request",
+		func(req *C.oav_request, rep **C.oav_report) C.int {
+			return C.oav_validate_callback_request(s.p, o, ol, c, cl, req, rep)
+		})
+}
+
+// ValidateCallbackResponse checks the response to a callback request.
+func (s *Spec) ValidateCallbackResponse(operationID, callback string, r *Request, w *Response) (Report, error) {
+	var pin runtime.Pinner
+	defer pin.Unpin()
+	o, ol := cstr(&pin, operationID)
+	c, cl := cstr(&pin, callback)
+	return s.response(r, w, "oav_validate_callback_response",
+		func(req *C.oav_request, resp *C.oav_response, rep **C.oav_report) C.int {
+			return C.oav_validate_callback_response(s.p, o, ol, c, cl, req, resp, rep)
+		})
+}
+
+func (s *Spec) request(pin *runtime.Pinner, r *Request, name string,
+	call func(*C.oav_request, **C.oav_report) C.int) (Report, error) {
+	req, free := s.cRequest(pin, r)
+	defer free()
+	var rep *C.oav_report
+	if rc := call(&req, &rep); rc != C.OAV_OK {
+		return Report{}, fmt.Errorf("%s: %d", name, int(rc))
+	}
+	return readReport(rep), nil
+}
+
+func (s *Spec) response(r *Request, w *Response, name string,
+	call func(*C.oav_request, *C.oav_response, **C.oav_report) C.int) (Report, error) {
 	var pin runtime.Pinner
 	defer pin.Unpin()
 	req, free := s.cRequest(&pin, r)
@@ -228,8 +292,8 @@ func (s *Spec) ValidateResponse(r *Request, w *Response) (Report, error) {
 		}
 	}()
 	var rep *C.oav_report
-	if rc := C.oav_validate_response(s.p, &req, &resp, &rep); rc != C.OAV_OK {
-		return Report{}, fmt.Errorf("oav_validate_response: %d", int(rc))
+	if rc := call(&req, &resp, &rep); rc != C.OAV_OK {
+		return Report{}, fmt.Errorf("%s: %d", name, int(rc))
 	}
 	return readReport(rep), nil
 }

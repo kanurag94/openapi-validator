@@ -458,13 +458,30 @@ unsafe fn with_request<R>(
     }))
 }
 
-/// Validates a request. On success `*out` owns a report to free with
-/// `oav_report_free`.
-#[no_mangle]
-pub unsafe extern "C" fn oav_validate_request(
+unsafe fn with_response<R>(
+    resp: *const OavResponse,
+    f: impl FnOnce(&Response<'_>) -> R,
+) -> Result<R, c_int> {
+    if resp.is_null() {
+        return Err(OAV_ERR_NULL);
+    }
+    // SAFETY: non-null and valid per the header.
+    let rs = unsafe { &*resp };
+    let rh = unsafe { headers(rs.headers, rs.headers_len) }?;
+    let body = unsafe { bytes(rs.body, rs.body_len) }.ok_or(OAV_ERR_NULL)?;
+    let rhs: Vec<(&str, &str)> = rh.iter().map(|(a, b)| (a.as_str(), b.as_str())).collect();
+    Ok(f(&Response {
+        status: rs.status,
+        headers: &rhs,
+        body,
+    }))
+}
+
+/// Runs `f` on the spec and stores its report in `*out`.
+unsafe fn validate(
     spec: *const OavSpec,
-    req: *const OavRequest,
     out: *mut *mut OavReport,
+    f: impl FnOnce(&Spec) -> Result<Report, c_int>,
 ) -> c_int {
     guard(|| {
         if spec.is_null() || out.is_null() {
@@ -473,7 +490,7 @@ pub unsafe extern "C" fn oav_validate_request(
         unsafe { out.write(std::ptr::null_mut()) };
         // SAFETY: created by `oav_spec_load`.
         let spec = unsafe { &(*spec).0 };
-        match unsafe { with_request(req, |r| spec.validate_request(r)) } {
+        match f(spec) {
             Ok(report) => {
                 unsafe { out.write(Box::into_raw(Box::new(OavReport(report)))) };
                 OAV_OK
@@ -481,6 +498,17 @@ pub unsafe extern "C" fn oav_validate_request(
             Err(e) => e,
         }
     })
+}
+
+/// Validates a request. On success `*out` owns a report to free with
+/// `oav_report_free`.
+#[no_mangle]
+pub unsafe extern "C" fn oav_validate_request(
+    spec: *const OavSpec,
+    req: *const OavRequest,
+    out: *mut *mut OavReport,
+) -> c_int {
+    unsafe { validate(spec, out, |s| with_request(req, |r| s.validate_request(r))) }
 }
 
 /// Validates a response to a request. On success `*out` owns a report to
@@ -492,35 +520,92 @@ pub unsafe extern "C" fn oav_validate_response(
     resp: *const OavResponse,
     out: *mut *mut OavReport,
 ) -> c_int {
-    guard(|| {
-        if spec.is_null() || out.is_null() || resp.is_null() {
-            return OAV_ERR_NULL;
-        }
-        unsafe { out.write(std::ptr::null_mut()) };
-        let spec = unsafe { &(*spec).0 };
-        // SAFETY: non-null and valid per the header.
-        let rs = unsafe { &*resp };
-        let rh = match unsafe { headers(rs.headers, rs.headers_len) } {
-            Ok(h) => h,
-            Err(e) => return e,
-        };
-        let Some(body) = (unsafe { bytes(rs.body, rs.body_len) }) else {
-            return OAV_ERR_NULL;
-        };
-        let rhs: Vec<(&str, &str)> = rh.iter().map(|(a, b)| (a.as_str(), b.as_str())).collect();
-        let response = Response {
-            status: rs.status,
-            headers: &rhs,
-            body,
-        };
-        match unsafe { with_request(req, |r| spec.validate_response(r, &response)) } {
-            Ok(report) => {
-                unsafe { out.write(Box::into_raw(Box::new(OavReport(report)))) };
-                OAV_OK
-            }
-            Err(e) => e,
-        }
-    })
+    unsafe {
+        validate(spec, out, |s| {
+            with_response(resp, |w| with_request(req, |r| s.validate_response(r, w)))?
+        })
+    }
+}
+
+/// Validates a request sent to the webhook `name`.
+#[no_mangle]
+pub unsafe extern "C" fn oav_validate_webhook_request(
+    spec: *const OavSpec,
+    name: *const c_char,
+    name_len: usize,
+    req: *const OavRequest,
+    out: *mut *mut OavReport,
+) -> c_int {
+    unsafe {
+        validate(spec, out, |s| {
+            let name = text(name, name_len)?;
+            with_request(req, |r| s.validate_webhook_request(name, r))
+        })
+    }
+}
+
+/// Validates the response to a request sent to the webhook `name`.
+#[no_mangle]
+pub unsafe extern "C" fn oav_validate_webhook_response(
+    spec: *const OavSpec,
+    name: *const c_char,
+    name_len: usize,
+    req: *const OavRequest,
+    resp: *const OavResponse,
+    out: *mut *mut OavReport,
+) -> c_int {
+    unsafe {
+        validate(spec, out, |s| {
+            let name = text(name, name_len)?;
+            with_response(resp, |w| {
+                with_request(req, |r| s.validate_webhook_response(name, r, w))
+            })?
+        })
+    }
+}
+
+/// Validates a request sent for the callback `callback` of the operation
+/// `operation_id`.
+#[no_mangle]
+pub unsafe extern "C" fn oav_validate_callback_request(
+    spec: *const OavSpec,
+    operation_id: *const c_char,
+    operation_id_len: usize,
+    callback: *const c_char,
+    callback_len: usize,
+    req: *const OavRequest,
+    out: *mut *mut OavReport,
+) -> c_int {
+    unsafe {
+        validate(spec, out, |s| {
+            let op = text(operation_id, operation_id_len)?;
+            let cb = text(callback, callback_len)?;
+            with_request(req, |r| s.validate_callback_request(op, cb, r))
+        })
+    }
+}
+
+/// Validates the response to a callback request.
+#[no_mangle]
+pub unsafe extern "C" fn oav_validate_callback_response(
+    spec: *const OavSpec,
+    operation_id: *const c_char,
+    operation_id_len: usize,
+    callback: *const c_char,
+    callback_len: usize,
+    req: *const OavRequest,
+    resp: *const OavResponse,
+    out: *mut *mut OavReport,
+) -> c_int {
+    unsafe {
+        validate(spec, out, |s| {
+            let op = text(operation_id, operation_id_len)?;
+            let cb = text(callback, callback_len)?;
+            with_response(resp, |w| {
+                with_request(req, |r| s.validate_callback_response(op, cb, r, w))
+            })?
+        })
+    }
 }
 
 /// 1 when the report has no problems, 0 otherwise (and for null).
