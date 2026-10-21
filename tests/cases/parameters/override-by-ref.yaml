@@ -1,0 +1,22 @@
+title: "An operation parameter given by $ref replaces the path-item one"
+ref: "OpenAPI 3.1.1 §4.8.9.1 (path item parameters) and §4.8.10.1 (operation parameters)"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/q":
+      parameters:
+        - {"name": "v", "in": "query", "schema": {"type": "string"}}
+      get:
+        parameters:
+          - {"$ref": "#/components/parameters/V"}
+        responses: {"200": {description: ok}}
+  components: {"parameters": {"V": {"name": "v", "in": "query", "schema": {"type": "integer", "minimum": 0}}}}
+request:
+  method: GET
+  path: "/q"
+  query: "v=-1"
+expect:
+  valid: false
+  kind: invalid_parameter
+  location: query.v

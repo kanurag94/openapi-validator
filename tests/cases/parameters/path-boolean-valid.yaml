@@ -1,0 +1,16 @@
+title: "The text true satisfies a boolean path parameter"
+ref: "OpenAPI 3.1.1 §4.8.12.2"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/b/{flag}":
+      get:
+        parameters:
+          - {"name": "flag", "in": "path", "required": true, "schema": {"type": "boolean"}}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/b/true"
+expect:
+  valid: true

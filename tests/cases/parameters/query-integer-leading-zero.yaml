@@ -1,0 +1,19 @@
+title: "A query integer with a leading zero is not a number literal"
+ref: "OpenAPI 3.1.1 §4.8.12.2; RFC 8259 §6"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/q":
+      get:
+        parameters:
+          - {"name": "limit", "in": "query", "schema": {"type": "integer"}}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/q"
+  query: "limit=05"
+expect:
+  valid: false
+  kind: invalid_parameter
+  location: query.limit

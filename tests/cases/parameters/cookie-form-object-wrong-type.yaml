@@ -1,0 +1,19 @@
+title: "A cookie object property of the wrong type is reported"
+ref: "OpenAPI 3.1.1 §4.8.12.4 (style examples) form object (cookie)"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/k":
+      get:
+        parameters:
+          - {"name": "color", "in": "cookie", "schema": {"type": "object", "properties": {"R": {"type": "integer"}, "G": {"type": "integer"}, "B": {"type": "integer"}}}, "explode": false}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/k"
+  headers: [["Cookie", "color=R,100,G,x"]]
+expect:
+  valid: false
+  kind: invalid_parameter
+  location: cookie.color/G

@@ -1,0 +1,17 @@
+title: "A true schema accepts any value"
+ref: "OpenAPI 3.1.1 §4.8.12.2; §4.8.24 (schema object); JSON Schema 2020-12 core §4.3.2"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/q":
+      get:
+        parameters:
+          - {"name": "q", "in": "query", "schema": true}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/q"
+  query: "q=anything"
+expect:
+  valid: true

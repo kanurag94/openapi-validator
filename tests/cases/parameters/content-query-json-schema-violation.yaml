@@ -1,0 +1,19 @@
+title: "JSON content that violates the schema is reported inside the value"
+ref: "OpenAPI 3.1.1 §4.8.12.2.3 (fixed fields for use with content)"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/q":
+      get:
+        parameters:
+          - {"name": "filter", "in": "query", "content": {"application/json": {"schema": {"type": "object", "required": ["a"], "properties": {"a": {"type": "integer"}}}}}}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/q"
+  query: "filter=%7B%22a%22%3A%22x%22%7D"
+expect:
+  valid: false
+  kind: invalid_parameter
+  location: query.filter/a

@@ -1,0 +1,18 @@
+title: "A label path value without the leading dot is refused"
+ref: "OpenAPI 3.1.1 §4.8.12.4 (style examples) label primitive"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/c/{color}":
+      get:
+        parameters:
+          - {"name": "color", "in": "path", "required": true, "schema": {"type": "string"}, "style": "label"}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/c/blue"
+expect:
+  valid: false
+  kind: invalid_parameter
+  location: path.color

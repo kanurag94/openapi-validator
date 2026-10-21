@@ -1,0 +1,19 @@
+title: "A wrongly typed header sent in a different case is still checked"
+ref: "OpenAPI 3.1.1 §4.8.12.1; RFC 9110 §5.1"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/h":
+      get:
+        parameters:
+          - {"name": "X-Count", "in": "header", "schema": {"type": "integer"}}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/h"
+  headers: [["x-count", "z"]]
+expect:
+  valid: false
+  kind: invalid_parameter
+  location: header.x-count

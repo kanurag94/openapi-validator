@@ -1,0 +1,19 @@
+title: "A cookie array longer than maxItems is refused"
+ref: "OpenAPI 3.1.1 §4.8.12.4 (style examples) form array (cookie)"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/k":
+      get:
+        parameters:
+          - {"name": "ids", "in": "cookie", "schema": {"type": "array", "items": {"type": "integer"}, "maxItems": 2}, "explode": false}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/k"
+  headers: [["Cookie", "ids=1,2,3"]]
+expect:
+  valid: false
+  kind: invalid_parameter
+  location: cookie.ids

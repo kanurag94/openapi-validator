@@ -1,0 +1,17 @@
+title: "A pair with no equals sign has the empty value"
+ref: "OpenAPI 3.1.1 §4.8.12.2 (in: query); RFC 3986 §3.4; §4.8.12.4 (style examples) form empty"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/q":
+      get:
+        parameters:
+          - {"name": "flag", "in": "query", "schema": {"type": "string", "maxLength": 0}, "required": true}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/q"
+  query: "flag"
+expect:
+  valid: true

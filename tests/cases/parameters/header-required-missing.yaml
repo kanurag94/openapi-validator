@@ -1,0 +1,18 @@
+title: "A required header that is absent is reported missing"
+ref: "OpenAPI 3.1.1 §4.8.12.2.1 required"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/h":
+      get:
+        parameters:
+          - {"name": "X-Req", "in": "header", "schema": {"type": "string"}, "required": true}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/h"
+expect:
+  valid: false
+  kind: missing_parameter
+  location: header.x-req

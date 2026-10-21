@@ -1,0 +1,16 @@
+title: "A non-exploded label array has a dot then comma-separated items"
+ref: "OpenAPI 3.1.1 §4.8.12.4 (style examples) label array"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/c/{color}":
+      get:
+        parameters:
+          - {"name": "color", "in": "path", "required": true, "schema": {"type": "array", "items": {"type": "string", "enum": ["blue", "black", "brown"]}}, "style": "label"}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/c/.blue,black,brown"
+expect:
+  valid: true

@@ -1,0 +1,19 @@
+title: "allowEmptyValue does not exempt an empty value from the schema"
+ref: "OpenAPI 3.1.1 §4.8.12.2.1 allowEmptyValue"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/q":
+      get:
+        parameters:
+          - {"name": "color", "in": "query", "schema": {"type": "string", "minLength": 1}, "allowEmptyValue": true}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/q"
+  query: "color="
+expect:
+  valid: false
+  kind: invalid_parameter
+  location: query.color

@@ -1,0 +1,19 @@
+title: "An exploded form object property of the wrong type is refused under 3.0.4"
+ref: "OpenAPI 3.0.4 §4.8.12.4 (style examples) form* object"
+document: |
+  openapi: 3.0.4
+  info: {title: t, version: "1"}
+  paths:
+    "/q":
+      get:
+        parameters:
+          - {"name": "color", "in": "query", "schema": {"type": "object", "properties": {"R": {"type": "integer"}, "G": {"type": "integer"}, "B": {"type": "integer"}}}}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/q"
+  query: "R=1&G=y"
+expect:
+  valid: false
+  kind: invalid_parameter
+  location: query.color/G

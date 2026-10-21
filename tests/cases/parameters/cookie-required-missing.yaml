@@ -1,0 +1,19 @@
+title: "A required cookie that is absent is reported missing"
+ref: "OpenAPI 3.1.1 §4.8.12.2 (in: cookie); RFC 6265 §4.2"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/k":
+      get:
+        parameters:
+          - {"name": "sid", "in": "cookie", "schema": {"type": "string"}, "required": true}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/k"
+  headers: [["Cookie", "other=1"]]
+expect:
+  valid: false
+  kind: missing_parameter
+  location: cookie.sid

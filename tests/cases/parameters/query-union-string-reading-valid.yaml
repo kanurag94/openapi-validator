@@ -1,0 +1,17 @@
+title: "With string and number allowed, a value valid as a string passes"
+ref: "OpenAPI 3.1.1 §4.8.12.2; JSON Schema 2020-12 validation §6.1.1"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/q":
+      get:
+        parameters:
+          - {"name": "v", "in": "query", "schema": {"type": ["number", "string"], "maximum": 3}}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/q"
+  query: "v=9"
+expect:
+  valid: true

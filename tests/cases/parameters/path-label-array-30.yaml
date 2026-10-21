@@ -1,0 +1,16 @@
+title: "A non-exploded label array under 3.0.4 uses commas after the dot"
+ref: "OpenAPI 3.0.4 §4.8.12.4 (style examples) label array"
+document: |
+  openapi: 3.0.4
+  info: {title: t, version: "1"}
+  paths:
+    "/items/{id}":
+      get:
+        parameters:
+          - {"name": "id", "in": "path", "required": true, "schema": {"type": "array", "items": {"type": "integer"}}, "style": "label"}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/items/.3,4,5"
+expect:
+  valid: true

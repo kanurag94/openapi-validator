@@ -1,0 +1,16 @@
+title: "A path value is percent-decoded before the schema is applied"
+ref: "OpenAPI 3.1.1 §4.8.12.2; RFC 3986 §2.1"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/f/{name}":
+      get:
+        parameters:
+          - {"name": "name", "in": "path", "required": true, "schema": {"type": "string", "enum": ["a b"]}}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/f/a%20b"
+expect:
+  valid: true

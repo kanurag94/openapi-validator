@@ -1,0 +1,18 @@
+title: "An exploded matrix array checks every repeated item"
+ref: "OpenAPI 3.1.1 §4.8.12.4 (style examples) matrix* array"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/items/{id}":
+      get:
+        parameters:
+          - {"name": "id", "in": "path", "required": true, "schema": {"type": "array", "items": {"type": "integer"}}, "style": "matrix", "explode": true}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/items/;id=3;id=x"
+expect:
+  valid: false
+  kind: invalid_parameter
+  location: path.id/1

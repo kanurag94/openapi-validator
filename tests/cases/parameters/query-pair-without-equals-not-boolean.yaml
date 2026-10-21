@@ -1,0 +1,19 @@
+title: "A pair with no equals sign is not a boolean"
+ref: "OpenAPI 3.1.1 §4.8.12.2 (in: query); RFC 3986 §3.4"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/q":
+      get:
+        parameters:
+          - {"name": "flag", "in": "query", "schema": {"type": "boolean"}}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/q"
+  query: "flag"
+expect:
+  valid: false
+  kind: invalid_parameter
+  location: query.flag

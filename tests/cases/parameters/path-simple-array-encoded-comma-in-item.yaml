@@ -1,0 +1,16 @@
+title: "A percent-encoded comma does not split a simple path array item"
+ref: "OpenAPI 3.1.1 §4.8.12.4; RFC 3986 §2.2"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/t/{tags}":
+      get:
+        parameters:
+          - {"name": "tags", "in": "path", "required": true, "schema": {"type": "array", "maxItems": 2, "items": {"type": "string"}}}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/t/a%2Cb,c"
+expect:
+  valid: true

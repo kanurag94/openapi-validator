@@ -1,0 +1,20 @@
+title: "An absent optional exploded object does not stop later parameters being checked"
+ref: "OpenAPI 3.1.1 §4.8.12.4 (style examples) form* object"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/q":
+      get:
+        parameters:
+          - {"name": "color", "in": "query", "schema": {"type": "object", "properties": {"R": {"type": "integer"}, "G": {"type": "integer"}, "B": {"type": "integer"}}}}
+          - {"name": "limit", "in": "query", "schema": {"type": "integer"}}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/q"
+  query: "limit=x"
+expect:
+  valid: false
+  kind: invalid_parameter
+  location: query.limit

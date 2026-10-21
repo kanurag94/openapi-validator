@@ -1,0 +1,18 @@
+title: "A deepObject does not absorb pairs of other names"
+ref: "OpenAPI 3.1.1 §4.8.12.4 (style examples) deepObject"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/q":
+      get:
+        parameters:
+          - {"name": "f", "in": "query", "schema": {"type": "object", "additionalProperties": false}, "style": "deepObject", "explode": true}
+          - {"name": "limit", "in": "query", "schema": {"type": "integer"}}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/q"
+  query: "limit=3"
+expect:
+  valid: true

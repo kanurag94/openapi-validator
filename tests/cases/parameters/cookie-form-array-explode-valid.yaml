@@ -1,0 +1,17 @@
+title: "Repeated cookies make an exploded array"
+ref: "OpenAPI 3.1.1 §4.8.12.4 (style examples) form* array (cookie)"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/k":
+      get:
+        parameters:
+          - {"name": "ids", "in": "cookie", "schema": {"type": "array", "items": {"type": "integer"}, "minItems": 2}}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/k"
+  headers: [["Cookie", "ids=1; ids=2"]]
+expect:
+  valid: true

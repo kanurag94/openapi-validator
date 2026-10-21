@@ -1,0 +1,16 @@
+title: "A required header parameter named Content-Type is ignored when absent"
+ref: "OpenAPI 3.1.1 §4.8.12.2 (in: header)"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/h":
+      get:
+        parameters:
+          - {"name": "Content-Type", "in": "header", "schema": {"type": "string", "enum": ["application/xml"]}, "required": true}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/h"
+expect:
+  valid: true

@@ -1,0 +1,16 @@
+title: "Headers listed in ignored_headers are not unknown"
+ref: "OpenAPI 3.1.1 §4.8.12.1 (parameter locations)"
+options: {"allow_unknown_headers": false, "ignored_headers": ["x-request-id"]}
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/h":
+      get:
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/h"
+  headers: [["X-Request-Id", "1"]]
+expect:
+  valid: true

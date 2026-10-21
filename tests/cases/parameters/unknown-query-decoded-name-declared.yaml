@@ -1,0 +1,18 @@
+title: "A percent-encoded declared name is not unknown"
+ref: "OpenAPI 3.1.1 §4.8.12.1 (parameter locations); RFC 3986 §2.1"
+options: {"allow_unknown_query": false}
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/q":
+      get:
+        parameters:
+          - {"name": "ab", "in": "query", "schema": {"type": "string"}}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/q"
+  query: "a%62=1"
+expect:
+  valid: true

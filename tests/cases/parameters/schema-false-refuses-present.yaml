@@ -1,0 +1,19 @@
+title: "A false schema refuses any present value"
+ref: "OpenAPI 3.1.1 §4.8.12.2; §4.8.24 (schema object); JSON Schema 2020-12 core §4.3.2"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/q":
+      get:
+        parameters:
+          - {"name": "q", "in": "query", "schema": false}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/q"
+  query: "q=1"
+expect:
+  valid: false
+  kind: invalid_parameter
+  location: query.q

@@ -1,0 +1,19 @@
+title: "A header integer that is not a number is refused"
+ref: "OpenAPI 3.1.1 §4.8.12.2 (in: header)"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/h":
+      get:
+        parameters:
+          - {"name": "X-Count", "in": "header", "schema": {"type": "integer"}}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/h"
+  headers: [["X-Count", "seven"]]
+expect:
+  valid: false
+  kind: invalid_parameter
+  location: header.x-count

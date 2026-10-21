@@ -1,0 +1,19 @@
+title: "A header object property of the wrong type is reported"
+ref: "OpenAPI 3.1.1 §4.8.12.4 (style examples) simple object"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/h":
+      get:
+        parameters:
+          - {"name": "X-Color", "in": "header", "schema": {"type": "object", "properties": {"R": {"type": "integer"}, "G": {"type": "integer"}, "B": {"type": "integer"}}}}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/h"
+  headers: [["X-Color", "R,100,G,no,B,150"]]
+expect:
+  valid: false
+  kind: invalid_parameter
+  location: header.x-color/G

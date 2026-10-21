@@ -1,0 +1,17 @@
+title: "A non-exploded form query primitive is also name=value"
+ref: "OpenAPI 3.1.1 §4.8.12.4 (style examples) form primitive"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/q":
+      get:
+        parameters:
+          - {"name": "color", "in": "query", "schema": {"type": "string", "enum": ["blue", "black", "brown"]}, "explode": false}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/q"
+  query: "color=blue"
+expect:
+  valid: true

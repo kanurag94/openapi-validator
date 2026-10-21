@@ -1,0 +1,18 @@
+title: "A label array item of the wrong type is reported at its index"
+ref: "OpenAPI 3.1.1 §4.8.12.4 (style examples) label array"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/items/{id}":
+      get:
+        parameters:
+          - {"name": "id", "in": "path", "required": true, "schema": {"type": "array", "items": {"type": "integer"}}, "style": "label"}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/items/.1,x"
+expect:
+  valid: false
+  kind: invalid_parameter
+  location: path.id/1

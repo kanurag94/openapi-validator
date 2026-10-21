@@ -1,0 +1,19 @@
+title: "Header overrides match names case-insensitively"
+ref: "OpenAPI 3.1.1 §4.8.9.1 (path item parameters) and §4.8.10.1 (operation parameters); RFC 9110 §5.1"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/h":
+      parameters:
+        - {"name": "X-Trace", "in": "header", "schema": {"type": "integer"}}
+      get:
+        parameters:
+          - {"name": "x-trace", "in": "header", "schema": {"type": "string"}}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/h"
+  headers: [["X-Trace", "abc"]]
+expect:
+  valid: true

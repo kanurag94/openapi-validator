@@ -1,0 +1,17 @@
+title: "Query values are percent-decoded before checking"
+ref: "OpenAPI 3.1.1 §4.8.12.2 (in: query); RFC 3986 §3.4; RFC 3986 §2.1"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/q":
+      get:
+        parameters:
+          - {"name": "q", "in": "query", "schema": {"type": "string", "enum": ["a&b"]}}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/q"
+  query: "q=a%26b"
+expect:
+  valid: true

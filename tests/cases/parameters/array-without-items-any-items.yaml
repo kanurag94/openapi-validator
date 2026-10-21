@@ -1,0 +1,17 @@
+title: "An array schema with no items accepts any items"
+ref: "OpenAPI 3.1.1 §4.8.12.2; §4.8.24 (schema object); JSON Schema 2020-12 core §10.3.1.2"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/q":
+      get:
+        parameters:
+          - {"name": "ids", "in": "query", "schema": {"type": "array"}}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/q"
+  query: "ids=a&ids=1&ids="
+expect:
+  valid: true

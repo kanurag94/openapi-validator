@@ -1,0 +1,19 @@
+title: "A cookie integer with a leading zero is refused"
+ref: "OpenAPI 3.1.1 §4.8.12.2 (in: cookie); RFC 6265 §4.2; RFC 8259 §6"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/k":
+      get:
+        parameters:
+          - {"name": "n", "in": "cookie", "schema": {"type": "integer"}}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/k"
+  headers: [["Cookie", "n=007"]]
+expect:
+  valid: false
+  kind: invalid_parameter
+  location: cookie.n

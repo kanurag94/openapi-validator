@@ -1,0 +1,17 @@
+title: "Pairs that are not declared properties are not part of an exploded object"
+ref: "OpenAPI 3.1.1 §4.8.12.4 (style examples) form* object"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/q":
+      get:
+        parameters:
+          - {"name": "color", "in": "query", "schema": {"type": "object", "properties": {"R": {"type": "integer"}, "G": {"type": "integer"}, "B": {"type": "integer"}}, "additionalProperties": false}}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/q"
+  query: "R=1&Z=2"
+expect:
+  valid: true

@@ -1,0 +1,18 @@
+title: "A query parameter declared on the path item is not unknown"
+ref: "OpenAPI 3.1.1 §4.8.12.1 (parameter locations); OpenAPI 3.1.1 §4.8.9.1 (path item parameters) and §4.8.10.1 (operation parameters)"
+options: {"allow_unknown_query": false}
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/q":
+      parameters:
+        - {"name": "v", "in": "query", "schema": {"type": "integer"}}
+      get:
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/q"
+  query: "v=1"
+expect:
+  valid: true

@@ -1,0 +1,20 @@
+title: "With allow_unknown_cookies off an undeclared cookie is reported"
+ref: "OpenAPI 3.1.1 §4.8.12.1 (parameter locations)"
+options: {"allow_unknown_cookies": false}
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/k":
+      get:
+        parameters:
+          - {"name": "sid", "in": "cookie", "schema": {"type": "string"}}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/k"
+  headers: [["Cookie", "sid=1; other=2"]]
+expect:
+  valid: false
+  kind: unknown_parameter
+  location: cookie.other

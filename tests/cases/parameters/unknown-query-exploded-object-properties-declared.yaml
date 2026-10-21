@@ -1,0 +1,18 @@
+title: "Exploded object properties count as declared query names"
+ref: "OpenAPI 3.1.1 §4.8.12.1 (parameter locations); §4.8.12.4 (style examples) form* object"
+options: {"allow_unknown_query": false}
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/q":
+      get:
+        parameters:
+          - {"name": "color", "in": "query", "schema": {"type": "object", "properties": {"R": {"type": "integer"}, "G": {"type": "integer"}, "B": {"type": "integer"}}}}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/q"
+  query: "R=1&G=2"
+expect:
+  valid: true

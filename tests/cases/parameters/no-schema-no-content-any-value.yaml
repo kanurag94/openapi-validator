@@ -1,0 +1,17 @@
+title: "A parameter without schema or content accepts any value"
+ref: "OpenAPI 3.1.1 §4.8.12"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/q":
+      get:
+        parameters:
+          - {"name": "q", "in": "query"}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/q"
+  query: "q=%7B%7D%5B"
+expect:
+  valid: true

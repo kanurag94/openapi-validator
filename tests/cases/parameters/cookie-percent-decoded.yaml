@@ -1,0 +1,17 @@
+title: "A percent-encoded cookie value is decoded before checking"
+ref: "OpenAPI 3.1.1 §4.8.12.2 (in: cookie); RFC 6265 §4.2; OpenAPI 3.1.1 §4.8.12.4"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/k":
+      get:
+        parameters:
+          - {"name": "name", "in": "cookie", "schema": {"type": "string", "enum": ["a b"]}}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/k"
+  headers: [["Cookie", "name=a%20b"]]
+expect:
+  valid: true

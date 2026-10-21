@@ -1,0 +1,18 @@
+title: "An operation override can make a required path-item parameter optional"
+ref: "OpenAPI 3.1.1 §4.8.9.1 (path item parameters) and §4.8.10.1 (operation parameters)"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/q":
+      parameters:
+        - {"name": "v", "in": "query", "schema": {"type": "integer"}, "required": true}
+      get:
+        parameters:
+          - {"name": "v", "in": "query", "schema": {"type": "integer"}, "required": false}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/q"
+expect:
+  valid: true

@@ -1,0 +1,19 @@
+title: "A query with many repeated pairs is processed in full"
+ref: "OpenAPI 3.1.1 §4.8.12.2 (in: query); RFC 3986 §3.4"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/q":
+      get:
+        parameters:
+          - {"name": "ids", "in": "query", "schema": {"type": "array", "items": {"type": "integer"}, "maxItems": 300}}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/q"
+  query: "ids=0&ids=1&ids=2&ids=3&ids=4&ids=5&ids=6&ids=7&ids=8&ids=9&ids=10&ids=11&ids=12&ids=13&ids=14&ids=15&ids=16&ids=17&ids=18&ids=19&ids=20&ids=21&ids=22&ids=23&ids=24&ids=25&ids=26&ids=27&ids=28&ids=29&ids=30&ids=31&ids=32&ids=33&ids=34&ids=35&ids=36&ids=37&ids=38&ids=39&ids=40&ids=41&ids=42&ids=43&ids=44&ids=45&ids=46&ids=47&ids=48&ids=49&ids=50&ids=51&ids=52&ids=53&ids=54&ids=55&ids=56&ids=57&ids=58&ids=59&ids=60&ids=61&ids=62&ids=63&ids=64&ids=65&ids=66&ids=67&ids=68&ids=69&ids=70&ids=71&ids=72&ids=73&ids=74&ids=75&ids=76&ids=77&ids=78&ids=79&ids=80&ids=81&ids=82&ids=83&ids=84&ids=85&ids=86&ids=87&ids=88&ids=89&ids=90&ids=91&ids=92&ids=93&ids=94&ids=95&ids=96&ids=97&ids=98&ids=99&ids=100&ids=101&ids=102&ids=103&ids=104&ids=105&ids=106&ids=107&ids=108&ids=109&ids=110&ids=111&ids=112&ids=113&ids=114&ids=115&ids=116&ids=117&ids=118&ids=119&ids=120&ids=121&ids=122&ids=123&ids=124&ids=125&ids=126&ids=127&ids=128&ids=129&ids=130&ids=131&ids=132&ids=133&ids=134&ids=135&ids=136&ids=137&ids=138&ids=139&ids=140&ids=141&ids=142&ids=143&ids=144&ids=145&ids=146&ids=147&ids=148&ids=149&ids=150&ids=151&ids=152&ids=153&ids=154&ids=155&ids=156&ids=157&ids=158&ids=159&ids=160&ids=161&ids=162&ids=163&ids=164&ids=165&ids=166&ids=167&ids=168&ids=169&ids=170&ids=171&ids=172&ids=173&ids=174&ids=175&ids=176&ids=177&ids=178&ids=179&ids=180&ids=181&ids=182&ids=183&ids=184&ids=185&ids=186&ids=187&ids=188&ids=189&ids=190&ids=191&ids=192&ids=193&ids=194&ids=195&ids=196&ids=197&ids=198&ids=199&ids=200&ids=201&ids=202&ids=203&ids=204&ids=205&ids=206&ids=207&ids=208&ids=209&ids=210&ids=211&ids=212&ids=213&ids=214&ids=215&ids=216&ids=217&ids=218&ids=219&ids=220&ids=221&ids=222&ids=223&ids=224&ids=225&ids=226&ids=227&ids=228&ids=229&ids=230&ids=231&ids=232&ids=233&ids=234&ids=235&ids=236&ids=237&ids=238&ids=239&ids=240&ids=241&ids=242&ids=243&ids=244&ids=245&ids=246&ids=247&ids=248&ids=249&ids=x"
+expect:
+  valid: false
+  kind: invalid_parameter
+  location: query.ids/250

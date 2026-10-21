@@ -1,0 +1,16 @@
+title: "A simple-style path primitive is the bare segment value"
+ref: "OpenAPI 3.1.1 §4.8.12.4 (style examples) simple primitive"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/c/{color}":
+      get:
+        parameters:
+          - {"name": "color", "in": "path", "required": true, "schema": {"type": "string", "enum": ["blue", "black", "brown"]}}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/c/blue"
+expect:
+  valid: true

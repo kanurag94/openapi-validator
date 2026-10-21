@@ -1,0 +1,16 @@
+title: "A label path empty string is a lone dot"
+ref: "OpenAPI 3.1.1 §4.8.12.4 (style examples) label empty"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/c/{color}":
+      get:
+        parameters:
+          - {"name": "color", "in": "path", "required": true, "schema": {"type": "string", "maxLength": 0}, "style": "label"}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/c/."
+expect:
+  valid: true

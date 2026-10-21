@@ -1,0 +1,19 @@
+title: "A cookie parameter is checked under 3.0.4"
+ref: "OpenAPI 3.0.4 §4.8.12.2 (in: cookie)"
+document: |
+  openapi: 3.0.4
+  info: {title: t, version: "1"}
+  paths:
+    "/k":
+      get:
+        parameters:
+          - {"name": "n", "in": "cookie", "schema": {"type": "integer"}}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/k"
+  headers: [["Cookie", "n=1.5"]]
+expect:
+  valid: false
+  kind: invalid_parameter
+  location: cookie.n

@@ -1,0 +1,19 @@
+title: "An empty form array fails minItems"
+ref: "OpenAPI 3.1.1 §4.8.12.4 (style examples) form empty"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/q":
+      get:
+        parameters:
+          - {"name": "ids", "in": "query", "schema": {"type": "array", "items": {"type": "integer"}, "minItems": 1}, "explode": false}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/q"
+  query: "ids="
+expect:
+  valid: false
+  kind: invalid_parameter
+  location: query.ids

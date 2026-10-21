@@ -1,0 +1,19 @@
+title: "A header boolean must be true or false"
+ref: "OpenAPI 3.1.1 §4.8.12.2"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/h":
+      get:
+        parameters:
+          - {"name": "X-Flag", "in": "header", "schema": {"type": "boolean"}}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/h"
+  headers: [["X-Flag", "1"]]
+expect:
+  valid: false
+  kind: invalid_parameter
+  location: header.x-flag

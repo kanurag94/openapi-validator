@@ -1,0 +1,16 @@
+title: "A value valid under either allowed type is accepted"
+ref: "OpenAPI 3.1.1 §4.8.12.2; JSON Schema 2020-12 validation §6.1.1"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/items/{id}":
+      get:
+        parameters:
+          - {"name": "id", "in": "path", "required": true, "schema": {"type": ["integer", "string"], "minimum": 10}}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/items/5"
+expect:
+  valid: true

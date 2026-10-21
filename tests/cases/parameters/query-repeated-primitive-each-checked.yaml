@@ -1,0 +1,18 @@
+title: "Every repetition of a primitive query parameter is checked"
+ref: "OpenAPI 3.1.1 §4.8.12.2"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/q":
+      get:
+        parameters:
+          - {"name": "limit", "in": "query", "schema": {"type": "integer"}}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/q"
+  query: "limit=1&limit=x"
+expect:
+  valid: false
+  kind: invalid_parameter

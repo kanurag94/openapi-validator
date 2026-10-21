@@ -1,0 +1,19 @@
+title: "A required deepObject with no keys present is missing"
+ref: "OpenAPI 3.1.1 §4.8.12.4 (style examples) deepObject; §4.8.12.2.1 required"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/q":
+      get:
+        parameters:
+          - {"name": "color", "in": "query", "schema": {"type": "object", "properties": {"R": {"type": "integer"}, "G": {"type": "integer"}, "B": {"type": "integer"}}}, "style": "deepObject", "explode": true, "required": true}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/q"
+  query: "R=1"
+expect:
+  valid: false
+  kind: missing_parameter
+  location: query.color

@@ -1,0 +1,17 @@
+title: "A pipeDelimited array may use %7C as the separator"
+ref: "OpenAPI 3.1.1 §4.8.12.4 (style examples) pipeDelimited array; RFC 3986 §2.1"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/q":
+      get:
+        parameters:
+          - {"name": "ids", "in": "query", "schema": {"type": "array", "items": {"type": "integer"}}, "style": "pipeDelimited", "explode": false}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/q"
+  query: "ids=1%7C2%7c3"
+expect:
+  valid: true

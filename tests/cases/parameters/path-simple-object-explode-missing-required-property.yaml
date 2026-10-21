@@ -1,0 +1,17 @@
+title: "An exploded simple path object lacking a required property is refused"
+ref: "OpenAPI 3.1.1 §4.8.12.4 (style examples) simple* object"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/c/{color}":
+      get:
+        parameters:
+          - {"name": "color", "in": "path", "required": true, "schema": {"type": "object", "properties": {"R": {"type": "integer"}, "G": {"type": "integer"}, "B": {"type": "integer"}}, "required": ["R", "G", "B"]}, "explode": true}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/c/R=100,B=150"
+expect:
+  valid: false
+  kind: invalid_parameter

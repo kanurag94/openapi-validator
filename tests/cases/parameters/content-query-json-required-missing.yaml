@@ -1,0 +1,18 @@
+title: "A required content parameter that is absent is missing"
+ref: "OpenAPI 3.1.1 §4.8.12.2.3 (fixed fields for use with content); §4.8.12.2.1 required"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/q":
+      get:
+        parameters:
+          - {"name": "filter", "in": "query", "content": {"application/json": {"schema": {"type": "object", "required": ["a"], "properties": {"a": {"type": "integer"}}}}}, "required": true}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/q"
+expect:
+  valid: false
+  kind: missing_parameter
+  location: query.filter

@@ -1,0 +1,18 @@
+title: "A declared header in another case is not unknown"
+ref: "OpenAPI 3.1.1 §4.8.12.1 (parameter locations); RFC 9110 §5.1"
+options: {"allow_unknown_headers": false}
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/h":
+      get:
+        parameters:
+          - {"name": "X-Known", "in": "header", "schema": {"type": "string"}}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/h"
+  headers: [["X-KNOWN", "a"]]
+expect:
+  valid: true

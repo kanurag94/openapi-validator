@@ -1,0 +1,17 @@
+title: "Header parameters match the request header regardless of case"
+ref: "OpenAPI 3.1.1 §4.8.12.1; RFC 9110 §5.1"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/h":
+      get:
+        parameters:
+          - {"name": "X-Count", "in": "header", "schema": {"type": "integer"}, "required": true}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/h"
+  headers: [["x-COUNT", "7"]]
+expect:
+  valid: true

@@ -1,0 +1,18 @@
+title: "Without explode, dots are not label array separators"
+ref: "OpenAPI 3.1.1 §4.8.12.4 (style examples) label array; RFC 6570 §3.2.5"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/c/{color}":
+      get:
+        parameters:
+          - {"name": "color", "in": "path", "required": true, "schema": {"type": "array", "items": {"type": "string", "enum": ["blue", "black", "brown"]}}, "style": "label"}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/c/.blue.black"
+expect:
+  valid: false
+  kind: invalid_parameter
+  location: path.color/0

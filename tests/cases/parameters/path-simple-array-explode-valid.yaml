@@ -1,0 +1,16 @@
+title: "A simple-style exploded path array is still comma-separated"
+ref: "OpenAPI 3.1.1 §4.8.12.4 (style examples) simple* array"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/c/{color}":
+      get:
+        parameters:
+          - {"name": "color", "in": "path", "required": true, "schema": {"type": "array", "items": {"type": "string", "enum": ["blue", "black", "brown"]}}, "explode": true}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/c/blue,black,brown"
+expect:
+  valid: true

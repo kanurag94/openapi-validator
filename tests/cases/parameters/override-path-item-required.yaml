@@ -1,0 +1,18 @@
+title: "A required path-item parameter is enforced on the operation"
+ref: "OpenAPI 3.1.1 §4.8.9.1 (path item parameters) and §4.8.10.1 (operation parameters)"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/q":
+      parameters:
+        - {"name": "v", "in": "query", "schema": {"type": "integer"}, "required": true}
+      get:
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/q"
+expect:
+  valid: false
+  kind: missing_parameter
+  location: query.v

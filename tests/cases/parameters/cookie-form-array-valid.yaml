@@ -1,0 +1,17 @@
+title: "A non-exploded form cookie array is comma-separated"
+ref: "OpenAPI 3.1.1 §4.8.12.4 (style examples) form array (cookie)"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/k":
+      get:
+        parameters:
+          - {"name": "ids", "in": "cookie", "schema": {"type": "array", "items": {"type": "integer"}}, "explode": false}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/k"
+  headers: [["Cookie", "ids=1,2,3"]]
+expect:
+  valid: true

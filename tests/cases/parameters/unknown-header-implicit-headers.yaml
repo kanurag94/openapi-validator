@@ -1,0 +1,16 @@
+title: "Accept, Content-Type, Authorization, Cookie and transport headers are not unknown"
+ref: "OpenAPI 3.1.1 §4.8.12.1 (parameter locations); §4.8.12.2 (in: header)"
+options: {"allow_unknown_headers": false}
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/h":
+      get:
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/h"
+  headers: [["Accept", "*/*"], ["Authorization", "Bearer x"], ["Cookie", "a=1"], ["Host", "example.test"], ["User-Agent", "u"], ["Connection", "close"]]
+expect:
+  valid: true

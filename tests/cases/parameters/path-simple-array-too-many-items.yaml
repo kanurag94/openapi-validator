@@ -1,0 +1,18 @@
+title: "A simple path array longer than maxItems is refused"
+ref: "OpenAPI 3.1.1 §4.8.12.4 (style examples) simple array"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/items/{id}":
+      get:
+        parameters:
+          - {"name": "id", "in": "path", "required": true, "schema": {"type": "array", "items": {"type": "integer"}, "maxItems": 2}}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/items/3,4,5"
+expect:
+  valid: false
+  kind: invalid_parameter
+  location: path.id

@@ -1,0 +1,17 @@
+title: "Percent-encoded brackets in deepObject names are decoded"
+ref: "OpenAPI 3.1.1 §4.8.12.4 (style examples) deepObject; RFC 3986 §2.1"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/q":
+      get:
+        parameters:
+          - {"name": "color", "in": "query", "schema": {"type": "object", "properties": {"R": {"type": "integer"}, "G": {"type": "integer"}, "B": {"type": "integer"}}, "required": ["R", "G", "B"]}, "style": "deepObject", "explode": true}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/q"
+  query: "color%5BR%5D=1&color%5BG%5D=2&color%5BB%5D=3"
+expect:
+  valid: true
