@@ -267,8 +267,9 @@ pub fn is_email(s: &str) -> bool {
         return false;
     }
     if let Some(lit) = domain.strip_prefix('[').and_then(|d| d.strip_suffix(']')) {
-        return match lit.strip_prefix("IPv6:") {
-            Some(v6) => is_ipv6(v6),
+        // RFC 5321 §4.1.3: the "IPv6:" tag is case-insensitive.
+        return match lit.get(..5).filter(|t| t.eq_ignore_ascii_case("IPv6:")) {
+            Some(_) => is_ipv6(&lit[5..]),
             None => is_ipv4(lit),
         };
     }
@@ -503,6 +504,7 @@ mod tests {
         assert!(is_email("\"joe bloggs\"@example.com"));
         assert!(is_email("joe@[127.0.0.1]"));
         assert!(is_email("joe@[IPv6:::1]"));
+        assert!(is_email("joe@[ipv6:::1]"));
         assert!(!is_email("joe..bloggs@example.com"));
         assert!(!is_email("@example.com"));
         assert!(!is_email("joe@"));
