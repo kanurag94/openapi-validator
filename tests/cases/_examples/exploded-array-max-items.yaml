@@ -1,0 +1,21 @@
+title: An exploded query array counts every repeated pair against maxItems
+ref: OpenAPI 3.1.1 §4.8.12.4 (form, explode true)
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /items:
+      get:
+        parameters:
+          - name: ids
+            in: query
+            schema: {type: array, items: {type: integer}, maxItems: 2}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: /items
+  query: ids=1&ids=2&ids=3
+expect:
+  valid: false
+  kind: invalid_parameter
+  location: query.ids

@@ -1,0 +1,10 @@
+title: Templates differing only in parameter names are the same path
+ref: OpenAPI 3.1.1 §4.8.8.2
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /pets/{petId}: {get: {responses: {"200": {description: ok}}}}
+    /pets/{name}: {get: {responses: {"200": {description: ok}}}}
+expect:
+  load_error: true
