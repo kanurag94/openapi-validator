@@ -32,6 +32,9 @@ pub(crate) struct Operation {
     pub template: usize,
     pub method: &'static str,
     pub operation_id: Option<String>,
+    /// Server base paths that serve this operation (OpenAPI 3.1.1
+    /// §4.8.10.1: operation `servers` replace the path item's).
+    pub bases: Vec<BasePath>,
     pub body: Option<Body>,
     pub params: Vec<Param>,
     /// `None`: no security applies.
@@ -136,9 +139,9 @@ impl Spec {
                         Some(s) => base_paths(Some(s), &format!("{op_ptr}/servers"), &mut warnings),
                         None => item_bases.clone(),
                     };
-                    for base in op_bases {
-                        if !pi.bases.contains(&base) {
-                            pi.bases.push(base);
+                    for base in &op_bases {
+                        if !pi.bases.contains(base) {
+                            pi.bases.push(base.clone());
                         }
                     }
                     let body =
@@ -164,6 +167,7 @@ impl Spec {
                             .get("operationId")
                             .and_then(Value::as_str)
                             .map(str::to_owned),
+                        bases: op_bases,
                         body,
                         params,
                         security: sec,
@@ -228,25 +232,31 @@ impl Spec {
     }
 
     /// Finds the path item for a raw request path.
-    fn match_path<'a>(&self, segs: &[RawSegment<'a>]) -> Option<Match<'a>> {
-        let mut best: Option<(Match<'a>, usize)> = None;
-        let consider = |m: Match<'a>, base_len: usize, best: &mut Option<(Match<'a>, usize)>| {
-            let better = match best {
-                None => true,
-                Some((b, bl)) => {
-                    let (rn, rb) = (
-                        self.paths.rank_of(m.template),
-                        self.paths.rank_of(b.template),
-                    );
-                    rn > rb || (rn == rb && base_len > *bl)
+    /// Finds the path item for a raw request path, and the server base path
+    /// that was stripped (`None` when matched without one).
+    fn match_path<'a>(&self, segs: &[RawSegment<'a>]) -> Option<(Match<'a>, Option<usize>)> {
+        let mut best: Option<(Match<'a>, usize, Option<usize>)> = None;
+        let consider =
+            |m: Match<'a>,
+             base: Option<usize>,
+             best: &mut Option<(Match<'a>, usize, Option<usize>)>| {
+                let base_len = base.and_then(|i| self.bases.get(i)).map_or(0, Vec::len);
+                let better = match best {
+                    None => true,
+                    Some((b, bl, _)) => {
+                        let (rn, rb) = (
+                            self.paths.rank_of(m.template),
+                            self.paths.rank_of(b.template),
+                        );
+                        rn > rb || (rn == rb && base_len > *bl)
+                    }
+                };
+                if better {
+                    *best = Some((m, base_len, base));
                 }
             };
-            if better {
-                *best = Some((m, base_len));
-            }
-        };
         if self.options.server_paths != ServerPaths::Ignored {
-            for base in &self.bases {
+            for (bi, base) in self.bases.iter().enumerate() {
                 if base.is_empty() || base.len() > segs.len() {
                     continue;
                 }
@@ -255,7 +265,7 @@ impl Spec {
                 }
                 for m in self.paths.find(&segs[base.len()..]) {
                     if self.items[m.template].bases.contains(base) {
-                        consider(m, base.len(), &mut best);
+                        consider(m, Some(bi), &mut best);
                         break;
                     }
                 }
@@ -267,11 +277,11 @@ impl Spec {
         };
         for m in self.paths.find(segs) {
             if unprefixed_ok(m.template) {
-                consider(m, 0, &mut best);
+                consider(m, None, &mut best);
                 break;
             }
         }
-        best.map(|(m, _)| m)
+        best.map(|(m, _, b)| (m, b))
     }
 
     pub(crate) fn route<'a>(&self, req: &Request<'a>) -> Route<'a> {
@@ -285,10 +295,21 @@ impl Spec {
             segs.pop();
             found = self.match_path(&segs);
         }
-        let Some(m) = found else {
+        let Some((m, base)) = found else {
             return Route::PathNotFound;
         };
         let item = &self.items[m.template];
+        // The server path used must serve the chosen operation itself.
+        let served = |op: usize| match base {
+            Some(i) => self
+                .bases
+                .get(i)
+                .is_some_and(|b| self.ops[op].bases.contains(b)),
+            None => {
+                self.options.server_paths != ServerPaths::Required
+                    || self.ops[op].bases.iter().any(Vec::is_empty)
+            }
+        };
         // Methods are case-sensitive (RFC 9110 §9.1): `GET` is the `get` key.
         let key = METHODS
             .iter()
@@ -298,6 +319,9 @@ impl Spec {
         match key {
             Some(k) => {
                 if let Some(op) = find(k) {
+                    if !served(op) {
+                        return Route::PathNotFound;
+                    }
                     return Route::Found {
                         op,
                         vars: m.vars,
@@ -306,6 +330,9 @@ impl Spec {
                 }
                 if k == "head" {
                     if let Some(op) = find("get") {
+                        if !served(op) {
+                            return Route::PathNotFound;
+                        }
                         return Route::Found {
                             op,
                             vars: m.vars,

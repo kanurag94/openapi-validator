@@ -1,0 +1,23 @@
+title: "Another operation's servers do not apply to GET on the same path"
+ref: "OpenAPI 3.1.1 §4.8.10.1 (Operation servers field)"
+options:
+  server_paths: "required"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  servers:
+    - url: /v1
+  paths:
+    /pets:
+      servers:
+        - url: /v2
+      get: {responses: {"200": {description: ok}}}
+      post:
+        servers:
+          - url: /v3
+        responses: {"200": {description: ok}}
+request:
+  method: "GET"
+  path: "/v3/pets"
+expect:
+  valid: false
