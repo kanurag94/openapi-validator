@@ -1,0 +1,19 @@
+title: "Before 3.2, in: querystring is not a parameter location"
+ref: "OpenAPI 3.1.1 §4.8.12.1"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /find:
+      get:
+        parameters:
+          - name: q
+            in: querystring
+            required: true
+            content:
+              application/json:
+                schema: {type: object}
+        responses:
+          "200": {description: ok}
+request: {method: GET, path: /find}
+expect: {valid: true}

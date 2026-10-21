@@ -1,0 +1,22 @@
+title: "An optional querystring parameter may be absent"
+ref: "OpenAPI 3.2.0 §4.12.2.1"
+document: |
+  openapi: 3.2.0
+  info: {title: t, version: "1"}
+  paths:
+    /find:
+      get:
+        parameters:
+          - name: json
+            in: querystring
+            content:
+              application/json:
+                schema:
+                  type: object
+                  properties:
+                    numbers: {type: array, items: {type: integer}}
+                    flag: {type: [boolean, "null"]}
+        responses:
+          "200": {description: ok}
+request: {method: GET, path: /find}
+expect: {valid: true}

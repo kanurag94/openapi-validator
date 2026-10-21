@@ -23,6 +23,8 @@ pub(crate) enum In {
     Query,
     Header,
     Cookie,
+    /// The whole query string as one value (OpenAPI 3.2 §4.12.1).
+    QueryString,
 }
 
 impl In {
@@ -32,6 +34,7 @@ impl In {
             In::Query => "query",
             In::Header => "header",
             In::Cookie => "cookie",
+            In::QueryString => "querystring",
         }
     }
 }
@@ -106,6 +109,12 @@ pub(crate) enum ParamValue {
         media: MediaType,
         id: Option<SchemaId>,
     },
+    /// An `in: querystring` parameter: the query string is content of
+    /// this media type.
+    QueryString {
+        media: MediaType,
+        entry: Box<crate::model::MediaEntry>,
+    },
     /// Neither `schema` nor `content`: any value.
     Any,
 }
@@ -121,6 +130,9 @@ pub(crate) struct Param {
 
 impl Param {
     pub fn label(&self) -> String {
+        if self.location == In::QueryString {
+            return "querystring".into();
+        }
         let name = if self.location == In::Header {
             self.name.to_ascii_lowercase()
         } else {
@@ -236,7 +248,7 @@ pub(crate) fn shape_of(root: &Value, s: &Value, version: Version) -> Shape {
 fn default_style(location: In) -> Style {
     match location {
         In::Query | In::Cookie => Style::Form,
-        In::Path | In::Header => Style::Simple,
+        In::Path | In::Header | In::QueryString => Style::Simple,
     }
 }
 
@@ -276,6 +288,7 @@ impl Builder<'_> {
                     Some("query") => In::Query,
                     Some("header") => In::Header,
                     Some("cookie") => In::Cookie,
+                    Some("querystring") if version >= Version::V32 => In::QueryString,
                     _ => {
                         self.warn(&pptr, "parameter has no valid `in`; ignored");
                         return Ok(None);
@@ -320,7 +333,17 @@ impl Builder<'_> {
                 "path parameters must be required; treated as required",
             );
         }
-        let value = if let Some(s) = p.get("schema") {
+        let value = if location == In::QueryString {
+            // §4.12.1: the whole query string, described by `content`.
+            let content = self.content(p.get("content"), &doc::join(&pptr, "content"), dir)?;
+            match content.into_iter().next() {
+                Some((media, entry)) => ParamValue::QueryString {
+                    media,
+                    entry: Box::new(entry),
+                },
+                None => ParamValue::Any,
+            }
+        } else if let Some(s) = p.get("schema") {
             let id = self.roots.id(dir, &doc::join(&pptr, "schema"));
             ParamValue::Schema {
                 id,

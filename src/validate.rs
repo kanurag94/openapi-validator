@@ -267,7 +267,7 @@ impl Spec {
                     self.check_value(*id, r, label, ProblemKind::InvalidParameter, report);
                 }
             }
-            ParamValue::Content { .. } | ParamValue::Any => {}
+            ParamValue::Content { .. } | ParamValue::QueryString { .. } | ParamValue::Any => {}
         }
     }
 
@@ -316,8 +316,11 @@ impl Spec {
         report: &mut Report,
     ) {
         let plus = self.options.query_plus_as_space;
+        // An `in: querystring` parameter takes the whole query string, which
+        // then need not be name-value pairs.
+        let whole_query = params.iter().any(|p| p.location == In::QueryString);
         let (pairs, bad) = split_query(req.query, plus);
-        for b in bad {
+        for b in bad.into_iter().filter(|_| !whole_query) {
             report.push(
                 ProblemKind::MalformedQuery,
                 "query",
@@ -342,6 +345,48 @@ impl Spec {
         for p in params {
             let label = p.label();
             match (&p.value, p.location) {
+                (ParamValue::QueryString { media, entry }, _) => {
+                    if req.query.is_empty() {
+                        if p.required {
+                            report.push(
+                                ProblemKind::MissingParameter,
+                                "querystring",
+                                "is required",
+                            );
+                        }
+                        continue;
+                    }
+                    // Form content is already URL-ready; any other media
+                    // type was percent-encoded into the URL (Appendix E).
+                    let text = if media.is_form() {
+                        req.query.to_owned()
+                    } else {
+                        match decode(req.query, false) {
+                            Ok(t) => t,
+                            Err(()) => {
+                                report.push(
+                                    ProblemKind::MalformedQuery,
+                                    "querystring",
+                                    "has an invalid percent-escape",
+                                );
+                                continue;
+                            }
+                        }
+                    };
+                    // Problems are a parameter's, whatever the media type.
+                    let mut scratch = self.new_report();
+                    self.check_payload(media, entry, text.as_bytes(), "querystring", &mut scratch);
+                    for q in scratch.problems() {
+                        let kind = match q.kind {
+                            ProblemKind::SchemaViolation | ProblemKind::MalformedBody => {
+                                ProblemKind::InvalidParameter
+                            }
+                            k => k,
+                        };
+                        report.push(kind, q.location.as_str(), q.message.as_str());
+                    }
+                    report.add_omitted(scratch.omitted());
+                }
                 (ParamValue::Content { media, id }, loc) => {
                     let texts: Vec<String> = match loc {
                         In::Path => vars
@@ -380,6 +425,7 @@ impl Spec {
                             .get(&p.name.to_ascii_lowercase())
                             .map(|l| l.iter().map(|s| (*s).to_owned()).collect())
                             .unwrap_or_default(),
+                        In::QueryString => Vec::new(),
                     };
                     if texts.is_empty() {
                         if p.required {
@@ -413,6 +459,7 @@ impl Spec {
                             found
                         }
                         In::Header => headers.contains_key(&p.name.to_ascii_lowercase()),
+                        In::QueryString => !req.query.is_empty(),
                     };
                     if !present && p.required {
                         report.push(ProblemKind::MissingParameter, label.as_str(), "is required");
@@ -481,7 +528,7 @@ impl Spec {
             }
         }
 
-        if !self.options.allow_unknown_query {
+        if !self.options.allow_unknown_query && !whole_query {
             for q in &pairs {
                 if !used_query.contains(&q.name) && !extra.query.contains(&q.name) {
                     report.push(
@@ -595,7 +642,7 @@ impl Spec {
                     ParamValue::Content { media, id } => {
                         self.check_content_param(media, *id, line, &label, report)
                     }
-                    ParamValue::Any => {}
+                    ParamValue::QueryString { .. } | ParamValue::Any => {}
                 }
             }
         }
@@ -714,7 +761,7 @@ impl Spec {
                                     ParamValue::Content { media, id } => {
                                         self.check_content_param(media, *id, line, &label, report)
                                     }
-                                    ParamValue::Any => {}
+                                    ParamValue::QueryString { .. } | ParamValue::Any => {}
                                 }
                             }
                         }

@@ -1,0 +1,25 @@
+title: "Values in a form querystring are checked against the schema"
+ref: "OpenAPI 3.2.0 §4.12.1, §4.12.8"
+document: |
+  openapi: 3.2.0
+  info: {title: t, version: "1"}
+  paths:
+    /find:
+      get:
+        parameters:
+          - name: q
+            in: querystring
+            required: true
+            content:
+              application/x-www-form-urlencoded:
+                schema:
+                  type: object
+                  required: [foo]
+                  properties:
+                    foo: {type: string}
+                    bar: {type: boolean}
+                  additionalProperties: false
+        responses:
+          "200": {description: ok}
+request: {method: GET, path: /find, query: "foo=a&bar=maybe"}
+expect: {valid: false, kind: invalid_parameter, location: querystring/bar}

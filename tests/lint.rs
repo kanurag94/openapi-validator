@@ -141,3 +141,45 @@ fn schema_rules_in_30() {
         "both readOnly and writeOnly",
     );
 }
+
+const HEAD32: &str = "openapi: 3.2.0\ninfo: {title: t, version: '1'}\n";
+
+// OpenAPI 3.2.0 §4.12.1, §4.12.2.2: querystring parameters.
+#[test]
+fn querystring_parameters() {
+    let op = |params: &str| {
+        format!("{HEAD32}paths:\n  /p:\n    get:\n      parameters:\n{params}      responses: {{'200': {{description: ok}}}}\n")
+    };
+    let qs = "        - {name: q, in: querystring, content: {application/json: {schema: {type: object}}}}\n";
+    assert!(warnings(&op(qs)).is_empty(), "{:?}", warnings(&op(qs)));
+    warns(
+        &op("        - {name: q, in: querystring, schema: {type: string}}\n"),
+        "MUST use `content`",
+    );
+    warns(
+        &op("        - {name: q, in: querystring, style: form, content: {text/plain: {}}}\n"),
+        "MUST NOT be used with in: querystring",
+    );
+    warns(&op(&format!("{qs}{qs}")), "MUST NOT appear more than once");
+    warns(
+        &op(&format!(
+            "{qs}        - {{name: a, in: query, schema: {{type: string}}}}\n"
+        )),
+        "MUST NOT appear with an in: querystring",
+    );
+}
+
+// OpenAPI 3.2.0 §4.9.1: additionalOperations excludes fixed-field methods.
+#[test]
+fn additional_operations() {
+    let d = |m: &str| {
+        format!("{HEAD32}paths:\n  /p:\n    additionalOperations:\n      {m}: {{responses: {{'200': {{description: ok}}}}}}\n")
+    };
+    assert!(
+        warnings(&d("LINK")).is_empty(),
+        "{:?}",
+        warnings(&d("LINK"))
+    );
+    warns(&d("POST"), "MUST NOT contain POST");
+    warns(&d("QUERY"), "MUST NOT contain QUERY");
+}

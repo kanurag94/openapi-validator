@@ -10,8 +10,9 @@ use serde_json::Value;
 
 use crate::doc::{self, Version, Warning};
 
-/// Styles each parameter location allows (OpenAPI 3.1.1 §4.8.12.3).
-fn style_allowed(location: &str, style: &str) -> bool {
+/// Styles each parameter location allows (OpenAPI 3.1.1 §4.8.12.3; 3.2
+/// adds `cookie`, §4.12.3).
+fn style_allowed(location: &str, style: &str, version: Version) -> bool {
     matches!(
         (location, style),
         ("path", "matrix" | "label" | "simple")
@@ -21,7 +22,7 @@ fn style_allowed(location: &str, style: &str) -> bool {
             )
             | ("header", "simple")
             | ("cookie", "form")
-    )
+    ) || (version >= Version::V32 && (location, style) == ("cookie", "cookie"))
 }
 
 struct Lint<'a> {
@@ -73,8 +74,25 @@ impl<'a> Lint<'a> {
             }
         } else {
             let location = p.get("in").and_then(Value::as_str).unwrap_or("");
+            if location == "querystring" && self.version >= Version::V32 {
+                if p.get("content").is_none() {
+                    self.warn(
+                        &ptr,
+                        "an in: querystring parameter MUST use `content` (§4.12.1)",
+                    );
+                }
+                for k in ["schema", "style", "explode", "allowReserved"] {
+                    if p.get(k).is_some() {
+                        self.warn(
+                            &ptr,
+                            format!("`{k}` MUST NOT be used with in: querystring (§4.12.2.2)"),
+                        );
+                    }
+                }
+                return;
+            }
             if let Some(s) = p.get("style").and_then(Value::as_str) {
-                if !style_allowed(location, s) {
+                if !style_allowed(location, s, self.version) {
                     self.warn(
                         &ptr,
                         format!("style {s:?} is not defined for {location} parameters (§4.8.12.3)"),
@@ -209,6 +227,7 @@ impl<'a> Lint<'a> {
             }
         }
         let mut path_params = Vec::new();
+        let (mut querystrings, mut queries) = (0, 0);
         for (c, cptr) in [(item, item_ptr), (op, op_ptr)] {
             for (i, p) in c
                 .get("parameters")
@@ -220,12 +239,31 @@ impl<'a> Lint<'a> {
                 let pptr = doc::join(&doc::join(cptr, "parameters"), &i.to_string());
                 self.parameter(p, &pptr, false);
                 if let Some((p, _)) = self.deref(p, &pptr) {
+                    match p.get("in").and_then(Value::as_str) {
+                        Some("querystring") => querystrings += 1,
+                        Some("query") => queries += 1,
+                        _ => {}
+                    }
                     if p.get("in").and_then(Value::as_str) == Some("path") {
                         if let Some(n) = p.get("name").and_then(Value::as_str) {
                             path_params.push((n.to_owned(), pptr.clone()));
                         }
                     }
                 }
+            }
+        }
+        if self.version >= Version::V32 {
+            if querystrings > 1 {
+                self.warn(
+                    op_ptr,
+                    "an in: querystring parameter MUST NOT appear more than once (§4.12.1)",
+                );
+            }
+            if querystrings > 0 && queries > 0 {
+                self.warn(
+                    op_ptr,
+                    "in: query parameters MUST NOT appear with an in: querystring parameter (§4.12.1)",
+                );
             }
         }
         let vars: Vec<&str> = template
@@ -470,6 +508,22 @@ pub(crate) fn check(root: &Value, version: Version) -> Vec<Warning> {
             continue;
         };
         l.servers(item.get("servers"), &doc::join(&iptr, "servers"));
+        if version >= Version::V32 {
+            for k in item
+                .get("additionalOperations")
+                .and_then(Value::as_object)
+                .into_iter()
+                .flat_map(|m| m.keys())
+            {
+                let mut fixed = crate::spec::METHODS.iter().chain(&["query"]);
+                if fixed.any(|m| m.to_ascii_uppercase() == *k) {
+                    l.warn(
+                        &doc::join(&doc::join(&iptr, "additionalOperations"), k),
+                        format!("additionalOperations MUST NOT contain {k}, which a fixed field describes (§4.9.1)"),
+                    );
+                }
+            }
+        }
         for it in crate::spec::item_operations(item, &iptr, version) {
             l.servers(it.op.get("servers"), &doc::join(&it.ptr, "servers"));
             l.operation(key, item, &iptr, it.op, &it.ptr, &mut ids);
