@@ -11,6 +11,7 @@ mod media;
 mod model;
 pub mod number;
 mod options;
+mod params;
 mod path;
 pub mod pattern;
 mod report;

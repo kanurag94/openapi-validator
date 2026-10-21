@@ -8,10 +8,12 @@ use crate::doc::{self, LoadError, Version, Warning};
 use crate::http::Request;
 use crate::model::{Body, Builder};
 use crate::options::{Options, ServerPaths};
+use crate::params::Param;
 use crate::path::{split_path, Match, PathIndex, RawSegment, Template, Vars};
 use crate::report::{MatchedOperation, ProblemKind, Report};
 use crate::schema::{SchemaStore, StoreOptions};
 use crate::server::{base_paths, BasePath};
+use crate::validate::Declared;
 
 /// HTTP methods a Path Item can describe (OpenAPI 3.1.1 §4.8.9.1).
 pub(crate) const METHODS: [&str; 8] = [
@@ -30,6 +32,7 @@ pub(crate) struct Operation {
     pub method: &'static str,
     pub operation_id: Option<String>,
     pub body: Option<Body>,
+    pub params: Vec<Param>,
 }
 
 /// A validator for one OpenAPI document. Load once and share: `Spec` is
@@ -132,6 +135,7 @@ impl Spec {
                     }
                     let body =
                         b.request_body(op.get("requestBody"), &doc::join(&op_ptr, "requestBody"))?;
+                    let params = b.params(item, &item_ptr, op, &op_ptr, version)?;
                     pi.ops.push((m, ops.len()));
                     ops.push(Operation {
                         template: tid,
@@ -141,6 +145,7 @@ impl Spec {
                             .and_then(Value::as_str)
                             .map(str::to_owned),
                         body,
+                        params,
                     });
                 }
                 if pi.bases.is_empty() {
@@ -363,8 +368,10 @@ impl Spec {
         let mut report = self.new_report();
         let guarded = catch_unwind(AssertUnwindSafe(|| {
             let mut r = self.new_report();
-            if let Some((op, _vars, _head)) = self.route_into(req, &mut r) {
-                self.check_request_body(self.ops[op].body.as_ref(), req, &mut r);
+            if let Some((op, vars, _head)) = self.route_into(req, &mut r) {
+                let o = &self.ops[op];
+                self.check_params(&o.params, &vars, req, &Declared::default(), &mut r);
+                self.check_request_body(o.body.as_ref(), req, &mut r);
             }
             r
         }));
