@@ -9,7 +9,7 @@ use crate::media::{best_match, MediaType};
 use crate::model::{Body, MediaEntry, Resp};
 use crate::params::{
     coerce, decode, header_index, header_value, path_value, query_value, readings, split_cookies,
-    split_query, Found, In, Pair, Param, ParamValue, Shape, Types,
+    split_query, Found, In, Pair, Param, ParamValue, Shape, Style, Types,
 };
 use crate::path::Vars;
 use crate::report::{ProblemKind, Report};
@@ -339,6 +339,23 @@ impl Spec {
                     raw,
                 })
                 .collect();
+        // `style: cookie` removes no percent-encoding (OpenAPI 3.2 Appendix
+        // D): its pairs are escaped so that decoding gives them back as sent.
+        let escaped: Vec<(String, String)> = if params.iter().any(|p| p.style == Style::Cookie) {
+            split_cookies(headers.get("cookie").into_iter().flatten().copied())
+                .into_iter()
+                .map(|(n, raw)| (n.to_owned(), raw.replace('%', "%25")))
+                .collect()
+        } else {
+            Vec::new()
+        };
+        let literal_cookies: Vec<Pair<'_>> = escaped
+            .iter()
+            .map(|(n, raw)| Pair {
+                name: n.clone(),
+                raw,
+            })
+            .collect();
         let mut used_query: Vec<String> = Vec::new();
         let mut used_cookies: Vec<String> = Vec::new();
 
@@ -502,6 +519,8 @@ impl Spec {
                 (ParamValue::Schema { shape, .. }, loc) => {
                     let (src, used, plus) = if loc == In::Query {
                         (&pairs, &mut used_query, plus)
+                    } else if p.style == Style::Cookie {
+                        (&literal_cookies, &mut used_cookies, false)
                     } else {
                         (&cookie_pairs, &mut used_cookies, false)
                     };
@@ -540,8 +559,12 @@ impl Spec {
             }
         }
         if !self.options.allow_unknown_cookies {
-            for q in &cookie_pairs {
-                if !used_cookies.contains(&q.name) && !extra.cookies.contains(&q.name) {
+            for (q, raw) in cookie_pairs.iter().zip(split_cookies(
+                headers.get("cookie").into_iter().flatten().copied(),
+            )) {
+                let used =
+                    used_cookies.contains(&q.name) || used_cookies.iter().any(|u| u == raw.0);
+                if !used && !extra.cookies.contains(&q.name) {
                     report.push(
                         ProblemKind::UnknownParameter,
                         format!("cookie.{}", truncate(&q.name, 100)),

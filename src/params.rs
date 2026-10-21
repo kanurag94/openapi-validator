@@ -48,6 +48,9 @@ pub(crate) enum Style {
     SpaceDelimited,
     PipeDelimited,
     DeepObject,
+    /// `form` with `Cookie` syntax and no percent-decoding (OpenAPI 3.2
+    /// §4.12.3).
+    Cookie,
 }
 
 /// JSON types a schema admits, as bit flags.
@@ -298,6 +301,7 @@ impl Builder<'_> {
             }
         };
         let style = match p.get("style").and_then(Value::as_str) {
+            Some("cookie") if version >= Version::V32 && location == In::Cookie => Style::Cookie,
             Some(s) => match parse_style(s) {
                 Some(st) => st,
                 None => {
@@ -309,7 +313,7 @@ impl Builder<'_> {
         };
         let explode = match p.get("explode") {
             Some(Value::Bool(b)) => *b,
-            _ => style == Style::Form,
+            _ => matches!(style, Style::Form | Style::Cookie),
         };
         if p.get("schema").is_some() && p.get("content").is_some() {
             // §4.8.12.2: a parameter MUST have schema or content, not both.

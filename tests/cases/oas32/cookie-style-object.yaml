@@ -1,0 +1,14 @@
+title: "An exploded cookie-style object is one cookie per property"
+ref: "OpenAPI 3.2.0 §4.12.3, Appendix D"
+document: |
+  openapi: 3.2.0
+  info: {title: t, version: "1"}
+  paths:
+    /c:
+      get:
+        parameters:
+          - {name: color, in: cookie, style: cookie, schema: {type: object, properties: {R: {type: integer}, G: {type: integer}}}}
+        responses:
+          "200": {description: ok}
+request: {method: GET, path: /c, headers: [["Cookie", "R=100; G=x"]]}
+expect: {valid: false, kind: invalid_parameter, location: cookie.color/G}

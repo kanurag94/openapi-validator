@@ -1,0 +1,14 @@
+title: "style: form cookies are percent-decoded"
+ref: "OpenAPI 3.2.0 §4.12.3, Appendix D"
+document: |
+  openapi: 3.2.0
+  info: {title: t, version: "1"}
+  paths:
+    /c:
+      get:
+        parameters:
+          - {name: s, in: cookie, style: form, schema: {type: string, pattern: "^a b$"}}
+        responses:
+          "200": {description: ok}
+request: {method: GET, path: /c, headers: [["Cookie", "s=a%20b"]]}
+expect: {valid: true}

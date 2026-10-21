@@ -1,0 +1,15 @@
+title: "Cookie-style object properties are read as their types"
+ref: "OpenAPI 3.2.0 §4.12.3, Appendix D"
+document: |
+  openapi: 3.2.0
+  info: {title: t, version: "1"}
+  paths:
+    /c:
+      get:
+        parameters:
+          - {name: color, in: cookie, style: cookie, schema: {type: object, properties: {R: {type: integer}, G: {type: integer}}}}
+        responses:
+          "200": {description: ok}
+request: {method: GET, path: /c, headers: [["Cookie", "R=100; G=200"]]}
+options: {allow_unknown_cookies: false}
+expect: {valid: true}

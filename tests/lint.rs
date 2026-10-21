@@ -183,3 +183,10 @@ fn additional_operations() {
     warns(&d("POST"), "MUST NOT contain POST");
     warns(&d("QUERY"), "MUST NOT contain QUERY");
 }
+// OpenAPI 3.2.0 §4.12.3: `style: cookie` is defined for cookies.
+#[test]
+fn cookie_style() {
+    let d = format!("{HEAD32}paths:\n  /p:\n    get:\n      parameters:\n        - {{name: c, in: cookie, style: cookie, schema: {{type: string}}}}\n      responses: {{'200': {{description: ok}}}}\n");
+    assert!(warnings(&d).is_empty(), "{:?}", warnings(&d));
+    warns(&d.replace("3.2.0", "3.1.0"), "not defined for cookie");
+}
