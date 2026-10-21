@@ -34,3 +34,6 @@ roxmltree = "0.21"
 debug = true
 
 [dev-dependencies]
+regex-syntax = "0.8"
+jsonschema-regex = "0.59"
+serde_json = { version = "1", features = ["arbitrary_precision", "preserve_order"] }

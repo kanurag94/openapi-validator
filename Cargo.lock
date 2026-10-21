@@ -405,9 +405,11 @@ name = "openapi-validator"
 version = "0.1.0"
 dependencies = [
  "jsonschema",
+ "jsonschema-regex",
  "num-bigint",
  "num-traits",
  "regex",
+ "regex-syntax",
  "roxmltree",
  "saphyr-parser",
  "serde_json",

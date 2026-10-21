@@ -40,9 +40,63 @@ impl fmt::Display for PatternError {
 impl std::error::Error for PatternError {}
 
 /// ECMA-262 WhiteSpace and LineTerminator code points, as class items.
-const ECMA_SPACE: &str = r"\t\n\x0B\x0C\r \x{A0}\x{1680}\x{2000}-\x{200A}\x{2028}\x{2029}\x{202F}\x{205F}\x{3000}\x{FEFF}";
-const DIGIT: &str = "0-9";
-const WORD: &str = "A-Za-z0-9_";
+const DIGIT_RANGES: &[(u32, u32)] = &[(0x30, 0x39)];
+const WORD_RANGES: &[(u32, u32)] = &[(0x30, 0x39), (0x41, 0x5A), (0x5F, 0x5F), (0x61, 0x7A)];
+/// ECMA-262 WhiteSpace and LineTerminator code points (§12.2, §12.3).
+const SPACE_RANGES: &[(u32, u32)] = &[
+    (0x09, 0x0D),
+    (0x20, 0x20),
+    (0xA0, 0xA0),
+    (0x1680, 0x1680),
+    (0x2000, 0x200A),
+    (0x2028, 0x2029),
+    (0x202F, 0x202F),
+    (0x205F, 0x205F),
+    (0x3000, 0x3000),
+    (0xFEFF, 0xFEFF),
+];
+
+/// Ranges of Unicode scalar values not in `ranges` (sorted, disjoint),
+/// skipping the surrogate block, which no `char` can hold.
+fn complement(ranges: &[(u32, u32)]) -> Vec<(u32, u32)> {
+    let mut out = Vec::new();
+    let mut next = 0u32;
+    for &(a, b) in ranges {
+        if a > next {
+            out.push((next, a - 1));
+        }
+        next = b + 1;
+    }
+    if next <= 0x10FFFF {
+        out.push((next, 0x10FFFF));
+    }
+    let mut scalar = Vec::new();
+    for (a, b) in out {
+        if b < 0xD800 || a > 0xDFFF {
+            scalar.push((a, b));
+        } else {
+            if a < 0xD800 {
+                scalar.push((a, 0xD7FF));
+            }
+            if b > 0xDFFF {
+                scalar.push((0xE000, b));
+            }
+        }
+    }
+    scalar
+}
+
+fn class_items(ranges: &[(u32, u32)]) -> String {
+    let mut s = String::new();
+    for &(a, b) in ranges {
+        if a == b {
+            s.push_str(&format!("\\x{{{a:X}}}"));
+        } else {
+            s.push_str(&format!("\\x{{{a:X}}}-\\x{{{b:X}}}"));
+        }
+    }
+    s
+}
 
 /// Translates and compiles an ECMA-262 pattern.
 pub fn compile(pattern: &str) -> Result<Regex, PatternError> {
@@ -229,12 +283,30 @@ impl Translator<'_> {
         };
         self.i += 1;
         Ok(match c {
-            'd' => ClassAtom::Set(format!("[{DIGIT}]")),
-            'D' => ClassAtom::Set(format!("[^{DIGIT}]")),
-            'w' => ClassAtom::Set(format!("[{WORD}]")),
-            'W' => ClassAtom::Set(format!("[^{WORD}]")),
-            's' => ClassAtom::Set(format!("[{ECMA_SPACE}]")),
-            'S' => ClassAtom::Set(format!("[^{ECMA_SPACE}]")),
+            'd' | 'D' | 'w' | 'W' | 's' | 'S' => {
+                let ranges = match c.to_ascii_lowercase() {
+                    'd' => DIGIT_RANGES,
+                    'w' => WORD_RANGES,
+                    _ => SPACE_RANGES,
+                };
+                let negated = c.is_ascii_uppercase();
+                // Inside a class the items are written inline: a nested
+                // `[...]` would be read as a literal `[` by ECMA-262 tooling
+                // that sees the translated text again.
+                let items = if negated {
+                    complement(ranges)
+                } else {
+                    ranges.to_vec()
+                };
+                let body = class_items(&items);
+                ClassAtom::Set(if in_class {
+                    body
+                } else if negated {
+                    format!("[^{}]", class_items(ranges))
+                } else {
+                    format!("[{body}]")
+                })
+            }
             'b' if in_class => ClassAtom::Char('\u{8}'),
             'b' => ClassAtom::Set(r"(?-u:\b)".into()),
             'B' if !in_class => ClassAtom::Set(r"(?-u:\B)".into()),
@@ -544,6 +616,61 @@ mod tests {
         ] {
             assert!(compile(p).is_err(), "{p}");
         }
+    }
+
+    /// `jsonschema` translates ECMA-262 patterns again before compiling. Our
+    /// output must already be a fixed point of that translation, or its
+    /// meaning would change (a nested class `[[a-z]]` reads as a literal
+    /// `[` in ECMA-262).
+    #[test]
+    fn translation_is_a_fixed_point_of_jsonschema_regex() {
+        let pats = [
+            r"^[a-z]+$",
+            r"^\d{3}$",
+            r"^[\w.-]+$",
+            r"^\S+$",
+            r"^[^\s]+$",
+            r"^.+$",
+            r"^(?:a|b)$",
+            r"\bx\b",
+            r"^[A-Za-z0-9 ]*$",
+            r"^\p{L}+$",
+            r"^[^/]+$",
+            r"^[a-zA-Z0-9_\-]{1,50}$",
+            r"^\w+@\w+\.\w+$",
+            r"^[\u0020-\u007e]*$",
+            r"^[^<>]*$",
+            r"^(\+|-)?\d+$",
+            r"^\$[a-z]+$",
+            r"^[\x20-\x7E]+$",
+            r"^a{2,}$",
+            r"^[\s\S]*$",
+            r"^[^\n]*$",
+            r"^[A-Z]{2}\-[0-9]+$",
+            r"^[\D\W]$",
+            r"^[^\d\s]+$",
+            r"^[&&~~]$",
+            r"[]",
+            r"[^]",
+            r"(?<y>\d{4})-(?<m>\d{2})",
+            r"^\cJ\u{1F600}\0$",
+        ];
+        for p in pats {
+            let t = translate(p).unwrap();
+            let again = jsonschema_regex::to_rust_regex(&t).map(|c| c.into_owned());
+            assert_eq!(again.as_deref(), Ok(t.as_str()), "{p}");
+        }
+    }
+
+    #[test]
+    fn negated_escapes_inside_classes() {
+        assert!(m(r"^[\D]$", "a"));
+        assert!(!m(r"^[\D]$", "5"));
+        assert!(m(r"^[\W5]$", "5"));
+        assert!(m(r"^[\W]$", "😀"));
+        assert!(!m(r"^[^\d\s]$", " "));
+        assert!(m(r"^[\w.-]+$", "a.b-c"));
+        assert!(!m(r"^[\w.-]+$", "a[b"), "no stray literal [");
     }
 
     #[test]
