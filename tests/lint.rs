@@ -241,3 +241,27 @@ fn xml_node_type() {
         "`attribute` MUST NOT be present",
     );
 }
+
+// OpenAPI 3.1.1 §4.8.29 and 3.2.0 §4.29: required OAuth flow fields.
+#[test]
+fn oauth_flows() {
+    let d = |head: &str, flow: &str| {
+        format!("{head}paths: {{}}\ncomponents:\n  securitySchemes:\n    o:\n      type: oauth2\n      flows:\n        {flow}\n")
+    };
+    let ok = d(HEAD32, "deviceAuthorization: {deviceAuthorizationUrl: 'https://a/d', tokenUrl: 'https://a/t', scopes: {}}");
+    assert!(warnings(&ok).is_empty(), "{:?}", warnings(&ok));
+    warns(
+        &d(
+            HEAD32,
+            "deviceAuthorization: {tokenUrl: 'https://a/t', scopes: {}}",
+        ),
+        "REQUIRES `deviceAuthorizationUrl`",
+    );
+    warns(
+        &d(
+            HEAD,
+            "authorizationCode: {authorizationUrl: 'https://a/a', scopes: {}}",
+        ),
+        "REQUIRES `tokenUrl`",
+    );
+}

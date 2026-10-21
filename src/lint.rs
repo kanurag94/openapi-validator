@@ -489,17 +489,45 @@ impl<'a> Lint<'a> {
                 Some("oauth2") if need("flows") => {
                     self.warn(&ptr, "an oauth2 scheme REQUIRES `flows`")
                 }
+                Some("oauth2") => self.flows(s.get("flows"), &doc::join(&ptr, "flows")),
                 Some("openIdConnect") if need("openIdConnectUrl") => {
                     self.warn(&ptr, "an openIdConnect scheme REQUIRES `openIdConnectUrl`")
                 }
                 Some("mutualTLS") if self.version == Version::V30 => {
                     self.warn(&ptr, "mutualTLS is not a scheme type in OpenAPI 3.0")
                 }
-                Some("http" | "oauth2" | "openIdConnect" | "mutualTLS") => {}
+                Some("http" | "openIdConnect" | "mutualTLS") => {}
                 other => self.warn(
                     &ptr,
                     format!("unknown security scheme type {:?}", other.unwrap_or("")),
                 ),
+            }
+        }
+    }
+
+    /// Required fields of each OAuth Flow Object (§4.8.29; 3.2 adds the
+    /// device authorization flow, §4.28, §4.29).
+    fn flows(&mut self, flows: Option<&Value>, ptr: &str) {
+        let Some(flows) = flows.and_then(Value::as_object) else {
+            return;
+        };
+        for (name, f) in flows {
+            let need: &[&str] = match name.as_str() {
+                "implicit" => &["authorizationUrl", "scopes"],
+                "password" | "clientCredentials" => &["tokenUrl", "scopes"],
+                "authorizationCode" => &["authorizationUrl", "tokenUrl", "scopes"],
+                "deviceAuthorization" if self.version >= Version::V32 => {
+                    &["deviceAuthorizationUrl", "tokenUrl", "scopes"]
+                }
+                _ => continue,
+            };
+            for k in need {
+                if f.get(*k).is_none() {
+                    self.warn(
+                        &doc::join(ptr, name),
+                        format!("the {name} flow REQUIRES `{k}`"),
+                    );
+                }
             }
         }
     }

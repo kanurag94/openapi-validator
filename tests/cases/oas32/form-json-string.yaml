@@ -1,0 +1,25 @@
+title: "A field with contentType application/json is a JSON value, so a string carries quotes"
+ref: "OpenAPI 3.2.0 §4.15.3.1"
+document: |
+  openapi: 3.2.0
+  info: {title: t, version: "1"}
+  paths:
+    /addr:
+      post:
+        requestBody:
+          content:
+            application/x-www-form-urlencoded:
+              schema:
+                type: object
+                properties:
+                  id: {type: string, format: uuid}
+                  address:
+                    type: object
+                    required: [zip]
+                    properties:
+                      zip: {type: string, pattern: "^[0-9]{5}\\+[0-9]{4}$"}
+              encoding: {id: {contentType: application/json}}
+        responses:
+          "204": {description: ok}
+request: {method: POST, path: /addr, headers: [["Content-Type", "application/x-www-form-urlencoded"]], body: "id=%22f81d4fae-7dec-11d0-a765-00a0c91e6bf6%22"}
+expect: {valid: true}
