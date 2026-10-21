@@ -1,0 +1,44 @@
+title: "A part missing a required header from itemEncoding is refused"
+ref: "OpenAPI 3.2.0 §4.14.5.2, §4.15.4"
+document: |
+  openapi: 3.2.0
+  info: {title: t, version: "1"}
+  paths:
+    /page:
+      post:
+        requestBody:
+          $ref: "#/components/requestBodies/RFC2557"
+        responses:
+          "204": {description: ok}
+  components:
+    headers:
+      RFC2557NoContentId:
+        schema: false
+      RFC2557ContentLocation:
+        required: true
+        content:
+          text/plain:
+            schema: {type: string, format: uri}
+    requestBodies:
+      RFC2557:
+        content:
+          multipart/related; type=text/html:
+            schema:
+              prefixItems:
+                - type: string
+              items:
+                anyOf:
+                  - type: string
+                  - $comment: To allow binary, this must always pass
+            prefixEncoding:
+              - contentType: text/html
+                headers:
+                  Content-ID: {$ref: "#/components/headers/RFC2557NoContentId"}
+                  Content-Location: {$ref: "#/components/headers/RFC2557ContentLocation"}
+            itemEncoding:
+              contentType: text/css,text/javascript,image/*
+              headers:
+                Content-ID: {$ref: "#/components/headers/RFC2557NoContentId"}
+                Content-Location: {$ref: "#/components/headers/RFC2557ContentLocation"}
+request: {method: POST, path: /page, headers: [["Content-Type", "multipart/related; type=text/html; boundary=b0undary"]], body: "--b0undary\r\nContent-Type: text/html\r\nContent-Location: https://example.com/index.html\r\n\r\n<html></html>\r\n--b0undary\r\nContent-Type: image/png\r\n\r\nx\r\n--b0undary--\r\n"}
+expect: {valid: false, kind: missing_parameter, location: "body/1:header.content-location"}

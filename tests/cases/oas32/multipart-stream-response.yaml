@@ -1,0 +1,20 @@
+title: "itemEncoding checks each part of a streamed multipart response"
+ref: "OpenAPI 3.2.0 §4.14.5.2, §4.15.4.7"
+document: |
+  openapi: 3.2.0
+  info: {title: t, version: "1"}
+  paths:
+    /pictures:
+      get:
+        responses:
+          "200":
+            description: ok
+            content:
+              multipart/mixed:
+                itemSchema:
+                  $comment: A single data image from the device
+                itemEncoding:
+                  contentType: image/jpg
+request: {method: GET, path: /pictures}
+response: {status: 200, headers: [["Content-Type", "multipart/mixed; boundary=b0undary"]], body: "--b0undary\r\nContent-Type: image/jpg\r\n\r\nJPEG1\r\n--b0undary\r\nContent-Type: image/png\r\n\r\nPNG\r\n--b0undary--\r\n"}
+expect: {valid: false, kind: unsupported_media_type, location: body/1}

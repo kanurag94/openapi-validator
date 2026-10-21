@@ -1,0 +1,26 @@
+title: "Each part is checked against its prefixItems schema"
+ref: "OpenAPI 3.2.0 §4.14.5.2, §4.15.4"
+document: |
+  openapi: 3.2.0
+  info: {title: t, version: "1"}
+  paths:
+    /upload:
+      post:
+        requestBody:
+          content:
+            multipart/mixed:
+              schema:
+                type: array
+                prefixItems:
+                  - type: object
+                    properties:
+                      author: {type: string}
+                      license: {type: string}
+                  - {}
+              prefixEncoding:
+                - {}
+                - contentType: image/*
+        responses:
+          "204": {description: ok}
+request: {method: POST, path: /upload, headers: [["Content-Type", "multipart/mixed; boundary=b0undary"]], body: "--b0undary\r\nContent-Type: application/json\r\n\r\n{\"author\": 7}\r\n--b0undary\r\nContent-Type: image/png\r\n\r\nPNGDATA\r\n--b0undary--\r\n"}
+expect: {valid: false, kind: schema_violation, location: body/0/author}

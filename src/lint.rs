@@ -114,12 +114,25 @@ impl<'a> Lint<'a> {
         };
         for (key, m) in map {
             let mptr = doc::join(ptr, key);
+            let k = key.to_ascii_lowercase();
+            let (m, mptr) = if self.version >= Version::V32 {
+                match self.deref(m, &mptr) {
+                    Some(x) => x,
+                    None => continue,
+                }
+            } else {
+                (m, mptr)
+            };
+            if self.version >= Version::V32 {
+                self.positional(&k, m, &mptr);
+            }
             let Some(enc) = m.get("encoding").and_then(Value::as_object) else {
                 continue;
             };
-            let k = key.to_ascii_lowercase();
             let form =
                 k.starts_with("application/x-www-form-urlencoded") || k.starts_with("multipart/");
+            // 3.2 no longer limits `encoding` to request bodies (§4.14.1).
+            let request = request || self.version >= Version::V32;
             if !request || !form {
                 self.warn(
                     &mptr,
@@ -150,6 +163,42 @@ impl<'a> Lint<'a> {
                     }
                 }
             }
+        }
+    }
+
+    /// OpenAPI 3.2 §4.14.1, §4.14.5.2: positional encodings.
+    fn positional(&mut self, key: &str, m: &Value, ptr: &str) {
+        let positional = m.get("prefixEncoding").is_some() || m.get("itemEncoding").is_some();
+        if !positional {
+            return;
+        }
+        if m.get("encoding").is_some() {
+            self.warn(
+                ptr,
+                "encoding MUST NOT be present with prefixEncoding or itemEncoding (§4.14.1)",
+            );
+        }
+        if !key.starts_with("multipart/") {
+            self.warn(
+                ptr,
+                "prefixEncoding and itemEncoding SHALL only apply to multipart media types (§4.14.1)",
+            );
+        }
+        let array_schema = m.get("schema").is_some_and(|s| {
+            let s = s
+                .get("$ref")
+                .and_then(Value::as_str)
+                .and_then(|r| doc::lookup_ref(self.root, r))
+                .unwrap_or(s);
+            s.get("type").and_then(Value::as_str) == Some("array")
+                || s.get("prefixItems").is_some()
+                || s.get("items").is_some()
+        });
+        if m.get("itemSchema").is_none() && !array_schema {
+            self.warn(
+                ptr,
+                "prefixEncoding and itemEncoding need itemSchema or an array schema (§4.14.5.2)",
+            );
         }
     }
 

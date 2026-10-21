@@ -190,3 +190,26 @@ fn cookie_style() {
     assert!(warnings(&d).is_empty(), "{:?}", warnings(&d));
     warns(&d.replace("3.2.0", "3.1.0"), "not defined for cookie");
 }
+
+// OpenAPI 3.2.0 §4.14.1, §4.14.5.2: positional encodings.
+#[test]
+fn positional_encodings() {
+    let d = |media: &str| {
+        format!("{HEAD32}paths:\n  /p:\n    post:\n      requestBody:\n        content:\n          {media}\n      responses: {{'200': {{description: ok}}}}\n")
+    };
+    let ok =
+        d("multipart/mixed: {schema: {type: array}, prefixEncoding: [{contentType: image/png}]}");
+    assert!(warnings(&ok).is_empty(), "{:?}", warnings(&ok));
+    warns(
+        &d("multipart/mixed: {itemSchema: {}, itemEncoding: {}, encoding: {a: {}}}"),
+        "MUST NOT be present with prefixEncoding",
+    );
+    warns(
+        &d("application/json: {itemSchema: {}, itemEncoding: {}}"),
+        "SHALL only apply to multipart",
+    );
+    warns(
+        &d("multipart/mixed: {schema: {type: object}, itemEncoding: {}}"),
+        "need itemSchema or an array schema",
+    );
+}

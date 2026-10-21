@@ -1,0 +1,16 @@
+title: "Before 3.2, a multipart/mixed body is not read by position"
+ref: "OpenAPI 3.1.1 §4.8.14"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /upload:
+      post:
+        requestBody:
+          content:
+            multipart/mixed:
+              schema: {type: array, maxItems: 0}
+        responses:
+          "204": {description: ok}
+request: {method: POST, path: /upload, headers: [["Content-Type", "multipart/mixed; boundary=b"]], body: "--b\r\n\r\nx\r\n--b--\r\n"}
+expect: {valid: true}

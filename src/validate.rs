@@ -118,6 +118,32 @@ impl Spec {
         }
     }
 
+    /// Checks the items of a sequential body: `itemSchema` each item, and
+    /// `schema` the array of them.
+    fn check_items(
+        &self,
+        entry: &MediaEntry,
+        items: Vec<Value>,
+        location: &str,
+        report: &mut Report,
+    ) {
+        if let Some(id) = entry.item_schema {
+            for (i, item) in items.iter().enumerate() {
+                self.check_value(
+                    id,
+                    item,
+                    &format!("{location}/{i}"),
+                    ProblemKind::SchemaViolation,
+                    report,
+                );
+            }
+        }
+        if let Some(id) = entry.schema {
+            let all = Value::Array(items);
+            self.check_value(id, &all, location, ProblemKind::SchemaViolation, report);
+        }
+    }
+
     /// Parses a body by its media type and checks it against the schema.
     pub(crate) fn check_payload(
         &self,
@@ -132,23 +158,28 @@ impl Spec {
         // `schema` checks the array and `itemSchema` each item.
         if let Some(seq) = actual.sequence().filter(|_| self.version >= Version::V32) {
             match body::sequence(bytes, actual, seq, depth) {
-                Ok(items) => {
-                    if let Some(id) = entry.item_schema {
-                        for (i, item) in items.iter().enumerate() {
-                            self.check_value(
-                                id,
-                                item,
-                                &format!("{location}/{i}"),
-                                ProblemKind::SchemaViolation,
-                                report,
-                            );
-                        }
-                    }
-                    if let Some(id) = entry.schema {
-                        let all = Value::Array(items);
-                        self.check_value(id, &all, location, ProblemKind::SchemaViolation, report);
-                    }
-                }
+                Ok(items) => self.check_items(entry, items, location, report),
+                Err(m) => report.push(ProblemKind::MalformedBody, location, m),
+            }
+            return;
+        }
+        if self.version >= Version::V32
+            && actual.ty == "multipart"
+            && (!actual.is_multipart_form()
+                || !entry.prefix_encoding.is_empty()
+                || entry.item_encoding.is_some())
+        {
+            match self.positional(
+                bytes,
+                actual,
+                &entry.prefix_encoding,
+                entry.item_encoding.as_deref(),
+                &entry.parts,
+                location,
+                0,
+                report,
+            ) {
+                Ok(items) => self.check_items(entry, items, location, report),
                 Err(m) => report.push(ProblemKind::MalformedBody, location, m),
             }
             return;
@@ -764,60 +795,140 @@ impl Spec {
         for enc in encodings {
             for part in parts.iter().filter(|p| p.name == enc.name) {
                 let at = format!("{location}/{}", crate::doc::escape_token(&part.name));
-                if let (Some(ct), false) = (&part.content_type, enc.allowed.is_empty()) {
-                    if !enc.allowed.iter().any(|r| r.match_rank(ct).is_some()) {
-                        let allowed: Vec<String> = enc
-                            .allowed
-                            .iter()
-                            .map(|m| format!("{}/{}", m.ty, m.sub))
-                            .collect();
-                        report.push(
-                            ProblemKind::UnsupportedMediaType,
-                            at.clone(),
-                            format!(
-                                "part type {}/{} is not allowed; allowed: {}",
-                                ct.ty,
-                                ct.sub,
-                                allowed.join(", ")
-                            ),
-                        );
-                    }
-                }
-                let hs: Vec<(&str, &str)> = part
-                    .headers
+                self.check_part(enc, part.content_type.as_ref(), &part.headers, &at, report);
+            }
+        }
+    }
+
+    /// Checks one part's type and headers against its Encoding Object.
+    fn check_part(
+        &self,
+        enc: &body::Encoding,
+        content_type: Option<&MediaType>,
+        headers: &[(String, String)],
+        at: &str,
+        report: &mut Report,
+    ) {
+        if let (Some(ct), false) = (content_type, enc.allowed.is_empty()) {
+            if !enc.allowed.iter().any(|r| r.match_rank(ct).is_some()) {
+                let allowed: Vec<String> = enc
+                    .allowed
                     .iter()
-                    .map(|(k, v)| (k.as_str(), v.as_str()))
+                    .map(|m| format!("{}/{}", m.ty, m.sub))
                     .collect();
-                let index = header_index(&hs);
-                for p in &enc.headers {
-                    let label = format!("{at}:header.{}", p.name.to_ascii_lowercase());
-                    match index.get(&p.name.to_ascii_lowercase()) {
-                        None if p.required => report.push(
-                            ProblemKind::MissingParameter,
-                            label,
-                            "is a required part header",
-                        ),
-                        None => {}
-                        Some(lines) => {
-                            for line in lines {
-                                match &p.value {
-                                    ParamValue::Schema { shape, .. } => self.check_param_value(
-                                        p,
-                                        header_value(line, shape, p.explode),
-                                        &label,
-                                        report,
-                                    ),
-                                    ParamValue::Content { media, id } => {
-                                        self.check_content_param(media, *id, line, &label, report)
-                                    }
-                                    ParamValue::QueryString { .. } | ParamValue::Any => {}
-                                }
+                report.push(
+                    ProblemKind::UnsupportedMediaType,
+                    at,
+                    format!(
+                        "part type {}/{} is not allowed; allowed: {}",
+                        ct.ty,
+                        ct.sub,
+                        allowed.join(", ")
+                    ),
+                );
+            }
+        }
+        let hs: Vec<(&str, &str)> = headers
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+        let index = header_index(&hs);
+        for p in &enc.headers {
+            let label = format!("{at}:header.{}", p.name.to_ascii_lowercase());
+            match index.get(&p.name.to_ascii_lowercase()) {
+                None if p.required => report.push(
+                    ProblemKind::MissingParameter,
+                    label,
+                    "is a required part header",
+                ),
+                None => {}
+                Some(lines) => {
+                    for line in lines {
+                        match &p.value {
+                            ParamValue::Schema { shape, .. } => self.check_param_value(
+                                p,
+                                header_value(line, shape, p.explode),
+                                &label,
+                                report,
+                            ),
+                            ParamValue::Content { media, id } => {
+                                self.check_content_param(media, *id, line, &label, report)
                             }
+                            ParamValue::QueryString { .. } | ParamValue::Any => {}
                         }
                     }
                 }
             }
         }
+    }
+
+    /// A multipart body read by position (OpenAPI 3.2 §4.14.5.2): one item
+    /// per part, in order, each parsed by its type and checked against
+    /// `prefixEncoding`, then `itemEncoding`. A nested multipart part is
+    /// read the same way with the Encoding Object's own positional fields.
+    #[allow(clippy::too_many_arguments)]
+    fn positional(
+        &self,
+        bytes: &[u8],
+        media: &MediaType,
+        prefix: &[body::Encoding],
+        item: Option<&body::Encoding>,
+        shapes: &crate::model::PartShapes,
+        location: &str,
+        nest: usize,
+        report: &mut Report,
+    ) -> Result<Vec<Value>, String> {
+        let depth = self.store.depth_limit(self.options.max_body_depth);
+        let parts = body::parts(bytes, body::boundary(media)?)?;
+        let mut out = Vec::with_capacity(parts.len());
+        for (i, part) in parts.iter().enumerate() {
+            let at = format!("{location}/{i}");
+            let enc = prefix.get(i).or(item);
+            if let Some(enc) = enc {
+                self.check_part(enc, part.content_type.as_ref(), &part.headers, &at, report);
+            }
+            // RFC 2046 §5.1: a part without Content-Type is text/plain; the
+            // description's default comes first.
+            let text_plain = MediaType::parse("text/plain").expect("a valid media type");
+            let shape = shapes.at(i);
+            let ct = part
+                .content_type
+                .as_ref()
+                .or_else(|| enc.and_then(|e| e.content_type.as_ref()))
+                .or_else(|| shape.map(|s| &s.default))
+                .unwrap_or(&text_plain);
+            let value = if ct.is_json() {
+                json::parse(part.data, json::Limits { max_depth: depth })
+                    .map_err(|e| format!("part {i} is not valid JSON: {e}"))?
+            } else if ct.ty == "multipart" && nest < 4 {
+                let (np, ni) = enc.map_or((&[][..], None), |e| (&e.prefix[..], e.item.as_deref()));
+                let empty = crate::model::PartShapes::default();
+                Value::Array(self.positional(
+                    part.data,
+                    ct,
+                    np,
+                    ni,
+                    shape.map_or(&empty, |s| &s.nested),
+                    &at,
+                    nest + 1,
+                    report,
+                )?)
+            } else if ct.is_xml() {
+                body::xml(part.data, ct, depth, shape.map(|s| &s.xml))
+                    .map_err(|e| format!("part {i}: {e}"))?
+                    .unwrap_or(Value::Null)
+            } else if ct.ty == "text" {
+                let t = String::from_utf8_lossy(part.data).into_owned();
+                match shape {
+                    Some(s) => coerce_text(t, &s.shape),
+                    None => Value::String(t),
+                }
+            } else {
+                Value::String(String::from_utf8_lossy(part.data).into_owned())
+            };
+            out.push(value);
+        }
+        Ok(out)
     }
 }
 

@@ -1,0 +1,31 @@
+title: "A nested multipart/mixed part is read with the Encoding Object's prefixEncoding"
+ref: "OpenAPI 3.2.0 §4.15.2, §4.15.4.9"
+document: |
+  openapi: 3.2.0
+  info: {title: t, version: "1"}
+  paths:
+    /n:
+      post:
+        requestBody:
+          content:
+            multipart/mixed:
+              schema:
+                type: array
+                prefixItems:
+                  - type: array
+                  - type: array
+                    prefixItems:
+                      - type: object
+                      - type: string
+                      - {}
+              prefixEncoding:
+                - {}
+                - contentType: multipart/mixed
+                  prefixEncoding:
+                    - contentType: application/xml
+                    - {}
+                    - contentType: image/png
+        responses:
+          "204": {description: ok}
+request: {method: POST, path: /n, headers: [["Content-Type", "multipart/mixed; boundary=b0undary"]], body: "--b0undary\r\n\r\n[1, 2]\r\n--b0undary\r\nContent-Type: multipart/mixed; boundary=in4er\r\n\r\n--in4er\r\nContent-Type: application/xml\r\n\r\n<a/>\r\n--in4er\r\n\r\nplain\r\n--in4er\r\nContent-Type: image/png\r\n\r\nPNG\r\n--in4er--\r\n\r\n--b0undary--\r\n"}
+expect: {valid: true}

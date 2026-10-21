@@ -21,6 +21,12 @@ pub(crate) struct MediaEntry {
     /// Declared properties, for form and multipart bodies.
     pub props: FormProps,
     pub encodings: Vec<Encoding>,
+    /// `prefixEncoding` and `itemEncoding` (OpenAPI 3.2 §4.14.5.2).
+    pub prefix_encoding: Vec<Encoding>,
+    pub item_encoding: Option<Box<Encoding>>,
+    /// How each position of a positional multipart body is read, from the
+    /// schema's `prefixItems` and then `items` (or `itemSchema`).
+    pub parts: PartShapes,
     /// XML mapping of the schema, for XML media types.
     pub xml: Option<crate::xml::XmlShape>,
 }
@@ -123,6 +129,13 @@ impl<'a> Builder<'a> {
                 _ => Vec::new(),
             };
             let encodings = self.encodings(media.get("encoding"), &doc::join(&mptr, "encoding"));
+            let (prefix_encoding, item_encoding) = self.positional(media, &mptr, 0);
+            let parts = if mt.ty == "multipart" && self.version >= Version::V32 {
+                let rest = media.get("itemSchema");
+                part_shapes(self.root, media.get("schema"), rest, self.version, 0)
+            } else {
+                PartShapes::default()
+            };
             let xml = match schema_v {
                 Some(s) if mt.is_xml() => {
                     Some(crate::xml::shape(self.root, s, self.version, None, 0))
@@ -138,6 +151,9 @@ impl<'a> Builder<'a> {
                     shape,
                     props,
                     encodings,
+                    prefix_encoding,
+                    item_encoding,
+                    parts,
                     xml,
                 },
             ));
@@ -206,64 +222,102 @@ impl<'a> Builder<'a> {
     fn encodings(&mut self, v: Option<&Value>, ptr: &str) -> Vec<Encoding> {
         let mut out = Vec::new();
         for (name, e) in v.and_then(Value::as_object).into_iter().flatten() {
-            let style = e.get("style").and_then(Value::as_str).map(|s| {
-                parse_style(s).unwrap_or_else(|| {
-                    self.warn(
-                        &doc::join(ptr, name),
-                        format!("unknown style {s:?}; using form"),
-                    );
-                    Style::Form
-                })
-            });
-            let style = style.unwrap_or(Style::Form);
-            let explode = match e.get("explode") {
-                Some(Value::Bool(b)) => *b,
-                _ => style == Style::Form,
-            };
-            // `contentType` may list several types and ranges; the first
-            // decides parsing, any of them may be sent.
-            let allowed: Vec<MediaType> = e
-                .get("contentType")
-                .and_then(Value::as_str)
-                .map(|c| {
-                    c.split(',')
-                        .filter_map(|t| MediaType::parse(t.trim()))
-                        .collect()
-                })
-                .unwrap_or_default();
-            let content_type = allowed.first().cloned();
-            let eptr = doc::join(ptr, name);
-            let mut headers = Vec::new();
-            if let Some(hs) = e.get("headers").and_then(Value::as_object) {
-                let hptr = doc::join(&eptr, "headers");
-                for (h, hv) in hs {
-                    // §4.8.15.1: a Content-Type header here SHALL be ignored.
-                    if h.eq_ignore_ascii_case("content-type") {
-                        continue;
-                    }
-                    if let Ok(Some(p)) = self.param(
-                        hv,
-                        &doc::join(&hptr, h),
-                        Some(h),
-                        Direction::Request,
-                        self.version,
-                    ) {
-                        headers.push(p);
-                    }
-                }
-            }
-            out.push(Encoding {
-                name: name.clone(),
-                content_type,
-                allowed,
-                headers,
-                style,
-                explode,
-            });
+            out.push(self.encoding(name, e, &doc::join(ptr, name), 0));
         }
         out
     }
+
+    /// One Encoding Object. In OpenAPI 3.2 it may nest `prefixEncoding`
+    /// and `itemEncoding` for a nested multipart part (§4.15.2).
+    fn encoding(&mut self, name: &str, e: &Value, eptr: &str, depth: usize) -> Encoding {
+        let style = e.get("style").and_then(Value::as_str).map(|s| {
+            parse_style(s).unwrap_or_else(|| {
+                self.warn(eptr, format!("unknown style {s:?}; using form"));
+                Style::Form
+            })
+        });
+        let style = style.unwrap_or(Style::Form);
+        let explode = match e.get("explode") {
+            Some(Value::Bool(b)) => *b,
+            _ => style == Style::Form,
+        };
+        // `contentType` may list several types and ranges; the first
+        // decides parsing, any of them may be sent.
+        let allowed: Vec<MediaType> = e
+            .get("contentType")
+            .and_then(Value::as_str)
+            .map(|c| {
+                c.split(',')
+                    .filter_map(|t| MediaType::parse(t.trim()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let content_type = allowed.first().cloned();
+        let mut headers = Vec::new();
+        if let Some(hs) = e.get("headers").and_then(Value::as_object) {
+            let hptr = doc::join(eptr, "headers");
+            for (h, hv) in hs {
+                // §4.8.15.1: a Content-Type header here SHALL be ignored.
+                if h.eq_ignore_ascii_case("content-type") {
+                    continue;
+                }
+                if let Ok(Some(p)) = self.param(
+                    hv,
+                    &doc::join(&hptr, h),
+                    Some(h),
+                    Direction::Request,
+                    self.version,
+                ) {
+                    headers.push(p);
+                }
+            }
+        }
+        let (prefix, item) = if depth < MAX_ENCODING_NESTING {
+            self.positional(e, eptr, depth + 1)
+        } else {
+            (Vec::new(), None)
+        };
+        Encoding {
+            name: name.to_owned(),
+            content_type,
+            allowed,
+            headers,
+            style,
+            explode,
+            prefix,
+            item,
+        }
+    }
+
+    /// `prefixEncoding` and `itemEncoding` of a Media Type or Encoding
+    /// Object (OpenAPI 3.2 §4.14.5.2).
+    pub fn positional(
+        &mut self,
+        v: &Value,
+        ptr: &str,
+        depth: usize,
+    ) -> (Vec<Encoding>, Option<Box<Encoding>>) {
+        if self.version < Version::V32 {
+            return (Vec::new(), None);
+        }
+        let pptr = doc::join(ptr, "prefixEncoding");
+        let prefix = v
+            .get("prefixEncoding")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .enumerate()
+            .map(|(i, e)| self.encoding("", e, &doc::join(&pptr, &i.to_string()), depth))
+            .collect();
+        let item = v
+            .get("itemEncoding")
+            .map(|e| Box::new(self.encoding("", e, &doc::join(ptr, "itemEncoding"), depth)));
+        (prefix, item)
+    }
 }
+
+/// Encoding Objects nest at most this deep (§4.15.2 requires one level).
+const MAX_ENCODING_NESTING: usize = 4;
 
 /// A Response Object (§4.8.17).
 pub(crate) struct Resp {
@@ -351,5 +405,101 @@ impl Builder<'_> {
             }
         }
         Ok(out)
+    }
+}
+
+/// The default part media type for a schema (OpenAPI 3.2 §4.15.1 table):
+/// objects and arrays are JSON, strings and other primitives text, a
+/// string with `contentEncoding` or a schema without `type` octets.
+fn default_part_type(root: &Value, s: Option<&Value>) -> MediaType {
+    let s = s.map(|s| {
+        s.get("$ref")
+            .and_then(Value::as_str)
+            .and_then(|r| doc::lookup_ref(root, r))
+            .unwrap_or(s)
+    });
+    let ty = s.and_then(|s| s.get("type"));
+    let has = |t: &str| match ty {
+        Some(Value::String(x)) => x == t,
+        Some(Value::Array(a)) => a.iter().any(|x| x == t),
+        _ => false,
+    };
+    let media = if has("object") || has("array") {
+        "application/json"
+    } else if has("string") && s.is_some_and(|s| s.get("contentEncoding").is_some()) {
+        "application/octet-stream"
+    } else if has("string") || has("number") || has("integer") || has("boolean") {
+        "text/plain"
+    } else {
+        "application/octet-stream"
+    };
+    MediaType::parse(media).expect("a valid media type")
+}
+
+/// How the parts of a positional multipart body are read.
+#[derive(Default)]
+pub(crate) struct PartShapes {
+    pub prefix: Vec<PartShape>,
+    pub rest: Option<Box<PartShape>>,
+}
+
+/// One position: its default media type, the shape of text values, the
+/// XML mapping, and the positions of a nested multipart part.
+pub(crate) struct PartShape {
+    pub default: MediaType,
+    pub shape: Shape,
+    pub xml: crate::xml::XmlShape,
+    pub nested: PartShapes,
+}
+
+impl PartShapes {
+    pub fn at(&self, i: usize) -> Option<&PartShape> {
+        self.prefix.get(i).or(self.rest.as_deref())
+    }
+}
+
+fn part_shape(root: &Value, s: Option<&Value>, version: Version, depth: usize) -> PartShape {
+    let any = Value::Bool(true);
+    let schema = s.unwrap_or(&any);
+    PartShape {
+        default: default_part_type(root, s),
+        shape: shape_of(root, schema, version),
+        xml: crate::xml::shape(root, schema, version, None, 0),
+        nested: if depth < MAX_ENCODING_NESTING {
+            part_shapes(root, Some(schema), None, version, depth + 1)
+        } else {
+            PartShapes::default()
+        },
+    }
+}
+
+/// Positions from an array schema's `prefixItems` and `items`; `rest`
+/// (an `itemSchema`) takes the place of `items`.
+fn part_shapes(
+    root: &Value,
+    schema: Option<&Value>,
+    rest: Option<&Value>,
+    version: Version,
+    depth: usize,
+) -> PartShapes {
+    let schema = schema.map(|s| {
+        s.get("$ref")
+            .and_then(Value::as_str)
+            .and_then(|r| doc::lookup_ref(root, r))
+            .unwrap_or(s)
+    });
+    let prefix = schema
+        .and_then(|s| s.get("prefixItems"))
+        .and_then(Value::as_array)
+        .map(|a| {
+            a.iter()
+                .map(|p| part_shape(root, Some(p), version, depth))
+                .collect()
+        })
+        .unwrap_or_default();
+    let rest = rest.or_else(|| schema.and_then(|s| s.get("items")));
+    PartShapes {
+        prefix,
+        rest: Some(Box::new(part_shape(root, rest, version, depth))),
     }
 }

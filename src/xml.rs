@@ -83,9 +83,10 @@ pub(crate) fn shape(
     if depth > MAX_DEPTH {
         return out;
     }
-    let types = match crate::params::shape_of(root, target, version) {
-        crate::params::Shape::Primitive(t) => Some(t),
-        _ => None,
+    let (types, object) = match crate::params::shape_of(root, target, version) {
+        crate::params::Shape::Primitive(t) => (Some(t), t.has(Types::OBJ) && !t.has(Types::STR)),
+        crate::params::Shape::Object(_) => (None, true),
+        crate::params::Shape::Array(_) => (None, false),
     };
     let mut props: Vec<(String, XmlShape)> = Vec::new();
     let mut stack = vec![target];
@@ -121,7 +122,8 @@ pub(crate) fn shape(
             out.name.as_deref(),
             depth + 1,
         )))
-    } else if !props.is_empty() {
+    } else if !props.is_empty() || object {
+        // An object, declared properties or not: its children are kept.
         Kind::Object(props)
     } else if let Some(t) = types.filter(|t| *t != Types::ANY) {
         Kind::Primitive(t)

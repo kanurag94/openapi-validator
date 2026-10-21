@@ -28,6 +28,9 @@ pub(crate) struct Encoding {
     pub headers: Vec<crate::params::Param>,
     pub style: Style,
     pub explode: bool,
+    /// Nested positional encodings for a multipart part (OpenAPI 3.2).
+    pub prefix: Vec<Encoding>,
+    pub item: Option<Box<Encoding>>,
 }
 
 /// What a multipart part carried besides its value.
@@ -211,12 +214,13 @@ pub(crate) fn form(
 }
 
 /// One part of a multipart body.
-struct Part<'a> {
-    name: String,
-    content_type: Option<MediaType>,
-    headers: Vec<(String, String)>,
-    file: bool,
-    data: &'a [u8],
+pub(crate) struct Part<'a> {
+    /// The `Content-Disposition` name; positional parts need none.
+    pub name: Option<String>,
+    pub content_type: Option<MediaType>,
+    pub headers: Vec<(String, String)>,
+    pub file: bool,
+    pub data: &'a [u8],
 }
 
 fn find(hay: &[u8], needle: &[u8], from: usize) -> Option<usize> {
@@ -231,7 +235,7 @@ fn find(hay: &[u8], needle: &[u8], from: usize) -> Option<usize> {
 
 /// Splits a multipart body (RFC 2046 §5.1.1). Line breaks may be CRLF or,
 /// leniently, LF.
-fn parts<'a>(body: &'a [u8], boundary: &str) -> Result<Vec<Part<'a>>, String> {
+pub(crate) fn parts<'a>(body: &'a [u8], boundary: &str) -> Result<Vec<Part<'a>>, String> {
     let delim = format!("--{boundary}");
     let d = delim.as_bytes();
     let mut out = Vec::new();
@@ -305,9 +309,6 @@ fn parts<'a>(body: &'a [u8], boundary: &str) -> Result<Vec<Part<'a>>, String> {
                 content_type = MediaType::parse(v.trim());
             }
         }
-        let Some(name) = name else {
-            return Err("a multipart part has no name in Content-Disposition".into());
-        };
         out.push(Part {
             name,
             content_type,
@@ -317,6 +318,27 @@ fn parts<'a>(body: &'a [u8], boundary: &str) -> Result<Vec<Part<'a>>, String> {
         });
         pos = next;
     }
+}
+
+/// A form-data part, which always has a name.
+struct NamedPart<'a> {
+    name: String,
+    part: Part<'a>,
+}
+
+impl<'a> std::ops::Deref for NamedPart<'a> {
+    type Target = Part<'a>;
+    fn deref(&self) -> &Part<'a> {
+        &self.part
+    }
+}
+
+/// The boundary of a multipart media type (RFC 2046 §5.1.1).
+pub(crate) fn boundary(media: &MediaType) -> Result<&str, String> {
+    media
+        .param("boundary")
+        .filter(|b| !b.is_empty() && b.len() <= 70)
+        .ok_or_else(|| format!("{}/{} needs a boundary parameter", media.ty, media.sub))
 }
 
 /// Parses a multipart/form-data body into an object.
@@ -336,6 +358,10 @@ pub(crate) fn multipart(
     let mut m = Map::new();
     let mut infos = Vec::new();
     for part in parts(body, boundary)? {
+        let Some(name) = part.name.clone() else {
+            return Err("a multipart part has no name in Content-Disposition".into());
+        };
+        let part = NamedPart { name, part };
         infos.push(PartInfo {
             name: part.name.clone(),
             content_type: part.content_type.clone(),
