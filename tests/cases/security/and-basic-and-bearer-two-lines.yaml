@@ -1,5 +1,5 @@
-title: "Basic and bearer in one requirement can be met by two Authorization lines"
-ref: "OpenAPI 3.1.1 §4.8.30 (Security Requirement Object)"
+title: "Authorization sent on two lines is a problem"
+ref: "RFC 9110 §5.3, §11.6.2 (Authorization is a single value; a sender MUST NOT repeat it)"
 document: |
   openapi: 3.1.0
   info: {title: t, version: "1"}
@@ -26,4 +26,6 @@ request:
   path: "/pets"
   headers: [["Authorization", "Basic dXNlcjpwYXNz"], ["Authorization", "Bearer t"]]
 expect:
-  valid: true
+  valid: false
+  kind: invalid_parameter
+  location: header.authorization

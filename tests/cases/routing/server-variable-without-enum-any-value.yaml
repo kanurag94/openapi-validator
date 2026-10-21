@@ -1,5 +1,5 @@
-title: "A server variable without enum does not accept arbitrary values"
-ref: "OpenAPI 3.1.1 §4.8.6 (Server Variable Object)"
+title: "A server variable without enum accepts any value"
+ref: "OpenAPI 3.1.1 §4.8.6.1 (enum only for a limited set; default is used if no alternate value is supplied)"
 options:
   server_paths: "required"
 document: |
@@ -15,6 +15,4 @@ request:
   method: "GET"
   path: "/other/pets"
 expect:
-  valid: false
-  kind: "path_not_found"
-  location: "path"
+  valid: true

@@ -1,5 +1,5 @@
-title: "Any Authorization line may carry the required scheme"
-ref: "RFC 9110 §11.6.2 (Authorization)"
+title: "A second Authorization line is a problem even when one line matches"
+ref: "RFC 9110 §5.3, §11.6.2 (Authorization is a single value; a sender MUST NOT repeat it)"
 document: |
   openapi: 3.1.0
   info: {title: t, version: "1"}
@@ -26,4 +26,6 @@ request:
   path: "/pets"
   headers: [["Authorization", "Bearer abc"], ["Authorization", "Basic dXNlcjpwYXNz"]]
 expect:
-  valid: true
+  valid: false
+  kind: invalid_parameter
+  location: header.authorization

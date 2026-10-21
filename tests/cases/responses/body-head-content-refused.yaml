@@ -1,5 +1,5 @@
-title: "A HEAD response body is not checked"
-ref: "OpenAPI 3.1.1 §4.8.17, RFC 9110 §9.3.2"
+title: "A response to HEAD that carries content is a problem"
+ref: "RFC 9110 §9.3.2 (the server MUST NOT send content in the response)"
 document: |
   openapi: 3.1.0
   info: {title: t, version: "1"}
@@ -14,4 +14,7 @@ document: |
                 schema: {type: object}
 request: {"method": "HEAD", "path": "/r"}
 response: {"status": 200, "headers": [["Content-Type", "application/json"]], "body": "[[["}
-expect: {"valid": true}
+expect:
+  valid: false
+  kind: unexpected_body
+  location: body

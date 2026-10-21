@@ -211,6 +211,27 @@ impl Spec {
     }
 }
 
+/// Fields defined as a single value, which a sender MUST NOT repeat
+/// (RFC 9110 §5.3; §8.3 Content-Type, §11.6.2 Authorization).
+const SINGLE_VALUE_HEADERS: &[&str] = &["content-type", "authorization"];
+
+/// Reports single-value header fields sent on more than one line.
+pub(crate) fn check_single_headers(headers: &[(&str, &str)], report: &mut Report) {
+    for name in SINGLE_VALUE_HEADERS {
+        let n = headers
+            .iter()
+            .filter(|(h, _)| h.eq_ignore_ascii_case(name))
+            .count();
+        if n > 1 {
+            report.push(
+                ProblemKind::InvalidParameter,
+                format!("header.{name}"),
+                format!("is sent on {n} lines but takes a single value"),
+            );
+        }
+    }
+}
+
 /// Header names never reported as unknown: OpenAPI ignores parameters with
 /// these names (§4.8.12.2), and `Cookie` is checked through cookie
 /// parameters.
@@ -529,6 +550,19 @@ impl Spec {
         report: &mut Report,
     ) {
         let headers = header_index(resp.headers);
+        if resp
+            .headers
+            .iter()
+            .filter(|(h, _)| h.eq_ignore_ascii_case("content-type"))
+            .count()
+            > 1
+        {
+            report.push(
+                ProblemKind::InvalidParameter,
+                "header.content-type",
+                "is sent on several lines but takes a single value",
+            );
+        }
         for p in &resp_obj.headers {
             let label = p.label();
             let Some(lines) = headers.get(&p.name.to_ascii_lowercase()) else {
@@ -558,11 +592,25 @@ impl Spec {
                 }
             }
         }
-        if !self.options.validate_body
-            || head
-            || req.method == "HEAD"
-            || resp_obj.content.is_empty()
-        {
+        if !self.options.validate_body {
+            return;
+        }
+        // RFC 9110 §9.3.2, §15.3.5, §15.4.5: no content in these responses.
+        let head = head || req.method == "HEAD";
+        if !resp.body.is_empty() && (head || resp.status == 204 || resp.status == 304) {
+            let why = if head {
+                "a response to HEAD".to_owned()
+            } else {
+                format!("a {} response", resp.status)
+            };
+            report.push(
+                ProblemKind::UnexpectedBody,
+                "body",
+                format!("{why} must not carry content"),
+            );
+            return;
+        }
+        if head || resp_obj.content.is_empty() {
             return;
         }
         if resp.body.is_empty() {

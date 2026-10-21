@@ -102,14 +102,21 @@ fn http_schemes_match_whole_tokens() {
     refused(get(&s, "", &[("Authorization", "Bearer   ")]));
     refused(get(&s, "", &[("Authorization", "Bearerx t0k3n")]));
     refused(get(&s, "", &[("Authorization", "Basic dTpw")]));
-    allowed(get(
+    // RFC 9110 §5.3: Authorization takes one value; two lines are a problem.
+    let r = get(
         &s,
         "",
         &[
             ("Authorization", "Basic dTpw"),
             ("Authorization", "Bearer t"),
         ],
-    ));
+    );
+    assert!(
+        r.problems()
+            .iter()
+            .any(|p| p.location == "header.authorization"),
+        "{r}"
+    );
     let s = spec(r#"[{"basic": []}]"#, None);
     allowed(get(&s, "", &[("Authorization", "basic dTpw")]));
     refused(get(&s, "", &[("Authorization", "Bearer t")]));

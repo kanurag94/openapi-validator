@@ -13,8 +13,26 @@ use crate::path::decode_segment;
 /// Upper bound on the base paths one Server Object may expand to.
 const MAX_EXPANSIONS: usize = 64;
 
-/// A server base path as decoded segments; empty for `/`.
+/// A server base path as decoded segments; empty for `/`. A segment may
+/// contain [`ANY`], standing for a variable without `enum`.
 pub type BasePath = Vec<String>;
+
+/// Stands for the value of a server variable without `enum`, which may be
+/// anything (OpenAPI 3.1.1 §4.8.6.1); it cannot occur in a decoded URL
+/// path segment taken from a request.
+pub const ANY: char = '\u{1}';
+
+/// Whether a decoded request segment matches a base path segment.
+pub fn segment_matches(base: &str, actual: &str) -> bool {
+    match base.split_once(ANY) {
+        None => base == actual,
+        Some((prefix, suffix)) => {
+            actual.len() > prefix.len() + suffix.len() - suffix.matches(ANY).count()
+                && actual.starts_with(prefix)
+                && actual.ends_with(suffix.trim_start_matches(ANY))
+        }
+    }
+}
 
 /// Expands the base paths of a `servers` array. A missing or empty array is
 /// the single server `/` (OpenAPI 3.1.1 §4.8.1.1, `servers`).
@@ -82,16 +100,15 @@ fn expand(
             })
             .unwrap_or_default();
         if values.is_empty() {
-            if let Some(d) = var.and_then(|v| v.get("default")).and_then(Value::as_str) {
-                values.push(d.to_owned());
+            if var.and_then(|v| v.get("default")).is_none() {
+                warnings.push(Warning {
+                    location: location.to_owned(),
+                    message: format!("server variable {name:?} has no default (it is REQUIRED)"),
+                });
             }
-        }
-        if values.is_empty() {
-            warnings.push(Warning {
-                location: location.to_owned(),
-                message: format!("server variable {name:?} has no default; substituted as empty"),
-            });
-            values.push(String::new());
+            // Without `enum` the value is open; the default is only what is
+            // used when no other value is supplied.
+            values.push(ANY.to_string());
         }
         let mut next = Vec::new();
         'outer: for r in &results {
@@ -181,7 +198,12 @@ mod tests {
         }]));
         assert_eq!(v, vec![vec!["v1".to_owned()], vec!["v2".to_owned()]]);
         let d = paths(json!([{"url": "/{base}", "variables": {"base": {"default": "api"}}}]));
-        assert_eq!(d, vec![vec!["api".to_owned()]]);
+        assert_eq!(d, vec![vec![ANY.to_string()]], "no enum: any value");
+        assert!(segment_matches(&d[0][0], "api"));
+        assert!(segment_matches(&d[0][0], "other"));
+        assert!(!segment_matches(&d[0][0], ""));
+        assert!(segment_matches(&format!("v{ANY}"), "v2"));
+        assert!(!segment_matches(&format!("v{ANY}"), "x2"));
     }
 
     #[test]

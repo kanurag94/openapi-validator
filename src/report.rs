@@ -32,6 +32,9 @@ pub enum ProblemKind {
     UnsupportedMediaType,
     /// A value in the body does not fit its schema.
     SchemaViolation,
+    /// A message carries content where none is allowed (a response to
+    /// HEAD, a 204 or a 304).
+    UnexpectedBody,
     /// The response status code is not declared for the operation.
     UndeclaredStatus,
     /// A response was given for a request that matches no operation.
@@ -58,6 +61,7 @@ impl ProblemKind {
             ProblemKind::BodyTooLarge => "body_too_large",
             ProblemKind::UnsupportedMediaType => "unsupported_media_type",
             ProblemKind::SchemaViolation => "schema_violation",
+            ProblemKind::UnexpectedBody => "unexpected_body",
             ProblemKind::UndeclaredStatus => "undeclared_status",
             ProblemKind::UndeclaredOperation => "undeclared_operation",
             ProblemKind::SchemaError => "schema_error",

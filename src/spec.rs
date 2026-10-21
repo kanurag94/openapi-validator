@@ -15,7 +15,7 @@ use crate::path::{split_path, Match, PathIndex, RawSegment, Template, Vars};
 use crate::report::{MatchedOperation, ProblemKind, Report};
 use crate::schema::{SchemaStore, StoreOptions};
 use crate::security::{self, Requirement, Schemes};
-use crate::server::{base_paths, BasePath};
+use crate::server::{base_paths, segment_matches, BasePath};
 use crate::validate::Declared;
 
 /// HTTP methods a Path Item can describe (OpenAPI 3.1.1 §4.8.9.1).
@@ -269,7 +269,11 @@ impl Spec {
                 if base.is_empty() || base.len() > segs.len() {
                     continue;
                 }
-                if !base.iter().zip(segs).all(|(b, s)| *b == s.text) {
+                if !base
+                    .iter()
+                    .zip(segs)
+                    .all(|(b, s)| segment_matches(b, &s.text))
+                {
                     continue;
                 }
                 for m in self.paths.find(&segs[base.len()..]) {
@@ -438,6 +442,7 @@ impl Spec {
                         }
                     }
                 }
+                crate::validate::check_single_headers(req.headers, &mut r);
                 self.check_params(&o.params, &vars, req, &o.declared, &mut r);
                 self.check_request_body(o.body.as_ref(), req, &mut r);
             }
