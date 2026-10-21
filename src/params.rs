@@ -636,16 +636,68 @@ pub(crate) fn query_value(
             }
         }
         (_, Shape::Object(props)) if p.explode => {
-            // Exploded objects take only their declared properties.
+            // Exploded objects take only their declared properties. Nested
+            // values have no defined form (RFC 6570 §3.2.8); repeated pairs
+            // make an array, and an object may come as JSON text or as
+            // `name[key]=value` pairs (see SPEC_DECISIONS.md).
             let mut m = Map::new();
             for (name, t) in props {
-                if let Some(q) = pairs.iter().find(|q| q.name == *name) {
-                    consumed.push(name.clone());
+                let same: Vec<&Pair<'_>> = pairs.iter().filter(|q| q.name == *name).collect();
+                let bracket = format!("{name}[");
+                let nested: Vec<&Pair<'_>> = pairs
+                    .iter()
+                    .filter(|q| q.name.starts_with(&bracket))
+                    .collect();
+                if same.is_empty() && nested.is_empty() {
+                    continue;
+                }
+                consumed.push(name.clone());
+                consumed.extend(nested.iter().map(|q| q.name.clone()));
+                let mut texts = Vec::with_capacity(same.len());
+                for q in &same {
                     let Ok(v) = decode(q.raw, plus) else {
                         return malformed();
                     };
-                    m.insert(name.clone(), coerce(&v, *t));
+                    texts.push(v);
                 }
+                let wants_array = t.has(Types::ARR) && !t.has(Types::STR);
+                let wants_object = t.has(Types::OBJ) && !t.has(Types::STR);
+                let value = if wants_object {
+                    let parsed = texts
+                        .first()
+                        .and_then(|x| {
+                            crate::json::parse(x.as_bytes(), crate::json::Limits::default()).ok()
+                        })
+                        .filter(Value::is_object);
+                    match parsed {
+                        Some(v) => v,
+                        None if !nested.is_empty() => {
+                            let mut obj = Map::new();
+                            for q in &nested {
+                                let Ok(v) = decode(q.raw, plus) else {
+                                    return malformed();
+                                };
+                                insert_deep(
+                                    &mut obj,
+                                    &bracket_keys(&q.name[name.len()..]),
+                                    coerce(&v, Types::ANY),
+                                );
+                            }
+                            Value::Object(obj)
+                        }
+                        None => coerce(texts.first().map_or("", String::as_str), *t),
+                    }
+                } else if wants_array || (texts.len() > 1 && t.has(Types::ARR)) {
+                    let only_empty = texts.len() == 1 && texts[0].is_empty();
+                    Value::Array(if only_empty {
+                        Vec::new()
+                    } else {
+                        texts.iter().map(|x| coerce(x, Types::ANY)).collect()
+                    })
+                } else {
+                    coerce(texts.first().map_or("", String::as_str), *t)
+                };
+                m.insert(name.clone(), value);
             }
             if m.is_empty() {
                 Found::Absent

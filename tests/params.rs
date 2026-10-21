@@ -412,3 +412,25 @@ fn unknown_parameters() {
     ok(get(&s, "/q", "", &[("X-Trace", "1")]));
     bad(get(&s, "/q", "", &[("Host", "h")]), "header.host");
 }
+
+// Nested values in exploded form objects have no defined serialization;
+// repeated pairs make an array and an object may be JSON or bracketed.
+#[test]
+fn exploded_object_with_nested_values() {
+    let s = spec(
+        "/q",
+        r#"{"name": "f", "in": "query", "required": true, "schema": {"type": "object", "properties": {
+            "tags": {"type": "array", "items": {"type": "string"}, "maxItems": 2},
+            "meta": {"type": "object", "additionalProperties": {"type": "string"}}}}}"#,
+    );
+    ok(get(&s, "/q", "tags=a&tags=b", &[]));
+    ok(get(&s, "/q", "tags=a", &[]));
+    bad(get(&s, "/q", "tags=a&tags=b&tags=c", &[]), "query.f/tags");
+    ok(get(&s, "/q", "meta=%7B%22k%22%3A%22v%22%7D", &[]));
+    ok(get(&s, "/q", "meta[k]=v", &[]));
+    // Valid under no reading: a nested object where a string is required.
+    bad(
+        get(&s, "/q", "meta=%7B%22k%22%3A%7B%7D%7D", &[]),
+        "query.f/meta/k",
+    );
+}
