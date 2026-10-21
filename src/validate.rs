@@ -674,6 +674,44 @@ fn coerce_text(t: String, shape: &Shape) -> Value {
 }
 
 impl Spec {
+    /// `Set-Cookie` takes one value per line and its values may hold
+    /// commas (RFC 9110 §5.3), so lines are never split. A `schema`
+    /// object has one property per line (`name=rest`) and an array one
+    /// item per line; `content` sees the lines joined with LF (OpenAPI 3.2
+    /// §4.21.3).
+    fn check_set_cookie(&self, p: &Param, lines: &[&str], label: &str, report: &mut Report) {
+        match &p.value {
+            ParamValue::Schema { shape, .. } => match shape {
+                Shape::Object(props) => {
+                    let mut m = serde_json::Map::new();
+                    for line in lines {
+                        let (name, rest) = line.split_once('=').unwrap_or((line, ""));
+                        let name = name.trim();
+                        let t = props
+                            .iter()
+                            .find(|(n, _)| n == name)
+                            .map_or(Types::STR, |(_, t)| *t);
+                        m.insert(name.to_owned(), coerce(rest, t));
+                    }
+                    self.check_param_value(p, Value::Object(m), label, report);
+                }
+                Shape::Array(t) => {
+                    let items = lines.iter().map(|l| coerce(l, *t)).collect();
+                    self.check_param_value(p, Value::Array(items), label, report);
+                }
+                Shape::Primitive(t) => {
+                    for line in lines {
+                        self.check_param_value(p, coerce(line, *t), label, report);
+                    }
+                }
+            },
+            ParamValue::Content { media, id } => {
+                self.check_content_param(media, *id, &lines.join("\n"), label, report)
+            }
+            ParamValue::QueryString { .. } | ParamValue::Any => {}
+        }
+    }
+
     /// Checks a response's headers and body against the Response Object.
     pub(crate) fn check_response(
         &self,
@@ -709,6 +747,10 @@ impl Spec {
                 }
                 continue;
             };
+            if p.name.eq_ignore_ascii_case("set-cookie") {
+                self.check_set_cookie(p, lines, &label, report);
+                continue;
+            }
             for line in lines {
                 match &p.value {
                     // Header values are literal text in simple style; they are

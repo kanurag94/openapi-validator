@@ -1,0 +1,26 @@
+title: "Each cookie's value is checked against its property schema"
+ref: "OpenAPI 3.2.0 §4.21.3; RFC 9110 §5.3"
+document: |
+  openapi: 3.2.0
+  info: {title: t, version: "1"}
+  paths:
+    /login:
+      post:
+        responses:
+          "200":
+            description: ok
+            headers:
+              Set-Cookie:
+                required: true
+                style: simple
+                explode: true
+                schema:
+                  type: object
+                  required: [lang, foo, urlSafeData]
+                  properties:
+                    urlSafeData: {type: string, pattern: "^[-_.%a-zA-Z0-9]+(;|$)"}
+                  additionalProperties:
+                    pattern: "; *Expires="
+request: {method: POST, path: /login}
+response: {status: 200, headers: [["Set-Cookie", "lang=en-US"], ["Set-Cookie", "foo=bar; Expires=Wed, 09 Jun 2021 10:18:14 GMT"], ["Set-Cookie", "urlSafeData=x"]]}
+expect: {valid: false, kind: invalid_parameter, location: header.set-cookie/lang}
