@@ -1,0 +1,50 @@
+[package]
+name = "openapi-validator-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary = { version = "1", features = ["derive"] }
+openapi-validator = { path = ".." }
+
+[[bin]]
+name = "load"
+path = "fuzz_targets/load.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "validate_request"
+path = "fuzz_targets/validate_request.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "json"
+path = "fuzz_targets/json.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "yaml"
+path = "fuzz_targets/yaml.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "pattern"
+path = "fuzz_targets/pattern.rs"
+test = false
+doc = false
+bench = false
+
+[workspace]
