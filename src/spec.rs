@@ -229,6 +229,15 @@ impl Spec {
             },
         )?;
         warnings.append(&mut schema_warnings);
+        warnings.extend(crate::lint::check(&root, version));
+        if options.strict_document {
+            if let Some(w) = warnings.first() {
+                return Err(LoadError::Invalid {
+                    location: w.location.clone(),
+                    message: format!("{} (strict_document)", w.message),
+                });
+            }
+        }
         Ok(Spec {
             version,
             options,

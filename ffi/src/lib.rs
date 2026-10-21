@@ -94,6 +94,8 @@ pub struct OavOptions {
     pub read_write_required: c_int,
     /// 0 bounded backtracking (default), 1 refuse such patterns at load.
     pub patterns: c_int,
+    /// Refuse documents that break a MUST of the specification.
+    pub strict_document: bool,
     /// 0 either, 1 required, 2 ignored.
     pub server_paths: c_int,
     pub max_problems: usize,
@@ -187,6 +189,7 @@ pub unsafe extern "C" fn oav_options_default(opts: *mut OavOptions) -> c_int {
             integers: 0,
             read_write_required: 0,
             patterns: 0,
+            strict_document: d.strict_document,
             server_paths: 0,
             max_problems: d.max_problems,
             max_report_bytes: d.max_report_bytes,
@@ -230,6 +233,7 @@ fn to_options(o: &OavOptions) -> Result<Options, c_int> {
             1 => ReadWriteRequired::RelaxAlways,
             _ => return Err(OAV_ERR_RANGE),
         },
+        strict_document: o.strict_document,
         patterns: match o.patterns {
             0 => PatternEngine::Bounded,
             1 => PatternEngine::LinearOnly,

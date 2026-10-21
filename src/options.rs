@@ -151,6 +151,10 @@ pub struct Options {
     pub integers: IntegerSemantics,
     pub read_write_required: ReadWriteRequired,
     pub patterns: PatternEngine,
+    /// Refuse a document that breaks a MUST of the specification (every
+    /// load warning becomes a load error). Default false: such documents
+    /// load, with warnings.
+    pub strict_document: bool,
     /// Decode `+` as a space in query strings, as HTML forms and the WHATWG
     /// URL standard do. Default true.
     pub query_plus_as_space: bool,
@@ -179,6 +183,7 @@ impl Default for Options {
             integers: IntegerSemantics::default(),
             read_write_required: ReadWriteRequired::default(),
             patterns: PatternEngine::default(),
+            strict_document: false,
             query_plus_as_space: true,
         }
     }
@@ -226,6 +231,7 @@ impl fmt::Debug for Options {
             .field("integers", &self.integers)
             .field("read_write_required", &self.read_write_required)
             .field("patterns", &self.patterns)
+            .field("strict_document", &self.strict_document)
             .field("query_plus_as_space", &self.query_plus_as_space)
             .finish()
     }

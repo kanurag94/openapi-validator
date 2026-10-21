@@ -47,6 +47,7 @@ mod doc;
 pub mod format;
 mod http;
 pub mod json;
+mod lint;
 mod media;
 mod model;
 pub mod number;

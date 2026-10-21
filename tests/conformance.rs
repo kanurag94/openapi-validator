@@ -80,6 +80,7 @@ fn options(v: Option<&Value>) -> Result<Options, String> {
             "allow_unknown_query" => o.allow_unknown_query = b()?,
             "allow_unknown_headers" => o.allow_unknown_headers = b()?,
             "allow_unknown_cookies" => o.allow_unknown_cookies = b()?,
+            "strict_document" => o.strict_document = b()?,
             "check_security" => o.check_security = b()?,
             "profile" => {} // applied first, below
             "formats" => {
