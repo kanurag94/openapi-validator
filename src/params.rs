@@ -500,7 +500,7 @@ fn split_decode(raw: &str, delims: &[&str], plus: bool) -> Result<Vec<String>, (
 }
 
 /// `k,v,k,v` into an object.
-fn pairs_to_object(items: Vec<String>, props: &[(String, Types)]) -> Value {
+pub(crate) fn pairs_to_object(items: Vec<String>, props: &[(String, Types)]) -> Value {
     let mut m = Map::new();
     let mut it = items.into_iter();
     while let Some(k) = it.next() {
@@ -620,7 +620,10 @@ pub(crate) fn query_value(
                     return malformed();
                 };
                 let keys = bracket_keys(&q.name[p.name.len()..]);
+                // Declared types are known one level down; deeper values
+                // are read as their text suggests.
                 let types = match shape {
+                    Shape::Object(_) if keys.len() > 1 => Types::ANY,
                     Shape::Object(props) => keys
                         .first()
                         .and_then(|k| props.iter().find(|(n, _)| n == k))
@@ -767,7 +770,7 @@ pub(crate) fn query_value(
 }
 
 /// `[a][b]` into `["a", "b"]`; text outside brackets ends the list.
-fn bracket_keys(s: &str) -> Vec<String> {
+pub(crate) fn bracket_keys(s: &str) -> Vec<String> {
     let mut keys = Vec::new();
     let mut rest = s;
     while let Some(inner) = rest.strip_prefix('[') {
@@ -783,7 +786,7 @@ fn bracket_keys(s: &str) -> Vec<String> {
 
 /// Inserts a deepObject value, nesting for `a[b][c]` (one level is all
 /// OpenAPI defines; deeper levels nest, and `[]` appends to an array).
-fn insert_deep(root: &mut Map<String, Value>, keys: &[String], v: Value) {
+pub(crate) fn insert_deep(root: &mut Map<String, Value>, keys: &[String], v: Value) {
     let Some((first, rest)) = keys.split_first() else {
         return;
     };

@@ -1,0 +1,17 @@
+title: "Nested deepObject keys produce a valid nested object"
+ref: "OpenAPI 3.1.1 §4.8.12.4 (style examples) deepObject"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    "/q":
+      get:
+        parameters:
+          - {"name": "f", "in": "query", "schema": {"type": "object", "required": ["size"], "properties": {"size": {"type": "object", "required": ["min", "max"], "properties": {"min": {"type": "integer"}, "max": {"type": "integer"}}}}}, "style": "deepObject", "explode": true}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/q"
+  query: "f[size][min]=1&f[size][max]=9"
+expect:
+  valid: true

@@ -13,7 +13,9 @@ use serde_json::{Map, Value};
 
 use crate::json;
 use crate::media::MediaType;
-use crate::params::{coerce, decode, split_query, Shape, Style};
+use crate::params::{
+    bracket_keys, coerce, decode, insert_deep, pairs_to_object, split_query, Shape, Style, Types,
+};
 
 /// Per-property serialization for form and multipart bodies.
 #[derive(Debug, Clone)]
@@ -59,7 +61,7 @@ pub(crate) fn form(
         ));
     }
     let mut m = Map::new();
-    let mut used: Vec<&str> = Vec::new();
+    let mut used: Vec<String> = Vec::new();
     for (name, shape) in props {
         let enc = encodings.iter().find(|e| e.name == *name);
         let style = enc.map_or(Style::Form, |e| e.style);
@@ -68,21 +70,47 @@ pub(crate) fn form(
             let prefix = format!("{name}[");
             let mut obj = Map::new();
             for p in pairs.iter().filter(|p| p.name.starts_with(&prefix)) {
-                let key = p.name[prefix.len()..].trim_end_matches(']').to_owned();
+                let keys = bracket_keys(&p.name[name.len()..]);
                 let v = decode(p.raw, true)
                     .map_err(|_| format!("{name} has an invalid percent-escape"))?;
-                obj.insert(key, Value::String(v));
+                let t = match shape {
+                    Shape::Object(nested) if keys.len() == 1 => nested
+                        .iter()
+                        .find(|(n, _)| Some(n) == keys.first())
+                        .map_or(Types::ANY, |(_, t)| *t),
+                    _ => Types::ANY,
+                };
+                insert_deep(&mut obj, &keys, coerce(&v, t));
             }
             if !obj.is_empty() {
                 m.insert(name.clone(), Value::Object(obj));
             }
             continue;
         }
+        // An exploded form object sends its own properties as top-level
+        // pairs (OpenAPI 3.1.1 §4.8.12.4 style table).
+        if let (Shape::Object(nested), Style::Form, true) = (shape, style, explode) {
+            if !pairs.iter().any(|p| p.name == *name) {
+                let mut obj = Map::new();
+                for (n, t) in nested {
+                    if let Some(p) = pairs.iter().find(|p| p.name == *n) {
+                        let v = decode(p.raw, true)
+                            .map_err(|_| format!("{n} has an invalid percent-escape"))?;
+                        obj.insert(n.clone(), coerce(&v, *t));
+                        used.push(n.clone());
+                    }
+                }
+                if !obj.is_empty() {
+                    m.insert(name.clone(), Value::Object(obj));
+                }
+                continue;
+            }
+        }
         let mine: Vec<_> = pairs.iter().filter(|p| p.name == *name).collect();
         if mine.is_empty() {
             continue;
         }
-        used.push(name);
+        used.push(name.clone());
         let texts: Result<Vec<String>, ()> = mine.iter().map(|p| decode(p.raw, true)).collect();
         let texts = texts.map_err(|_| format!("{name} has an invalid percent-escape"))?;
         if enc
@@ -132,14 +160,30 @@ pub(crate) fn form(
                     Value::Array(texts.iter().map(|s| coerce(s, *t)).collect())
                 }
             }
-            Shape::Object(_) => Value::String(texts.join(",")),
+            Shape::Object(nested) => {
+                let first = texts.first().map_or("", String::as_str);
+                match crate::json::parse(first.as_bytes(), crate::json::Limits { max_depth: depth })
+                    .ok()
+                    .filter(Value::is_object)
+                {
+                    Some(v) => v,
+                    None => {
+                        let d = match style {
+                            Style::SpaceDelimited => ' ',
+                            Style::PipeDelimited => '|',
+                            _ => ',',
+                        };
+                        pairs_to_object(first.split(d).map(str::to_owned).collect(), nested)
+                    }
+                }
+            }
         };
         m.insert(name.clone(), value);
     }
     // Undeclared fields are still properties of the form object, so
     // `additionalProperties` can judge them.
     for p in &pairs {
-        if used.contains(&p.name.as_str()) || props_shape(props, &p.name).is_some() {
+        if used.contains(&p.name) || props_shape(props, &p.name).is_some() {
             continue;
         }
         if props
