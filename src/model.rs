@@ -14,6 +14,8 @@ use crate::schema::{Direction, SchemaId};
 pub(crate) struct MediaEntry {
     pub key: String,
     pub schema: Option<SchemaId>,
+    /// `itemSchema` (OpenAPI 3.2 §4.14.1): each item of a sequential body.
+    pub item_schema: Option<SchemaId>,
     /// Shape of the whole value, for text bodies.
     pub shape: Shape,
     /// Declared properties, for form and multipart bodies.
@@ -104,6 +106,10 @@ impl<'a> Builder<'a> {
             let (media, mptr) = self.media(media, &mptr)?;
             let schema_v = media.get("schema");
             let schema = schema_v.map(|_| self.roots.id(dir, &doc::join(&mptr, "schema")));
+            let item_schema = media
+                .get("itemSchema")
+                .filter(|_| self.version >= Version::V32)
+                .map(|_| self.roots.id(dir, &doc::join(&mptr, "itemSchema")));
             // Shapes and encodings matter only for bodies parsed from text.
             let textual = mt.is_form() || mt.is_multipart_form() || mt.ty == "text" || mt.ty == "*";
             let shape = match schema_v {
@@ -128,6 +134,7 @@ impl<'a> Builder<'a> {
                 MediaEntry {
                     key: key.clone(),
                     schema,
+                    item_schema,
                     shape,
                     props,
                     encodings,

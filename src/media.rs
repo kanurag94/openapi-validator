@@ -63,6 +63,20 @@ impl MediaType {
         self.ty == "application" && self.sub == "x-www-form-urlencoded"
     }
 
+    /// A sequential media type (OpenAPI 3.2 §4.14.3.1): a repeating
+    /// structure read as an array of items.
+    pub fn sequence(&self) -> Option<Sequence> {
+        match (self.ty.as_str(), self.sub.as_str()) {
+            ("application", "jsonl" | "x-ndjson" | "x-jsonlines" | "jsonlines") => {
+                Some(Sequence::JsonLines)
+            }
+            ("application", "json-seq") => Some(Sequence::JsonSeq),
+            (_, sub) if sub.ends_with("+json-seq") => Some(Sequence::JsonSeq),
+            ("text", "event-stream") => Some(Sequence::EventStream),
+            _ => None,
+        }
+    }
+
     pub fn is_multipart_form(&self) -> bool {
         self.ty == "multipart" && self.sub == "form-data"
     }
@@ -99,6 +113,17 @@ impl MediaType {
         }
         Some(if self.params.is_empty() { 2 } else { 3 })
     }
+}
+
+/// How a sequential media type separates its items.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Sequence {
+    /// JSON Lines and NDJSON: one JSON value per line.
+    JsonLines,
+    /// JSON Text Sequences (RFC 7464): records led by RS (0x1E).
+    JsonSeq,
+    /// Server-Sent Events (WHATWG HTML §9.2.6).
+    EventStream,
 }
 
 /// Picks the best `content` key for an actual media type.

@@ -1,0 +1,35 @@
+title: "An event matching no branch of itemSchema is refused at its index"
+ref: "OpenAPI 3.2.0 §4.14.4, §4.14.6.3"
+document: |
+  openapi: 3.2.0
+  info: {title: t, version: "1"}
+  paths:
+    /events:
+      post:
+        requestBody:
+          required: true
+          content:
+            text/event-stream:
+              itemSchema:
+                $ref: "#/components/schemas/Event"
+                required: [event]
+                oneOf:
+                  - properties: {event: {const: addString}}
+                  - properties: {event: {const: addInt64}, data: {format: int64}}
+                  - properties:
+                      event: {const: addJson}
+                      data: {contentMediaType: application/json, contentSchema: {type: object, required: [foo], properties: {foo: {type: integer}}}}
+        responses:
+          "204": {description: ok}
+  components:
+    schemas:
+      Event:
+        type: object
+        required: [data]
+        properties:
+          data: {type: string}
+          event: {type: string}
+          id: {type: string}
+          retry: {type: integer, minimum: 0}
+request: {method: POST, path: /events, headers: [["Content-Type", "text/event-stream"]], body: "event: addString\ndata: a\n\nevent: removeAll\ndata: b\n"}
+expect: {valid: false, kind: schema_violation, location: body/1}

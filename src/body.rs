@@ -396,6 +396,109 @@ pub(crate) fn text(body: &[u8], media: &MediaType) -> Result<String, String> {
     }
 }
 
+/// The items of a sequential media type body (OpenAPI 3.2 §4.14.3.1).
+pub(crate) fn sequence(
+    body: &[u8],
+    media: &MediaType,
+    seq: crate::media::Sequence,
+    max_depth: usize,
+) -> Result<Vec<Value>, String> {
+    use crate::media::Sequence;
+    let limits = json::Limits { max_depth };
+    let item = |i: usize, b: &[u8]| {
+        json::parse(b, limits).map_err(|e| format!("item {i} is not valid JSON: {e}"))
+    };
+    match seq {
+        // Blank lines are skipped (NDJSON allows ignoring them).
+        Sequence::JsonLines => body
+            .split(|&c| c == b'\n')
+            .map(|l| l.strip_suffix(b"\r").unwrap_or(l))
+            .filter(|l| !l.iter().all(|c| matches!(c, b' ' | b'\t')))
+            .enumerate()
+            .map(|(i, l)| item(i, l))
+            .collect(),
+        // RFC 7464 §2.1: each record follows RS; empty records are not
+        // elements.
+        Sequence::JsonSeq => body
+            .split(|&c| c == 0x1E)
+            .skip(1)
+            .filter(|r| !r.iter().all(u8::is_ascii_whitespace))
+            .enumerate()
+            .map(|(i, r)| item(i, r))
+            .collect(),
+        Sequence::EventStream => {
+            let t = text(body, media)?;
+            Ok(events(&t))
+        }
+    }
+}
+
+/// Server-Sent Events parsed as the WHATWG event stream rules say
+/// (HTML §9.2.6), one object per event: comments and unknown fields are
+/// dropped, `data` lines are joined with LF, `retry` is an integer when it
+/// is all digits (and ignored otherwise), and an `id` with NUL is ignored
+/// (OpenAPI 3.2 §4.14.4). A final event without a blank line is kept.
+pub(crate) fn events(t: &str) -> Vec<Value> {
+    let t = t.strip_prefix('\u{feff}').unwrap_or(t);
+    let mut out = Vec::new();
+    let mut cur = Map::new();
+    let mut data: Option<String> = None;
+    let mut flush = |cur: &mut Map<String, Value>, data: &mut Option<String>| {
+        if let Some(d) = data.take() {
+            cur.insert("data".into(), Value::String(d));
+        }
+        if !cur.is_empty() {
+            out.push(Value::Object(std::mem::take(cur)));
+        }
+    };
+    // Lines end with CRLF, LF or CR.
+    let mut rest = t;
+    while !rest.is_empty() {
+        let end = rest.find(['\r', '\n']).unwrap_or(rest.len());
+        let line = &rest[..end];
+        rest = &rest[end..];
+        if let Some(r) = rest.strip_prefix("\r\n") {
+            rest = r;
+        } else if !rest.is_empty() {
+            rest = &rest[1..];
+        }
+        if line.is_empty() {
+            flush(&mut cur, &mut data);
+            continue;
+        }
+        if line.starts_with(':') {
+            continue;
+        }
+        let (field, value) = match line.split_once(':') {
+            Some((f, v)) => (f, v.strip_prefix(' ').unwrap_or(v)),
+            None => (line, ""),
+        };
+        match field {
+            "data" => match &mut data {
+                Some(d) => {
+                    d.push('\n');
+                    d.push_str(value);
+                }
+                None => data = Some(value.to_owned()),
+            },
+            "event" => {
+                cur.insert("event".into(), Value::String(value.to_owned()));
+            }
+            "id" if !value.contains('\0') => {
+                cur.insert("id".into(), Value::String(value.to_owned()));
+            }
+            "retry" if !value.is_empty() && value.bytes().all(|c| c.is_ascii_digit()) => {
+                if let Ok(n) = value.parse::<serde_json::Number>() {
+                    cur.insert("retry".into(), Value::Number(n));
+                }
+            }
+            _ => {}
+        }
+    }
+    flush(&mut cur, &mut data);
+    out
+}
+
 /// Entity references nest at most this deep in `roxmltree`.
 const XML_ENTITY_DEPTH: usize = 10;
 
@@ -551,4 +654,53 @@ pub(crate) fn decode_content(body: &[u8], codings: &str, limit: usize) -> Result
         data = out;
     }
     Ok(data)
+}
+
+#[cfg(test)]
+mod sequence_tests {
+    use super::*;
+    use serde_json::json;
+
+    // OpenAPI 3.2.0 §4.14.6.3: the stream and its JSON Lines equivalent.
+    #[test]
+    fn oas32_s4_14_6_3_event_stream() {
+        let t = "event: addString\ndata: This data is formatted\ndata: across two lines\nretry: 5\n\nevent: addInt64\ndata: 1234.5678\nunknownField: this is ignored\n\n: This is a comment\nevent: addJSON\ndata: {\"foo\": 42}\n";
+        assert_eq!(
+            events(t),
+            vec![
+                json!({"event": "addString", "data": "This data is formatted\nacross two lines", "retry": 5}),
+                json!({"event": "addInt64", "data": "1234.5678"}),
+                json!({"event": "addJSON", "data": "{\"foo\": 42}"}),
+            ]
+        );
+    }
+
+    #[test]
+    fn event_stream_line_endings_and_ignored_values() {
+        let t = "\u{feff}data\r\nretry: 1x\rid: a\0b\r\n\r\n:only a comment\n\n";
+        assert_eq!(events(t), vec![json!({"data": ""})]);
+    }
+
+    #[test]
+    fn json_lines_and_sequences() {
+        let jsonl = MediaType::parse("application/jsonl").unwrap();
+        let v = sequence(
+            b"{\"a\":1}\r\n\n  \n[2]\n",
+            &jsonl,
+            jsonl.sequence().unwrap(),
+            64,
+        )
+        .unwrap();
+        assert_eq!(v, vec![json!({"a": 1}), json!([2])]);
+        let seq = MediaType::parse("application/geo+json-seq").unwrap();
+        let v = sequence(
+            b"\x1e{\"a\":1}\n\x1e\x1e3\n",
+            &seq,
+            seq.sequence().unwrap(),
+            64,
+        )
+        .unwrap();
+        assert_eq!(v, vec![json!({"a": 1}), json!(3)]);
+        assert!(sequence(b"{}\nnope\n", &jsonl, jsonl.sequence().unwrap(), 64).is_err());
+    }
 }

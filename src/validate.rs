@@ -3,6 +3,7 @@
 use serde_json::Value;
 
 use crate::body;
+use crate::doc::Version;
 use crate::http::{Request, Response};
 use crate::json;
 use crate::media::{best_match, MediaType};
@@ -127,6 +128,31 @@ impl Spec {
         report: &mut Report,
     ) {
         let depth = self.store.depth_limit(self.options.max_body_depth);
+        // OpenAPI 3.2 §4.14.3.1: a sequential body is an array of its items;
+        // `schema` checks the array and `itemSchema` each item.
+        if let Some(seq) = actual.sequence().filter(|_| self.version >= Version::V32) {
+            match body::sequence(bytes, actual, seq, depth) {
+                Ok(items) => {
+                    if let Some(id) = entry.item_schema {
+                        for (i, item) in items.iter().enumerate() {
+                            self.check_value(
+                                id,
+                                item,
+                                &format!("{location}/{i}"),
+                                ProblemKind::SchemaViolation,
+                                report,
+                            );
+                        }
+                    }
+                    if let Some(id) = entry.schema {
+                        let all = Value::Array(items);
+                        self.check_value(id, &all, location, ProblemKind::SchemaViolation, report);
+                    }
+                }
+                Err(m) => report.push(ProblemKind::MalformedBody, location, m),
+            }
+            return;
+        }
         let parsed: Result<Option<Value>, String> = if actual.is_json() {
             json::parse(bytes, json::Limits { max_depth: depth })
                 .map(Some)
