@@ -117,7 +117,7 @@ pub(crate) fn json_eq(a: &Value, b: &Value) -> bool {
 }
 
 /// A canonical text form: equal values (by [`json_eq`]) have equal keys.
-fn canonical(v: &Value, out: &mut String) {
+pub(crate) fn canonical(v: &Value, out: &mut String) {
     match v {
         Value::Number(_) => {
             out.push('n');

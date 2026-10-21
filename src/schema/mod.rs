@@ -149,6 +149,61 @@ impl DirRequired {
     }
 }
 
+/// `enum` and `const` with JSON Schema equality (2020-12 §4.2.2): numbers
+/// by value, objects regardless of member order.
+struct Enum(Vec<Value>);
+
+impl<'i> Keyword<'i> for Enum {
+    fn validate(&self, instance: &'i Value) -> Result<(), ValidationError<'i>> {
+        if self.is_valid(instance) {
+            Ok(())
+        } else {
+            Err(ValidationError::custom("is not one of the allowed values"))
+        }
+    }
+
+    fn is_valid(&self, instance: &'i Value) -> bool {
+        self.0.iter().any(|v| explain::json_eq(v, instance))
+    }
+}
+
+/// `uniqueItems: true` with the same equality, by canonical form.
+struct UniqueItems;
+
+impl<'i> Keyword<'i> for UniqueItems {
+    fn validate(&self, instance: &'i Value) -> Result<(), ValidationError<'i>> {
+        if self.is_valid(instance) {
+            Ok(())
+        } else {
+            Err(ValidationError::custom("items must be unique"))
+        }
+    }
+
+    fn is_valid(&self, instance: &'i Value) -> bool {
+        let Some(items) = instance.as_array() else {
+            return true;
+        };
+        let mut seen = std::collections::HashSet::with_capacity(items.len());
+        items.iter().all(|x| {
+            let mut key = String::new();
+            explain::canonical(x, &mut key);
+            seen.insert(key)
+        })
+    }
+}
+
+struct AlwaysValid;
+
+impl<'i> Keyword<'i> for AlwaysValid {
+    fn validate(&self, _: &'i Value) -> Result<(), ValidationError<'i>> {
+        Ok(())
+    }
+
+    fn is_valid(&self, _: &'i Value) -> bool {
+        true
+    }
+}
+
 struct IntFormat(&'static str);
 
 impl<'i> Keyword<'i> for IntFormat {
@@ -308,6 +363,21 @@ impl SchemaStore {
             .should_ignore_unknown_formats(true)
             .with_keyword("x-oav-int", |_: &Map<String, Value>, _: &Value, _| {
                 Ok(Box::new(LexicalInteger) as Box<dyn for<'i> Keyword<'i>>)
+            })
+            .with_keyword("enum", |_: &Map<String, Value>, v: &Value, _| {
+                let values = v.as_array().cloned().unwrap_or_default();
+                Ok(Box::new(Enum(values)) as Box<dyn for<'i> Keyword<'i>>)
+            })
+            .with_keyword("const", |_: &Map<String, Value>, v: &Value, _| {
+                Ok(Box::new(Enum(vec![v.clone()])) as Box<dyn for<'i> Keyword<'i>>)
+            })
+            .with_keyword("uniqueItems", |_: &Map<String, Value>, v: &Value, _| {
+                let k: Box<dyn for<'i> Keyword<'i>> = if v == &Value::Bool(true) {
+                    Box::new(UniqueItems)
+                } else {
+                    Box::new(AlwaysValid)
+                };
+                Ok(k)
             })
             .with_keyword(
                 "x-oav-int-format",

@@ -1,0 +1,23 @@
+title: "Objects differing only in key order are equal for uniqueItems"
+ref: "JSON Schema Validation (Wright draft 00) §5.3.4 uniqueItems"
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: array, items: {}, uniqueItems: true}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "[{\"a\": 1, \"b\": 2}, {\"b\": 2, \"a\": 1}]"
+expect:
+  valid: false
+  kind: schema_violation
+  location: body
