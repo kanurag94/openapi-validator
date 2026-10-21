@@ -430,12 +430,28 @@ impl Gen<'_> {
         let min = m.get("minLength").and_then(num).unwrap_or(0.0) as usize;
         let max = m.get("maxLength").and_then(num).map(|x| x as usize);
         if let Some(p) = m.get("pattern").and_then(Value::as_str) {
-            // A document example is the best witness when it fits.
+            let re = openapi_validator::pattern::compile(p).ok()?;
+            let format = m.get("format").and_then(Value::as_str).unwrap_or("");
+            let fits = |e: &str| {
+                re.is_match(e)
+                    && (format.is_empty() || openapi_validator::format::check_str(format, e))
+                    && e.chars().count() >= min
+                    && max.is_none_or(|mx| e.chars().count() <= mx)
+            };
+            // A document example, or a canonical value of the format, is the
+            // best witness when it fits.
             for key in ["example", "default"] {
                 if let Some(Value::String(e)) = m.get(key) {
-                    if openapi_validator::pattern::compile(p).is_ok_and(|re| re.is_match(e)) {
+                    if fits(e) {
                         return Some(Value::String(e.clone()));
                     }
+                }
+            }
+            let mut without = m.clone();
+            without.remove("pattern");
+            if let Some(Value::String(f)) = self.string(&without) {
+                if fits(&f) {
+                    return Some(Value::String(f));
                 }
             }
             let mut s = string_for_pattern(p)?;
@@ -644,15 +660,17 @@ pub fn request(root: &Value, path: &str, method: &str, salt: u64) -> Result<Gene
                     .ok_or_else(|| format!("cannot generate {loc} parameter"))?,
                 false,
             )
-        } else if let Some(c) = p
+        } else if let Some((media, c)) = p
             .get("content")
             .and_then(Value::as_object)
-            .and_then(|c| c.values().next())
+            .and_then(|c| c.iter().next())
         {
+            // Only JSON media types carry JSON text; others carry the value.
+            let is_json = media.to_ascii_lowercase().contains("json");
             match c.get("schema") {
                 Some(s) => (
                     g.value(s, 0).ok_or("cannot generate content parameter")?,
-                    true,
+                    is_json,
                 ),
                 None => (json!("x"), false),
             }

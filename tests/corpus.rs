@@ -189,9 +189,17 @@ fn corpus() {
                             )
                         })
                         .collect();
+                    let elsewhere = r
+                        .operation()
+                        .is_some_and(|mo| mo.path != *p || mo.method != m);
+                    let note = if elsewhere {
+                        " (routed to another operation)"
+                    } else {
+                        ""
+                    };
                     let _ = writeln!(
                         report,
-                        "file {fi} op {op}: valid request refused: {}",
+                        "file {fi} op {op}: valid request refused{note}: {}",
                         what.join("; ")
                     );
                 }
