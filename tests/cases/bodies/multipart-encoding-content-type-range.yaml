@@ -1,0 +1,28 @@
+title: "A contentType range admits matching part types"
+ref: "OpenAPI 3.1.1 §4.8.15.1 (contentType: a media type or comma-separated list, wildcards allowed)"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /upload:
+      post:
+        requestBody:
+          required: true
+          content:
+            multipart/form-data:
+              schema:
+                type: object
+                properties:
+                  id: {type: integer}
+                  file: {type: string, contentMediaType: image/png}
+              encoding:
+                file:
+                  contentType: image/*
+        responses: {"204": {description: done}}
+request:
+  method: POST
+  path: /upload
+  headers: [["Content-Type", "multipart/form-data; boundary=B"]]
+  body: "--B\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a\"\r\nContent-Type: image/gif\r\n\r\nxyz\r\n--B--\r\n"
+expect:
+  valid: true

@@ -137,7 +137,12 @@ impl Spec {
                 Err(_) => Err("the body is not valid UTF-8".into()),
             }
         } else if actual.is_multipart_form() {
-            body::multipart(bytes, actual, &entry.props, &entry.encodings, depth).map(Some)
+            body::multipart(bytes, actual, &entry.props, &entry.encodings, depth).map(
+                |(v, parts)| {
+                    self.check_parts(&entry.encodings, &parts, location, report);
+                    Some(v)
+                },
+            )
         } else if actual.is_xml() {
             body::xml(bytes, actual, depth).map(|()| None)
         } else if actual.ty == "text" {
@@ -641,6 +646,77 @@ impl Spec {
         let ct = header_values(resp.headers, "content-type").next();
         if let Some((actual, entry)) = self.select_media(&resp_obj.content, ct, report) {
             self.check_payload(&actual, entry, resp.body, "body", report);
+        }
+    }
+}
+
+impl Spec {
+    /// Encoding Object rules for multipart parts (OpenAPI 3.1.1 §4.8.15.1):
+    /// the part's media type must be one `contentType` allows, and its
+    /// declared headers must be present (when required) and valid.
+    pub(crate) fn check_parts(
+        &self,
+        encodings: &[body::Encoding],
+        parts: &[body::PartInfo],
+        location: &str,
+        report: &mut Report,
+    ) {
+        for enc in encodings {
+            for part in parts.iter().filter(|p| p.name == enc.name) {
+                let at = format!("{location}/{}", crate::doc::escape_token(&part.name));
+                if let (Some(ct), false) = (&part.content_type, enc.allowed.is_empty()) {
+                    if !enc.allowed.iter().any(|r| r.match_rank(ct).is_some()) {
+                        let allowed: Vec<String> = enc
+                            .allowed
+                            .iter()
+                            .map(|m| format!("{}/{}", m.ty, m.sub))
+                            .collect();
+                        report.push(
+                            ProblemKind::UnsupportedMediaType,
+                            at.clone(),
+                            format!(
+                                "part type {}/{} is not allowed; allowed: {}",
+                                ct.ty,
+                                ct.sub,
+                                allowed.join(", ")
+                            ),
+                        );
+                    }
+                }
+                let hs: Vec<(&str, &str)> = part
+                    .headers
+                    .iter()
+                    .map(|(k, v)| (k.as_str(), v.as_str()))
+                    .collect();
+                let index = header_index(&hs);
+                for p in &enc.headers {
+                    let label = format!("{at}:header.{}", p.name.to_ascii_lowercase());
+                    match index.get(&p.name.to_ascii_lowercase()) {
+                        None if p.required => report.push(
+                            ProblemKind::MissingParameter,
+                            label,
+                            "is a required part header",
+                        ),
+                        None => {}
+                        Some(lines) => {
+                            for line in lines {
+                                match &p.value {
+                                    ParamValue::Schema { shape, .. } => self.check_param_value(
+                                        p,
+                                        header_value(line, shape, p.explode),
+                                        &label,
+                                        report,
+                                    ),
+                                    ParamValue::Content { media, id } => {
+                                        self.check_content_param(media, *id, line, &label, report)
+                                    }
+                                    ParamValue::Any => {}
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

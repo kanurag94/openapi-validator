@@ -1,0 +1,31 @@
+title: "A declared part header that is valid is accepted"
+ref: "OpenAPI 3.1.1 §4.8.15.1 (headers: additional information for multipart parts)"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /upload:
+      post:
+        requestBody:
+          required: true
+          content:
+            multipart/form-data:
+              schema:
+                type: object
+                properties:
+                  id: {type: integer}
+                  file: {type: string, contentMediaType: image/png}
+              encoding:
+                file:
+                  headers:
+                    X-Checksum:
+                      required: true
+                      schema: {type: string, pattern: '^[0-9a-f]{8}$'}
+        responses: {"204": {description: done}}
+request:
+  method: POST
+  path: /upload
+  headers: [["Content-Type", "multipart/form-data; boundary=B"]]
+  body: "--B\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a\"\r\nContent-Type: image/png\r\nX-Checksum: 0a1b2c3d\r\n\r\nxyz\r\n--B--\r\n"
+expect:
+  valid: true

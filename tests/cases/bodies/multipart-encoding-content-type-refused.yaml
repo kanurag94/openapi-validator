@@ -1,0 +1,30 @@
+title: "A part whose type is outside the contentType list is reported"
+ref: "OpenAPI 3.1.1 §4.8.15.1 (contentType: a media type or comma-separated list, wildcards allowed)"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /upload:
+      post:
+        requestBody:
+          required: true
+          content:
+            multipart/form-data:
+              schema:
+                type: object
+                properties:
+                  id: {type: integer}
+                  file: {type: string, contentMediaType: image/png}
+              encoding:
+                file:
+                  contentType: image/png, image/jpeg
+        responses: {"204": {description: done}}
+request:
+  method: POST
+  path: /upload
+  headers: [["Content-Type", "multipart/form-data; boundary=B"]]
+  body: "--B\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a\"\r\nContent-Type: text/plain\r\n\r\nxyz\r\n--B--\r\n"
+expect:
+  valid: false
+  kind: unsupported_media_type
+  location: body/file

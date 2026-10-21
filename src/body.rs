@@ -18,12 +18,23 @@ use crate::params::{
 };
 
 /// Per-property serialization for form and multipart bodies.
-#[derive(Debug, Clone)]
 pub(crate) struct Encoding {
     pub name: String,
+    /// The first listed type; decides how the part is parsed.
     pub content_type: Option<MediaType>,
+    /// Every listed type or range (`contentType` may be a list).
+    pub allowed: Vec<MediaType>,
+    /// Header Objects for multipart parts (§4.8.15.1).
+    pub headers: Vec<crate::params::Param>,
     pub style: Style,
     pub explode: bool,
+}
+
+/// What a multipart part carried besides its value.
+pub(crate) struct PartInfo {
+    pub name: String,
+    pub content_type: Option<MediaType>,
+    pub headers: Vec<(String, String)>,
 }
 
 /// Declared properties of a form body with their shapes.
@@ -203,6 +214,7 @@ pub(crate) fn form(
 struct Part<'a> {
     name: String,
     content_type: Option<MediaType>,
+    headers: Vec<(String, String)>,
     file: bool,
     data: &'a [u8],
 }
@@ -269,12 +281,14 @@ fn parts<'a>(body: &'a [u8], boundary: &str) -> Result<Vec<Part<'a>>, String> {
             .map_err(|_| "multipart part headers are not UTF-8".to_string())?;
         let mut name = None;
         let mut content_type = None;
+        let mut headers = Vec::new();
         let mut file = false;
         for line in head.lines() {
             let Some((k, v)) = line.split_once(':') else {
                 continue;
             };
             let k = k.trim();
+            headers.push((k.to_owned(), v.trim().to_owned()));
             if k.eq_ignore_ascii_case("content-disposition") {
                 for param in v.split(';').skip(1) {
                     let Some((pk, pv)) = param.split_once('=') else {
@@ -297,6 +311,7 @@ fn parts<'a>(body: &'a [u8], boundary: &str) -> Result<Vec<Part<'a>>, String> {
         out.push(Part {
             name,
             content_type,
+            headers,
             file,
             data,
         });
@@ -311,7 +326,7 @@ pub(crate) fn multipart(
     props: &FormProps,
     encodings: &[Encoding],
     depth: usize,
-) -> Result<Value, String> {
+) -> Result<(Value, Vec<PartInfo>), String> {
     let Some(boundary) = media
         .param("boundary")
         .filter(|b| !b.is_empty() && b.len() <= 70)
@@ -319,7 +334,13 @@ pub(crate) fn multipart(
         return Err("multipart/form-data needs a boundary parameter".into());
     };
     let mut m = Map::new();
+    let mut infos = Vec::new();
     for part in parts(body, boundary)? {
+        infos.push(PartInfo {
+            name: part.name.clone(),
+            content_type: part.content_type.clone(),
+            headers: part.headers.clone(),
+        });
         let declared_json = encodings
             .iter()
             .find(|e| e.name == part.name)
@@ -356,7 +377,7 @@ pub(crate) fn multipart(
             insert_repeated(&mut m, part.name.clone(), value);
         }
     }
-    Ok(Value::Object(m))
+    Ok((Value::Object(m), infos))
 }
 
 /// Decodes a text body by its charset: UTF-8 (the default), US-ASCII or

@@ -193,15 +193,43 @@ impl<'a> Builder<'a> {
                 Some(Value::Bool(b)) => *b,
                 _ => style == Style::Form,
             };
-            // `contentType` may list several types; the first decides parsing.
-            let content_type = e
+            // `contentType` may list several types and ranges; the first
+            // decides parsing, any of them may be sent.
+            let allowed: Vec<MediaType> = e
                 .get("contentType")
                 .and_then(Value::as_str)
-                .and_then(|c| c.split(',').next())
-                .and_then(|c| MediaType::parse(c.trim()));
+                .map(|c| {
+                    c.split(',')
+                        .filter_map(|t| MediaType::parse(t.trim()))
+                        .collect()
+                })
+                .unwrap_or_default();
+            let content_type = allowed.first().cloned();
+            let eptr = doc::join(ptr, name);
+            let mut headers = Vec::new();
+            if let Some(hs) = e.get("headers").and_then(Value::as_object) {
+                let hptr = doc::join(&eptr, "headers");
+                for (h, hv) in hs {
+                    // §4.8.15.1: a Content-Type header here SHALL be ignored.
+                    if h.eq_ignore_ascii_case("content-type") {
+                        continue;
+                    }
+                    if let Ok(Some(p)) = self.param(
+                        hv,
+                        &doc::join(&hptr, h),
+                        Some(h),
+                        Direction::Request,
+                        self.version,
+                    ) {
+                        headers.push(p);
+                    }
+                }
+            }
             out.push(Encoding {
                 name: name.clone(),
                 content_type,
+                allowed,
+                headers,
                 style,
                 explode,
             });
