@@ -1,194 +1,94 @@
 # Specification decisions
 
-Where the specs are silent, say SHOULD, or leave a choice open.
+This document lists where OpenAPI, JSON Schema or the HTTP RFCs are silent, say SHOULD, or leave a choice open, and what this library does in each case.
 
-- Rule: never refuse a valid call.
-- Where reasonable people differ, there is an option.
-- Sections are OpenAPI 3.1.1 unless noted; 3.0.4 numbers match.
+The guiding rule is to never refuse a valid call. Where reasonable people differ, the behaviour is an option. Section numbers refer to OpenAPI 3.1.1 unless stated otherwise; OpenAPI 3.0.4 uses the same numbers for these objects.
 
 ## Routing
 
-- **Trailing slash** (silent)
-  - No match and path ends in `/`: retried without it.
-- **Path variables** (§4.8.2.2)
-  - Match one or more characters inside one segment.
-  - Segments are decoded one at a time; `%2F` never splits a segment (RFC 3986 §2.2).
-- **Several variables in one segment** (silent)
-  - Each takes the shortest run before the next literal; a final literal must end the segment.
-- **Ties between templates** (§4.8.8.2 covers only concrete vs templated)
-  - Most literal characters wins (`/f/{id}.json` over `/f/{id}`).
-  - Then the template whose first differing segment is literal.
-- **Server path in front of the request path** (§4.8.5)
-  - Option `server_paths`: `either` (default), `required`, `ignored`.
-  - Stripped by whole segments only.
-- **Operation and path-item `servers`** (§4.8.9.1, §4.8.10.1)
-  - The stripped server path must serve the matched operation itself.
-- **Server variable without `enum` or `default`**
-  - Substituted as empty, with a load warning.
-- **Relative server URL like `v1`**
-  - Read as `/v1`.
-- **Method case** (RFC 9110 §9.1)
-  - Case-sensitive: `GET` matches `get`; `get` does not.
-- **HEAD without a `head` operation** (RFC 9110 §9.3.2)
-  - Checked as GET; the response body is skipped.
-- **Body sent to an operation without `requestBody`** (silent)
-  - Not a problem.
+- **Trailing slashes.** The specification is silent. A path ending in `/` that matches no template is retried without the slash.
+- **Path variables.** A variable matches one or more characters within a single segment. Segments are percent-decoded one at a time, so `%2F` never creates a new segment (RFC 3986 §2.2).
+- **Several variables in one segment.** Each variable takes the shortest run that lets the next literal follow, and a final literal must end the segment.
+- **Ties between templates.** §4.8.8.2 only says concrete paths beat templated ones. Among templates, the one with the most literal characters wins, then the one whose first differing segment is literal.
+- **Server paths.** The option `server_paths` decides whether the request path may (`either`, the default), must (`required`) or must not (`ignored`) start with a server path. Server paths are stripped as whole segments only.
+- **Operation servers.** Following §4.8.10.1, the server path used must serve the matched operation itself, not just a sibling operation on the same path item.
+- **Server variables without a default.** The variable is substituted as empty and a load warning is recorded.
+- **Relative server URLs.** A relative URL such as `v1` is read as `/v1`, because there is no document URL at run time.
+- **Method case.** Methods are case-sensitive (RFC 9110 §9.1): `GET` matches the `get` operation and `get` does not.
+- **HEAD requests.** Without a `head` operation, HEAD is checked as GET (RFC 9110 §9.3.2), and the response body is not checked.
+- **Unexpected request bodies.** A body sent to an operation without a `requestBody` is not reported.
 
 ## Parameters
 
-- **Text to typed values** (§4.8.12 defines serialization only)
-  - Numbers only from JSON number literals (`05` is not a number).
-  - Booleans only from `true` / `false`.
-  - Several allowed types: valid if any reading is valid.
-- **`+` in query strings** (RFC 3986 gives it no meaning)
-  - A space by default; option `query_plus_as_space`.
-- **Query separators** (RFC 3986 §3.4)
-  - Split on `&` only; `;` stays in the value.
-  - Bad percent-escapes are `malformed_query`.
-  - No limit on pairs.
-- **Exploded `form` objects** (§4.8.12.4)
-  - Only declared properties are taken; none present means absent.
-- **Nested values in exploded objects** (RFC 6570: undefined)
-  - Repeated pairs make an array.
-  - An object may come as JSON text or `name[key]=value`.
-- **`deepObject` beyond one level** (§4.8.12.4 defines one)
-  - `a[b][c]=v` nests; `a[]=v` appends.
-- **`list=`**
-  - An empty array, in both explode modes.
-- **Repeats**
-  - Non-exploded array sent twice: items concatenated.
-  - Primitive sent twice: each value checked.
-- **Header lists** (RFC 9110 §5.6.1)
-  - Items are trimmed (`a, b` works).
-- **Repeated header lines** (RFC 9110 §5.3)
-  - Each line is checked on its own.
-- **Cookie values** (RFC 6265)
-  - Percent-decoded when valid, else taken as written.
-- **`allowEmptyValue`** (deprecated)
-  - Changes nothing; the schema decides.
-- **Broken MUSTs** (§4.8.10.1, §4.8.12.2) — load with a warning:
-  - `schema` and `content` both: `schema` is used.
-  - Several `content` entries: the first is used.
-  - Duplicate parameters: the last is used.
-  - Path parameter with `required: false`: treated as required.
-- **Undeclared headers** (`allow_unknown_headers: false`)
-  - Always declared: Accept, Content-Type, Authorization, Cookie, security header names.
-  - Plus `ignored_headers`: Host, Content-Length, Transfer-Encoding, Connection, User-Agent.
-- **`content` parameter without a schema**
-  - Unconstrained; not parsed.
+- **Typed values.** §4.8.12 defines serialization, not parsing. Text becomes a number only if it is a JSON number literal, and a boolean only if it is `true` or `false`. When a schema allows several types, the value is valid if any reading is valid.
+- **Plus signs in queries.** RFC 3986 gives `+` no meaning, but browsers send it for a space. It is read as a space by default; the option `query_plus_as_space` turns this off.
+- **Query separators.** Query strings are split on `&` only, so `;` stays inside values (RFC 3986 §3.4). An invalid percent-escape is reported, and there is no limit on the number of pairs.
+- **Exploded objects.** Only the schema's declared properties are taken from the query, as in the §4.8.12.4 style table. An object with none of them present is absent.
+- **Nested values in exploded objects.** RFC 6570 leaves these undefined. Repeated pairs form an array, and an object may be sent as JSON text or as `name[key]=value` pairs.
+- **Nested deepObject keys.** §4.8.12.4 defines one level. Deeper keys such as `a[b][c]=v` nest, and `a[]=v` appends to an array.
+- **Empty arrays.** `list=` is an empty array in both explode modes.
+- **Repeated parameters.** A non-exploded array sent twice has its items combined. A primitive sent twice has each value checked.
+- **Header lists.** Items in list-valued headers are trimmed, so `a, b` is accepted (RFC 9110 §5.6.1).
+- **Repeated header lines.** Every line is checked on its own (RFC 9110 §5.3).
+- **Cookie values.** Values are percent-decoded when the escapes are valid and taken as written otherwise (RFC 6265).
+- **`allowEmptyValue`.** The field is deprecated and changes nothing; the schema decides whether an empty value is valid.
+- **Documents that break a parameter MUST.** These load with a warning instead of being refused. With both `schema` and `content`, `schema` is used. With several `content` entries, the first is used. With duplicate parameters, the last is used. A path parameter with `required: false` is treated as required.
+- **Undeclared headers.** When `allow_unknown_headers` is false, `Accept`, `Content-Type`, `Authorization`, `Cookie` and the security schemes' header names always count as declared, as do the names in `ignored_headers` (by default `Host`, `Content-Length`, `Transfer-Encoding`, `Connection` and `User-Agent`).
+- **Content parameters without a schema.** These are unconstrained and not parsed.
 
 ## Security
 
-- **Scope** (§4.8.27)
-  - Presence only; `security_hook` can verify.
-- **`http` schemes** (RFC 9110 §11.4)
-  - Whole, case-insensitive token, then whitespace, then a non-empty credential.
-  - Any `Authorization` line may satisfy it.
-- **`oauth2`, `openIdConnect`** (RFC 6750 §2.1)
-  - Need `Authorization: Bearer <token>`.
-- **`mutualTLS`, unknown types**
-  - Never refused (not visible in HTTP).
-- **Undefined scheme name** (§4.8.30.2)
-  - Load error.
-- **`apiKey` missing `in` or `name`**
-  - Load warning; not checked.
+- **Scope.** Only the presence of credentials is checked (§4.8.27). The `security_hook` option can verify them.
+- **HTTP schemes.** The `Authorization` header must start with the scheme as a whole, case-insensitive token, followed by whitespace and a non-empty credential (RFC 9110 §11.4). Any `Authorization` line may satisfy it.
+- **OAuth 2 and OpenID Connect.** These need `Authorization: Bearer <token>` (RFC 6750 §2.1).
+- **Mutual TLS and unknown scheme types.** These are never refused, because they are not visible in the HTTP message.
+- **Undefined scheme names.** A requirement naming an undefined scheme is a load error (§4.8.30.2).
+- **Incomplete API key schemes.** An `apiKey` scheme without `in` or `name` loads with a warning and is not checked.
 
 ## Bodies
 
-- **No `Content-Type`** (RFC 9110 §8.3)
-  - One declared, non-range type: assumed.
-  - Otherwise `unsupported_media_type`.
-- **Media type matching** (RFC 9110 §12.5.1)
-  - Most specific key wins: `type/sub`, then `type/*`, then `*/*`.
-  - Parameters such as `charset` do not block a match.
-- **Parsing**
-  - By the request's actual type: JSON and `+json` (RFC 6839), form, multipart, XML, `text/*`.
-  - Other types are not parsed.
-- **XML** (§4.8.26)
-  - Well-formedness only; DTDs allowed, nesting bounded.
-- **Text charsets**
-  - UTF-8 (default), US-ASCII, ISO-8859-1; others are `malformed_body`.
-- **Form fields not in the schema**
-  - Kept as properties, so `additionalProperties` decides.
-- **`allowReserved: false`** (SHOULD encode)
-  - Unencoded reserved characters are accepted.
-- **Multipart parts** (§4.8.15.1)
-  - Objects default to JSON; arrays take their items' type.
-  - Files are read as text, lossily.
-  - LF-only line breaks accepted.
-- **Empty optional body** (§4.8.13)
-  - Fine, whatever the `Content-Type`.
-- **Size**
-  - Over `max_body_bytes` (16 MiB): `body_too_large`, not parsed.
+- **Missing Content-Type.** If the operation declares exactly one media type that is not a range, it is assumed (RFC 9110 §8.3). Otherwise the problem is reported.
+- **Media type matching.** The most specific key wins: `type/subtype`, then `type/*`, then `*/*`. Parameters such as `charset` do not prevent a match.
+- **Parsing.** Bodies are parsed by their actual media type: JSON (including `+json`, RFC 6839), form, multipart, XML and `text/*`. Other media types are not parsed.
+- **XML.** Only well-formedness is checked (§4.8.26). Document type definitions are allowed, and nesting is bounded.
+- **Text charsets.** UTF-8, US-ASCII and ISO-8859-1 are supported; other charsets are reported as malformed.
+- **Undeclared form fields.** They are kept as properties of the body, so `additionalProperties` decides whether they are allowed.
+- **Reserved characters in form values.** Unencoded reserved characters are accepted even when `allowReserved` is false, since the specification only says they SHOULD be encoded.
+- **Multipart parts.** Following §4.8.15.1, object properties default to JSON and arrays take their items' type. File parts are read as text, and line breaks without a carriage return are accepted.
+- **Empty optional bodies.** These are accepted whatever the `Content-Type` (§4.8.13).
+- **Size.** Bodies larger than `max_body_bytes` (16 MiB by default) are reported and not parsed.
 
 ## Responses
 
-- **Status lookup** (§4.8.16.2)
-  - Exact code, then `1XX`–`5XX` (any case), then `default`.
-- **Empty body with declared content**
-  - `missing_body`, except HEAD, 204, 304 (RFC 9110 §15.3.5, §15.4.5).
-- **Body with no declared content**
-  - Not a problem.
-- **Header values** (§4.8.21)
-  - Literal text in simple style, never re-read as JSON.
-  - Each repeated line checked.
-- **`Content-Type` header definition** (§4.8.17.1)
-  - Ignored.
+- **Status lookup.** The exact code is tried first, then a range such as `2XX` in any case, then `default` (§4.8.16.2).
+- **Empty bodies.** An empty body where content is declared is reported, except for HEAD requests and 204 and 304 responses (RFC 9110 §15.3.5, §15.4.5).
+- **Undeclared bodies.** A body where no content is declared is not reported.
+- **Header values.** Values are literal text in simple style and are never re-read as JSON (§4.8.21). Each repeated line is checked.
+- **Content-Type headers.** A declared `Content-Type` response header is ignored (§4.8.17.1).
 
 ## Schemas
 
-- **3.0 `nullable`** (3.0.4 §4.8.24.1)
-  - Needs `type` in the same object.
-  - `enum` must list `null` for it to pass.
-  - Never pushed into `allOf` / `oneOf`.
-- **Non-3.0 keywords in 3.0 documents**
-  - Ignored (`const`, `if`, `prefixItems`, ...).
-- **`integer`**
-  - 3.0: written without fraction or exponent (`1.0` fails).
-  - 3.1: any number with zero fraction (`1.0` passes; 2020-12 §6.1.1).
-- **Count keywords** (2020-12 §6.2–6.4)
-  - `2.0`, `1e0` are counts.
-  - Past `u64`: maximum unbounded, minimum unreachable.
-  - Negative or fractional: dropped with a warning.
-- **Formats** (2020-12 §7.2)
-  - Asserted: date, time, date-time, email, uuid, uri, uri-reference, ipv4, ipv6, hostname, int32, int64.
-  - All others are annotations; option `assert_formats`.
-- **`hostname`** (RFC 1123, RFC 5891)
-  - Letters, digits, hyphens per label; Punycode is not decoded.
-- **Patterns** (2020-12 §6.3.3, ECMA-262)
-  - Translated to the linear-time `regex` crate with ECMA meanings.
-  - Lookaround and backreferences: load error naming the pattern.
-- **Discriminator** (§4.8.25)
-  - Property present: value must be mapped; that schema is checked.
-  - All branches mapped: the named branch alone decides (option `discriminator_selects_branch`).
-  - Property absent: plain `oneOf` / `anyOf`.
-- **Discriminator inheritance cycles**
-  - A child's `allOf` link to its base uses a copy without the dispatch.
-- **readOnly / writeOnly** (§4.8.24.4)
-  - Dropped from `required` in the matching direction, through `$ref` and same-schema `allOf`.
-  - Sending them is allowed.
-- **Equality** (2020-12 §4.2.2)
-  - Numbers by value; objects ignore key order.
-- **`#` refs in 3.1 schemas without `$id`**
-  - Resolve against the OpenAPI document root.
-- **JSON Schema metaschema refs**
-  - Allowed (built in; nothing fetched).
+- **3.0 `nullable`.** It applies only when `type` is in the same schema object, `enum` must still list `null`, and it is never pushed into `allOf` or `oneOf` (3.0.4 §4.8.24.1).
+- **Unknown keywords in 3.0.** Keywords that are not part of the 3.0 Schema Object, such as `const` or `if`, are ignored.
+- **Integers.** In 3.0 an integer must be written without a fraction or exponent, so `1.0` is rejected. In 3.1 any number with a zero fraction is an integer (JSON Schema 2020-12 §6.1.1).
+- **Count keywords written as numbers.** Values such as `2.0` are counts. Beyond the 64-bit range, a maximum is unbounded and a minimum is unreachable. Negative or fractional counts are dropped with a warning.
+- **Formats.** date, time, date-time, email, uuid, uri, uri-reference, ipv4, ipv6, hostname, int32 and int64 are asserted. All other formats are annotations (JSON Schema 2020-12 §7.2). The option `assert_formats` turns assertion off.
+- **Hostnames.** Each label must contain only letters, digits and hyphens (RFC 1123). Punycode labels are not decoded or checked against IDNA rules.
+- **Patterns.** Patterns are translated from ECMA-262 to the linear-time `regex` crate, keeping ECMA meanings. Lookaround and backreferences are a load error that names the pattern.
+- **Discriminator.** When the payload has the discriminator property, its value must be a mapped name, and the payload is checked against that schema (§4.8.25). When every `oneOf` or `anyOf` branch is mapped, the named branch alone decides; the option `discriminator_selects_branch` turns this off. Without the property, the plain `oneOf` or `anyOf` applies.
+- **Discriminator cycles.** When a child schema extends its base through `allOf`, the reference uses a copy of the base without the dispatch, so the common base-and-children pattern does not loop.
+- **readOnly and writeOnly.** These properties are dropped from `required` in the matching direction, including through `$ref` and `allOf`. Sending them is allowed, since the specification only says they SHOULD NOT be sent.
+- **Equality.** `enum`, `const` and `uniqueItems` compare numbers by value and ignore the key order of objects (JSON Schema 2020-12 §4.2.2).
+- **Fragment references in 3.1.** A `#` reference in a schema without `$id` resolves against the OpenAPI document root.
+- **Metaschema references.** References to the JSON Schema metaschemas are allowed, because they are built in and nothing is fetched.
 
 ## Parsing and limits
 
-- **Duplicate JSON keys** (RFC 8259 §4): refused.
-- **Invalid UTF-8, lone surrogates** (RFC 8259 §8): refused.
-- **Byte order mark**: one leading BOM ignored.
-- **Huge numbers**: exponent past ±4096 or over 4096 digits is `malformed_body`.
-- **Nesting**
-  - Documents: 128 levels.
-  - Bodies: `max_body_depth` (128), lowered per document to fit the stack budget.
-- **In-place schema chains**
-  - At most 64 deep and 100,000 subschemas per value; else a load error.
-- **YAML 1.2**
-  - Core schema (`yes`, `on` are strings).
-  - Refused: duplicate keys, several documents, alias expansion over 4 M nodes.
-  - `<<` is an ordinary key; `.inf` / `.nan` become strings.
-- **External references**: load error.
-- **Reports**: `max_problems` (20), `max_report_bytes` (8 KiB), then "and N more".
-- **Failed `anyOf` / `oneOf`**: reported there, or inside the one branch whose `type` fits.
+- **JSON.** Duplicate keys, invalid UTF-8 and lone surrogate escapes are refused (RFC 8259 §4, §8). One leading byte order mark is ignored.
+- **Large numbers.** Numbers with an exponent beyond ±4096 or more than 4096 digits are refused, so exact comparison stays bounded.
+- **Nesting.** Documents may nest 128 levels. Bodies may nest `max_body_depth` levels (128 by default), lowered per document so that body depth multiplied by schema depth stays within a fixed stack budget.
+- **In-place schema chains.** At most 64 nested `$ref`, `allOf`, `anyOf` and similar keywords, and at most 100,000 subschemas, may apply to one value. Larger documents are refused at load, because the schema engine would take exponential time.
+- **YAML.** YAML 1.2 core schema rules apply, so `yes` and `on` are strings. Duplicate keys, multiple documents and alias expansion beyond 4 million nodes are refused. `<<` is an ordinary key, and `.inf` and `.nan` become strings.
+- **External references.** These are a load error; the library never reads files or the network.
+- **Reports.** A report keeps at most `max_problems` (20) problems and `max_report_bytes` (8 KiB) of text, and counts the rest.
+- **Failed `anyOf` and `oneOf`.** The problem is reported at the `anyOf` or `oneOf` itself, or inside the one branch whose `type` fits the value.
