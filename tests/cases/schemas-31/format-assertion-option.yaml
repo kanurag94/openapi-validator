@@ -1,0 +1,24 @@
+title: With format assertion on, a 3.1 email format is checked
+ref: JSON Schema 2020-12 Validation §7.2.2; RFC 5321 §4.1.2
+options:
+  formats: always
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: string, format: email}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: '"not an email"'
+expect:
+  valid: false
+  location: body

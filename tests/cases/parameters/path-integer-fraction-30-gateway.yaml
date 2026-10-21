@@ -1,0 +1,20 @@
+title: "Under 3.0 an integer may not be written with a fraction (gateway profile)"
+ref: "OpenAPI 3.0.4 §4.8.12.2; §4.4.1 data types"
+options:
+  profile: gateway
+document: |
+  openapi: 3.0.4
+  info: {title: t, version: "1"}
+  paths:
+    "/items/{id}":
+      get:
+        parameters:
+          - {"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: "/items/1.0"
+expect:
+  valid: false
+  kind: invalid_parameter
+  location: path.id

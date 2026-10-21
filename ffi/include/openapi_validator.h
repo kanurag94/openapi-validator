@@ -106,9 +106,11 @@ typedef struct {
     bool allow_unknown_headers;        /* default true */
     bool allow_unknown_cookies;        /* default true */
     bool check_security;               /* default true */
-    bool assert_formats;               /* default true */
     bool query_plus_as_space;          /* default true */
-    bool discriminator_selects_branch; /* default true */
+    int formats;                       /* 0 by version (default), 1 always, 2 never */
+    int discriminator;                 /* 0 annotation (default), 1 enforce */
+    int integers;                      /* 0 mathematical (default), 1 lexical in 3.0 */
+    int read_write_required;           /* 0 by version (default), 1 relax in 3.1 too */
     int server_paths;                  /* 0 either (default), 1 required, 2 ignored */
     size_t max_problems;               /* default 20 */
     size_t max_report_bytes;           /* default 8192 */

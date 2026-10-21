@@ -1,0 +1,24 @@
+title: In 3.1 a required writeOnly property is still required in a response
+ref: OpenAPI 3.1.1 §4.8.24.3.2
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /u:
+      get:
+        responses:
+          "200":
+            description: ok
+            content:
+              application/json:
+                schema: {type: object, required: [id, secret], properties: {id: {type: string}, secret: {type: string, writeOnly: true}}}
+request:
+  method: GET
+  path: /u
+response:
+  status: 200
+  headers: [["Content-Type", "application/json"]]
+  body: '{"id": "1"}'
+expect:
+  valid: false
+  location: body/secret

@@ -27,7 +27,10 @@
 
 use std::path::{Path, PathBuf};
 
-use openapi_validator::{Options, Request, Response, ServerPaths, Spec};
+use openapi_validator::{
+    DiscriminatorMode, FormatAssertion, IntegerSemantics, Options, ReadWriteRequired, Request,
+    Response, ServerPaths, Spec,
+};
 use serde_json::Value;
 
 fn files(dir: &Path) -> Vec<PathBuf> {
@@ -55,6 +58,13 @@ fn options(v: Option<&Value>) -> Result<Options, String> {
     let Some(m) = v.and_then(Value::as_object) else {
         return Ok(o);
     };
+    // `profile: gateway` starts from Options::gateway_profile(); other
+    // options then adjust it.
+    match m.get("profile").map(|p| p.as_str()) {
+        None => {}
+        Some(Some("gateway")) => o = Options::gateway_profile(),
+        Some(_) => return Err("profile must be gateway".into()),
+    }
     for (k, x) in m {
         let b = || {
             x.as_bool()
@@ -71,9 +81,39 @@ fn options(v: Option<&Value>) -> Result<Options, String> {
             "allow_unknown_headers" => o.allow_unknown_headers = b()?,
             "allow_unknown_cookies" => o.allow_unknown_cookies = b()?,
             "check_security" => o.check_security = b()?,
-            "assert_formats" => o.assert_formats = b()?,
+            "profile" => {} // applied first, below
+            "formats" => {
+                o.formats = match x.as_str() {
+                    Some("by-version") => FormatAssertion::ByVersion,
+                    Some("always") => FormatAssertion::Always,
+                    Some("never") => FormatAssertion::Never,
+                    _ => return Err("formats must be by-version, always or never".into()),
+                }
+            }
+            "discriminator" => {
+                o.discriminator = match x.as_str() {
+                    Some("annotation") => DiscriminatorMode::Annotation,
+                    Some("enforce") => DiscriminatorMode::Enforce,
+                    _ => return Err("discriminator must be annotation or enforce".into()),
+                }
+            }
+            "integers" => {
+                o.integers = match x.as_str() {
+                    Some("mathematical") => IntegerSemantics::Mathematical,
+                    Some("lexical-in-30") => IntegerSemantics::LexicalIn30,
+                    _ => return Err("integers must be mathematical or lexical-in-30".into()),
+                }
+            }
+            "read_write_required" => {
+                o.read_write_required = match x.as_str() {
+                    Some("by-version") => ReadWriteRequired::ByVersion,
+                    Some("relax-always") => ReadWriteRequired::RelaxAlways,
+                    _ => {
+                        return Err("read_write_required must be by-version or relax-always".into())
+                    }
+                }
+            }
             "query_plus_as_space" => o.query_plus_as_space = b()?,
-            "discriminator_selects_branch" => o.discriminator_selects_branch = b()?,
             "max_problems" => o.max_problems = n()?,
             "max_report_bytes" => o.max_report_bytes = n()?,
             "max_body_bytes" => o.max_body_bytes = n()?,

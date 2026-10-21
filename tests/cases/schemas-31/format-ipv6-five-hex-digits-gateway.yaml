@@ -1,0 +1,25 @@
+title: "format ipv6: a group has at most four hex digits (gateway profile)"
+ref: "JSON Schema Validation 2020-12 §7.3; RFC 4291 §2.2"
+options:
+  profile: gateway
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: string, format: ipv6}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "\"12345::\""
+expect:
+  valid: false
+  kind: schema_violation
+  location: body

@@ -251,8 +251,12 @@ impl<'a> Explainer<'a> {
                 }
                 "x-oav-int-format" => {
                     if let (Some(d), Some(f)) = (dec(inst), kv.as_str()) {
-                        if !format::check_int_range(f, &d) {
-                            self.push(ipath, format!("must be an integer that fits {f}"));
+                        if !format::check_number(f, &d) {
+                            let msg = match f {
+                                "float" | "double" => format!("must be within the {f} range"),
+                                _ => format!("must be an integer that fits {f}"),
+                            };
+                            self.push(ipath, msg);
                         }
                     }
                 }

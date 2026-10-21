@@ -1,0 +1,22 @@
+title: A value beyond the binary32 range fails format float
+ref: OpenAPI 3.0.4 §4.4 (float); IEEE 754 binary32
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: number, format: float}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: '1e39'
+expect:
+  valid: false
+  location: body

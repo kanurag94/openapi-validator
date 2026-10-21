@@ -1,0 +1,28 @@
+title: With enforcement on, an unmapped value fails
+ref: OpenAPI 3.1.1 §4.8.25
+options:
+  discriminator: enforce
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {oneOf: [{$ref: '#/components/schemas/Cat'}, {$ref: '#/components/schemas/Dog'}], discriminator: {propertyName: kind, mapping: {cat: '#/components/schemas/Cat', dog: '#/components/schemas/Dog'}}}
+        responses: {"200": {description: ok}}
+  components:
+    schemas:
+      Cat: {type: object, required: [kind, meow], properties: {kind: {type: string}, meow: {type: boolean}}}
+      Dog: {type: object, required: [kind, bark], properties: {kind: {type: string}, bark: {type: boolean}}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: '{"kind": "cow", "meow": true}'
+expect:
+  valid: false
+  location: body/kind

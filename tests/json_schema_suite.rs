@@ -110,11 +110,8 @@ fn json_schema_test_suite() {
     let mut details = String::new();
     let mut summary = String::new();
     let mut all = (0usize, 0usize);
-    // Required tests: format is an annotation in 2020-12 by default.
-    let required = Options {
-        assert_formats: false,
-        ..Options::default()
-    };
+    // Required tests: the defaults, where format is an annotation in 3.1.
+    let required = Options::default();
     for f in json_files(&dir) {
         let _ = writeln!(
             details,
@@ -133,7 +130,10 @@ fn json_schema_test_suite() {
         );
     }
     // Optional format tests, with format assertion on.
-    let asserting = Options::default();
+    let asserting = Options {
+        formats: openapi_validator::FormatAssertion::Always,
+        ..Options::default()
+    };
     let mut fmt = (0usize, 0usize);
     for f in json_files(&dir.join("optional/format")) {
         let name = f

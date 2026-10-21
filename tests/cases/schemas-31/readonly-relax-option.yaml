@@ -1,0 +1,26 @@
+title: The relax option drops a readOnly property from required in 3.1 requests
+ref: OpenAPI 3.0.4 §4.7.24.1 rule applied to 3.1
+options:
+  read_write_required: relax-always
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Item'}
+        responses: {"200": {description: ok}}
+  components:
+    schemas:
+      Item: {type: object, required: [id, name], properties: {id: {type: string, readOnly: true}, name: {type: string}}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: '{"name": "a"}'
+expect:
+  valid: true

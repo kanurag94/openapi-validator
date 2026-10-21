@@ -12,7 +12,8 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::Arc;
 
 use openapi_validator::{
-    Credential, CredentialLocation, Options, Report, Request, Response, ServerPaths, Spec,
+    Credential, CredentialLocation, DiscriminatorMode, FormatAssertion, IntegerSemantics, Options,
+    ReadWriteRequired, Report, Request, Response, ServerPaths, Spec,
 };
 
 pub const OAV_OK: c_int = 0;
@@ -82,9 +83,15 @@ pub struct OavOptions {
     pub allow_unknown_headers: bool,
     pub allow_unknown_cookies: bool,
     pub check_security: bool,
-    pub assert_formats: bool,
     pub query_plus_as_space: bool,
-    pub discriminator_selects_branch: bool,
+    /// 0 by version (default), 1 always, 2 never.
+    pub formats: c_int,
+    /// 0 annotation (default), 1 enforce.
+    pub discriminator: c_int,
+    /// 0 mathematical (default), 1 lexical in OpenAPI 3.0.
+    pub integers: c_int,
+    /// 0 by version (default), 1 relax `required` in 3.1 too.
+    pub read_write_required: c_int,
     /// 0 either, 1 required, 2 ignored.
     pub server_paths: c_int,
     pub max_problems: usize,
@@ -172,9 +179,11 @@ pub unsafe extern "C" fn oav_options_default(opts: *mut OavOptions) -> c_int {
             allow_unknown_headers: d.allow_unknown_headers,
             allow_unknown_cookies: d.allow_unknown_cookies,
             check_security: d.check_security,
-            assert_formats: d.assert_formats,
             query_plus_as_space: d.query_plus_as_space,
-            discriminator_selects_branch: d.discriminator_selects_branch,
+            formats: 0,
+            discriminator: 0,
+            integers: 0,
+            read_write_required: 0,
             server_paths: 0,
             max_problems: d.max_problems,
             max_report_bytes: d.max_report_bytes,
@@ -196,9 +205,28 @@ fn to_options(o: &OavOptions) -> Result<Options, c_int> {
         allow_unknown_headers: o.allow_unknown_headers,
         allow_unknown_cookies: o.allow_unknown_cookies,
         check_security: o.check_security,
-        assert_formats: o.assert_formats,
         query_plus_as_space: o.query_plus_as_space,
-        discriminator_selects_branch: o.discriminator_selects_branch,
+        formats: match o.formats {
+            0 => FormatAssertion::ByVersion,
+            1 => FormatAssertion::Always,
+            2 => FormatAssertion::Never,
+            _ => return Err(OAV_ERR_RANGE),
+        },
+        discriminator: match o.discriminator {
+            0 => DiscriminatorMode::Annotation,
+            1 => DiscriminatorMode::Enforce,
+            _ => return Err(OAV_ERR_RANGE),
+        },
+        integers: match o.integers {
+            0 => IntegerSemantics::Mathematical,
+            1 => IntegerSemantics::LexicalIn30,
+            _ => return Err(OAV_ERR_RANGE),
+        },
+        read_write_required: match o.read_write_required {
+            0 => ReadWriteRequired::ByVersion,
+            1 => ReadWriteRequired::RelaxAlways,
+            _ => return Err(OAV_ERR_RANGE),
+        },
         server_paths: match o.server_paths {
             0 => ServerPaths::Either,
             1 => ServerPaths::Required,

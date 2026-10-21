@@ -64,7 +64,8 @@ pub mod yaml;
 pub use doc::{LoadError, Version, Warning};
 pub use http::{Request, Response};
 pub use options::{
-    Credential, CredentialLocation, Options, SecurityHook, ServerPaths, DEFAULT_IGNORED_HEADERS,
+    Credential, CredentialLocation, DiscriminatorMode, FormatAssertion, IntegerSemantics, Options,
+    ReadWriteRequired, SecurityHook, ServerPaths, DEFAULT_IGNORED_HEADERS,
 };
 pub use report::{MatchedOperation, Problem, ProblemKind, Report};
 pub use spec::Spec;

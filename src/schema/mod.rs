@@ -64,7 +64,9 @@ pub(crate) struct SchemaStore {
 
 pub(crate) struct StoreOptions {
     pub assert_formats: bool,
-    pub discriminator_selects_branch: bool,
+    pub discriminator_enforce: bool,
+    pub lexical_integers: bool,
+    pub relax_required: bool,
 }
 
 /// Percent-encodes a JSON Pointer for use as a URI fragment (RFC 6901 §6).
@@ -218,7 +220,7 @@ impl<'i> Keyword<'i> for IntFormat {
     fn is_valid(&self, instance: &'i Value) -> bool {
         match instance {
             Value::Number(n) => {
-                Decimal::parse(&n.to_string()).is_some_and(|d| format::check_int_range(self.0, &d))
+                Decimal::parse(&n.to_string()).is_some_and(|d| format::check_number(self.0, &d))
             }
             _ => true,
         }
@@ -309,7 +311,9 @@ impl SchemaStore {
     ) -> Result<(SchemaStore, Vec<crate::doc::Warning>), LoadError> {
         let topts = translate::Options {
             assert_formats: opts.assert_formats,
-            discriminator_selects_branch: opts.discriminator_selects_branch,
+            discriminator_enforce: opts.discriminator_enforce,
+            lexical_integers: opts.lexical_integers,
+            relax_required: opts.relax_required,
         };
         let mut roots = request_roots.clone();
         roots.extend(response_roots.iter().cloned());
@@ -419,10 +423,11 @@ impl SchemaStore {
             .with_keyword(
                 "x-oav-int-format",
                 |_: &Map<String, Value>, v: &Value, _| {
-                    let f = if v.as_str() == Some("int32") {
-                        "int32"
-                    } else {
-                        "int64"
+                    let f = match v.as_str() {
+                        Some("int32") => "int32",
+                        Some("float") => "float",
+                        Some("double") => "double",
+                        _ => "int64",
                     };
                     Ok(Box::new(IntFormat(f)) as Box<dyn for<'i> Keyword<'i>>)
                 },

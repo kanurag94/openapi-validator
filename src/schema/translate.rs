@@ -100,7 +100,9 @@ pub const DOC_URI: &str = "oav:///openapi.json";
 
 pub struct Options {
     pub assert_formats: bool,
-    pub discriminator_selects_branch: bool,
+    pub discriminator_enforce: bool,
+    pub lexical_integers: bool,
+    pub relax_required: bool,
 }
 
 /// The translated skeleton for one direction.
@@ -348,9 +350,15 @@ impl Translator<'_> {
                 continue;
             };
             let mut targets = HashSet::new();
-            for (_, r) in mapping_entries(d) {
-                targets.insert(r);
+            let enforce = self.opts.discriminator_enforce;
+            if enforce {
+                for (_, r) in mapping_entries(d) {
+                    targets.insert(r);
+                }
             }
+            // As an annotation the discriminator changes nothing, so only a
+            // real cycle (a oneOf/anyOf branch that extends this base) needs
+            // the copy without dispatch; with enforcement, every target does.
             for key in ["oneOf", "anyOf"] {
                 for b in s.get(key).and_then(Value::as_array).into_iter().flatten() {
                     if let Some(r) = b.get("$ref").and_then(Value::as_str) {
@@ -366,7 +374,7 @@ impl Translator<'_> {
                     .flatten()
                     .filter_map(|m| m.get("$ref").and_then(Value::as_str))
                     .any(|r| doc::canonical_pointer(r).as_deref() == Some(ptr.as_str()));
-                if extends {
+                if extends && enforce {
                     targets.insert(doc::join("#/components/schemas", cname));
                 }
             }
@@ -616,6 +624,7 @@ impl Translator<'_> {
                     let mut always = Vec::new();
                     let mut request_only = Vec::new();
                     let mut response_only = Vec::new();
+                    let mut neither = Vec::new();
                     for n in names.iter().filter_map(Value::as_str) {
                         let (ro, wo) = visible.get(n).copied().unwrap_or((false, false));
                         let v = Value::String(n.to_owned());
@@ -623,8 +632,15 @@ impl Translator<'_> {
                             (false, false) => always.push(v),
                             (true, false) => response_only.push(v),
                             (false, true) => request_only.push(v),
-                            (true, true) => {}
+                            (true, true) => neither.push(v),
                         }
+                    }
+                    if !self.opts.relax_required {
+                        // OpenAPI 3.1: readOnly and writeOnly are annotations;
+                        // `required` applies in both directions.
+                        always.append(&mut request_only);
+                        always.append(&mut response_only);
+                        always.append(&mut neither);
                     }
                     out.insert(k.clone(), Value::Array(always));
                     if !request_only.is_empty() || !response_only.is_empty() {
@@ -722,11 +738,11 @@ impl Translator<'_> {
                 Some(Value::Array(a)) => a.iter().any(|x| x == t),
                 _ => false,
             };
-            if has("integer") && !has("number") {
+            if self.opts.lexical_integers && has("integer") && !has("number") {
                 out.insert("x-oav-int".into(), Value::Bool(true));
             }
         }
-        if dispatch {
+        if dispatch && self.opts.discriminator_enforce {
             if let Some(d) = m.get("discriminator").filter(|d| d.is_object()) {
                 self.discriminator(d, m, ptr, &ctx, &mut out)?;
             }
@@ -885,7 +901,7 @@ impl Translator<'_> {
     /// §4.8.25): when the payload carries the property, its value must name
     /// a mapped schema and the payload is checked against that schema. When
     /// every `oneOf`/`anyOf` branch is mapped, the named branch alone decides
-    /// (option `discriminator_selects_branch`); without the property, the
+    /// (option `discriminator: Enforce`); without the property, the
     /// original `oneOf`/`anyOf` applies.
     fn discriminator(
         &mut self,
@@ -969,7 +985,7 @@ impl Translator<'_> {
             .iter()
             .map(|(v, _)| Value::String(v.clone()))
             .collect();
-        let selects = all_mapped && self.opts.discriminator_selects_branch;
+        let selects = all_mapped;
         let mut then = Map::new();
         if branch_key.is_none() || all_mapped {
             let mut allowed = names;

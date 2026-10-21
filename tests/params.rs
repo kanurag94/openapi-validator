@@ -222,11 +222,19 @@ fn coercion() {
     );
     ok(get(&s, "/q", "b=true", &[]));
     bad(get(&s, "/q", "b=yes", &[]), "query.b");
+    // OpenAPI 3.0.4 §4.4: 1.0 is an integer; the 3.0.3 reading is an option.
     let s = spec_with(
         "3.0.3",
         "/q",
         r#"{"name": "n", "in": "query", "schema": {"type": "integer"}}"#,
         Options::default(),
+    );
+    ok(get(&s, "/q", "n=1.0", &[]));
+    let s = spec_with(
+        "3.0.3",
+        "/q",
+        r#"{"name": "n", "in": "query", "schema": {"type": "integer"}}"#,
+        Options::gateway_profile(),
     );
     bad(get(&s, "/q", "n=1.0", &[]), "query.n");
 }

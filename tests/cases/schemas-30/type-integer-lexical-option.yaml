@@ -1,0 +1,24 @@
+title: The lexical integer option refuses 1.0 in 3.0
+ref: OpenAPI 3.0.3 §4.4 ("defined as a JSON number without a fraction or exponent part")
+options:
+  integers: lexical-in-30
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: integer}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: '1.0'
+expect:
+  valid: false
+  location: body

@@ -1,0 +1,29 @@
+title: "A discriminator value that names no branch is reported at the property (gateway profile)"
+ref: "OpenAPI 3.0.4 §4.8.25 (Discriminator Object)"
+options:
+  profile: gateway
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {oneOf: [{$ref: '#/components/schemas/Cat'}, {$ref: '#/components/schemas/Dog'}], discriminator: {propertyName: petType}}
+        responses: {"200": {description: ok}}
+  components:
+    schemas:
+      Cat: {type: object, required: [petType, meow], properties: {petType: {type: string}, meow: {type: boolean}}}
+      Dog: {type: object, required: [petType, bark], properties: {petType: {type: string}, bark: {type: boolean}}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "{\"petType\": \"Lizard\", \"meow\": true}"
+expect:
+  valid: false
+  kind: schema_violation
+  location: body/petType

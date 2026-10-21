@@ -1,0 +1,28 @@
+title: "With anyOf, the selected Square branch is enforced (gateway profile)"
+ref: "OpenAPI 3.1.1 §4.8.25 (Discriminator Object)"
+options:
+  profile: gateway
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {anyOf: [{$ref: '#/components/schemas/Circle'}, {$ref: '#/components/schemas/Square'}], discriminator: {propertyName: kind}}
+        responses: {"200": {description: ok}}
+  components:
+    schemas:
+      Circle: {type: object, required: [kind, r], properties: {kind: {type: string}, r: {type: number}}}
+      Square: {type: object, required: [kind, side], properties: {kind: {type: string}, side: {type: number}}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "{\"kind\": \"Square\", \"r\": 1}"
+expect:
+  valid: false
+  kind: schema_violation

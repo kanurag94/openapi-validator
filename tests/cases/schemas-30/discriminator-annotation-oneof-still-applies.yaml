@@ -1,0 +1,26 @@
+title: A payload matching two oneOf branches fails even when the discriminator names one
+ref: OpenAPI 3.1.1 §4.8.25; JSON Schema 2020-12 §10.2.1.3
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {oneOf: [{$ref: '#/components/schemas/Cat'}, {$ref: '#/components/schemas/Dog'}], discriminator: {propertyName: kind, mapping: {cat: '#/components/schemas/Cat', dog: '#/components/schemas/Dog'}}}
+        responses: {"200": {description: ok}}
+  components:
+    schemas:
+      Cat: {type: object, required: [kind, meow], properties: {kind: {type: string}, meow: {type: boolean}}}
+      Dog: {type: object, required: [kind, bark], properties: {kind: {type: string}, bark: {type: boolean}}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: '{"kind": "cat", "meow": true, "bark": true}'
+expect:
+  valid: false
+  kind: schema_violation

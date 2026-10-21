@@ -1,0 +1,21 @@
+title: In 3.0, 1e2 is the integer 100
+ref: OpenAPI 3.0.4 §4.4
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: integer, maximum: 100}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: '1e2'
+expect:
+  valid: true

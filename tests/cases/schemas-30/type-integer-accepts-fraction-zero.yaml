@@ -1,0 +1,21 @@
+title: In 3.0, 1.0 is an integer
+ref: OpenAPI 3.0.4 §4.4 ("both 1 and 1.0 are equivalent, and are both considered to be integers")
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: integer}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: '1.0'
+expect:
+  valid: true

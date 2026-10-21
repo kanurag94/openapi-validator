@@ -1,0 +1,17 @@
+title: A 3.0 integer query value written 2.0 is an integer
+ref: OpenAPI 3.0.4 §4.4
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /q:
+      get:
+        parameters:
+          - {name: n, in: query, schema: {type: integer}}
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: /q
+  query: n=2.0
+expect:
+  valid: true

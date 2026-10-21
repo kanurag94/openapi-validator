@@ -1,0 +1,19 @@
+title: "A required writeOnly property may be absent from a response (gateway profile)"
+ref: "OpenAPI 3.1.1 §4.8.24.3 (readOnly/writeOnly), OpenAPI 3.1.1 §4.8.17"
+options:
+  profile: gateway
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /r:
+      get:
+        responses:
+          "200":
+            description: ok
+            content:
+              application/json:
+                schema: {type: object, required: [name, password], properties: {name: {type: string}, password: {type: string, writeOnly: true}}}
+request: {"method": "GET", "path": "/r"}
+response: {"status": 200, "headers": [["Content-Type", "application/json"]], "body": "{\"name\": \"a\"}"}
+expect: {"valid": true}

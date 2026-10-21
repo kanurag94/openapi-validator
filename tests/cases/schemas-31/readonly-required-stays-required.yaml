@@ -1,0 +1,25 @@
+title: In 3.1 a required readOnly property is still required in a request
+ref: OpenAPI 3.1.1 §4.8.24.3.2 (readOnly is an annotation; the behaviour differs from 3.0)
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Item'}
+        responses: {"200": {description: ok}}
+  components:
+    schemas:
+      Item: {type: object, required: [id, name], properties: {id: {type: string, readOnly: true}, name: {type: string}}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: '{"name": "a"}'
+expect:
+  valid: false
+  location: body/id

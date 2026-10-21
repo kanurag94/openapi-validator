@@ -1,0 +1,25 @@
+title: "format uri: a scheme starts with a letter (gateway profile)"
+ref: "JSON Schema Validation 2020-12 §7.3; RFC 3986 §3.1"
+options:
+  profile: gateway
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: string, format: uri}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "\"1http://example.com\""
+expect:
+  valid: false
+  kind: schema_violation
+  location: body

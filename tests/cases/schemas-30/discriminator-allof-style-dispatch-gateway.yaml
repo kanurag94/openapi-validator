@@ -1,0 +1,28 @@
+title: "allOf-style discriminator dispatches to the child named by the value (gateway profile)"
+ref: "OpenAPI 3.0.4 §4.8.25 (Discriminator Object)"
+options:
+  profile: gateway
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Pet'}
+        responses: {"200": {description: ok}}
+  components:
+    schemas:
+      Pet: {type: object, required: [petType], properties: {petType: {type: string}}, discriminator: {propertyName: petType}}
+      Cat: {allOf: [{$ref: '#/components/schemas/Pet'}, {type: object, required: [meow], properties: {meow: {type: boolean}}}]}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "{\"petType\": \"Cat\"}"
+expect:
+  valid: false
+  kind: schema_violation

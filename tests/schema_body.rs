@@ -17,6 +17,12 @@ fn load(version: &str, schema: &str, components: &str) -> Spec {
     Spec::load(d.as_bytes(), Options::default()).unwrap_or_else(|e| panic!("{e}\n{d}"))
 }
 
+/// The same, with `Options::gateway_profile()`.
+fn load_gw(version: &str, schema: &str, components: &str) -> Spec {
+    let d = doc(version, schema, components);
+    Spec::load(d.as_bytes(), Options::gateway_profile()).unwrap_or_else(|e| panic!("{e}\n{d}"))
+}
+
 fn post(spec: &Spec, body: &str) -> Report {
     spec.validate_request(&Request {
         method: "POST",
@@ -143,7 +149,13 @@ fn oas31_ref_siblings_apply() {
 // with no fractional part (JSON Schema 2020-12 core §4.2.1).
 #[test]
 fn integer_meaning_by_version() {
+    // OpenAPI 3.0.4 §4.4: integers are mathematical by default.
     let s = load("3.0.3", r#"{"type": "integer"}"#, "");
+    ok(&s, "12");
+    ok(&s, "1.0");
+    bad(&s, "1.5", "body");
+    // OpenAPI 3.0.3 §4.4 reading, through the gateway profile.
+    let s = load_gw("3.0.3", r#"{"type": "integer"}"#, "");
     ok(&s, "12");
     bad(&s, "1.0", "body");
     bad(&s, "1e2", "body");
@@ -236,13 +248,21 @@ fn boolean_schemas() {
 fn read_only_is_not_required_in_requests() {
     let comps = r##""Id": {"type": "string", "readOnly": true},
         "Pet": {"type": "object", "required": ["id", "name"], "properties": {"id": {"$ref": "#/components/schemas/Id"}, "name": {"type": "string"}}}"##;
-    for v in ["3.0.3", "3.1.0"] {
-        let s = load(v, r##"{"$ref": "#/components/schemas/Pet"}"##, comps);
+    // 3.0 relaxes required by default; 3.1 only with the gateway profile
+    // (OpenAPI 3.1.1 §4.8.24.3.2 keeps required in force).
+    let s31 = load("3.1.0", r##"{"$ref": "#/components/schemas/Pet"}"##, comps);
+    bad(&s31, r#"{"name": "rex"}"#, "body/id");
+    for (v, gw) in [("3.0.3", false), ("3.1.0", true)] {
+        let s = if gw {
+            load_gw(v, r##"{"$ref": "#/components/schemas/Pet"}"##, comps)
+        } else {
+            load(v, r##"{"$ref": "#/components/schemas/Pet"}"##, comps)
+        };
         ok(&s, r#"{"name": "rex"}"#);
         ok(&s, r#"{"id": "1", "name": "rex"}"#);
         bad(&s, r#"{"id": "1"}"#, "body/name");
     }
-    let s = load(
+    let s = load_gw(
         "3.1.0",
         r#"{"allOf": [{"properties": {"id": {"type": "string", "readOnly": true}}}, {"required": ["id"]}]}"#,
         "",
@@ -278,7 +298,7 @@ fn formats() {
         ("hostname", r#""example.com""#, r#""-example.com""#),
     ];
     for (f, good, wrong) in cases {
-        let s = load(
+        let s = load_gw(
             "3.1.0",
             &format!(r#"{{"type": "string", "format": "{f}"}}"#),
             "",
@@ -286,10 +306,12 @@ fn formats() {
         ok(&s, good);
         bad(&s, wrong, "body");
     }
-    let s = load("3.1.0", r#"{"type": "string", "format": "made-up"}"#, "");
+    let s = load_gw("3.1.0", r#"{"type": "string", "format": "made-up"}"#, "");
     ok(&s, r#""anything""#);
-    let s = load("3.0.3", r#"{"type": "string", "format": "byte"}"#, "");
-    ok(&s, r#""not base64!""#);
+    // OpenAPI 3.0.4 §4.4: byte is base64 (RFC 4648 §4).
+    let s = load_gw("3.0.3", r#"{"type": "string", "format": "byte"}"#, "");
+    bad(&s, r#""not base64!""#, "body");
+    ok(&s, r#""aGVsbG8=""#);
 }
 
 // ECMA-262 patterns, with ASCII \d and linear-time matching.
@@ -319,7 +341,7 @@ fn discriminator_is_enforced() {
     let schema = r##"{"oneOf": [{"$ref": "#/components/schemas/Cat"}, {"$ref": "#/components/schemas/Dog"}],
         "discriminator": {"propertyName": "kind", "mapping": {"cat": "#/components/schemas/Cat", "dog": "Dog"}}}"##;
     for v in ["3.0.3", "3.1.0"] {
-        let s = load(v, schema, comps);
+        let s = load_gw(v, schema, comps);
         ok(&s, r#"{"kind": "cat", "meow": true}"#);
         ok(&s, r#"{"kind": "dog", "bark": true}"#);
         bad(&s, r#"{"kind": "cow", "meow": true}"#, "body/kind");
@@ -339,7 +361,7 @@ fn discriminator_with_inheritance_cycle() {
         "Dog": {"allOf": [{"$ref": "#/components/schemas/Pet"}, {"type": "object", "properties": {"bark": {"type": "boolean"}}}]},
         "Cat": {"allOf": [{"$ref": "#/components/schemas/Pet"}, {"type": "object", "properties": {"meow": {"type": "boolean"}}}]}"##;
     for v in ["3.0.3", "3.1.0"] {
-        let s = load(v, r##"{"$ref": "#/components/schemas/Pet"}"##, comps);
+        let s = load_gw(v, r##"{"$ref": "#/components/schemas/Pet"}"##, comps);
         ok(&s, r#"{"kind": "Dog", "bark": true}"#);
         bad(&s, r#"{"kind": "Dog", "bark": "loud"}"#, "body/bark");
         bad(&s, r#"{"kind": "Cow"}"#, "body/kind");

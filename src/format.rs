@@ -9,23 +9,37 @@ use crate::number::Decimal;
 
 /// Formats this library asserts.
 pub const ASSERTED: &[&str] = &[
+    // JSON Schema 2020-12 §7.3.
+    "date-time",
     "date",
     "time",
-    "date-time",
+    "duration",
     "email",
-    "uuid",
-    "uri",
-    "uri-reference",
+    "idn-email",
+    "hostname",
+    "idn-hostname",
     "ipv4",
     "ipv6",
-    "hostname",
+    "uri",
+    "uri-reference",
+    "iri",
+    "iri-reference",
+    "uuid",
+    "uri-template",
+    "json-pointer",
+    "relative-json-pointer",
+    "regex",
+    // OpenAPI data types (3.0.4 §4.4, 3.1.1 §4.2 and the Format Registry).
     "int32",
     "int64",
+    "float",
+    "double",
+    "byte",
 ];
 
 /// Formats that constrain numbers rather than strings.
 pub fn is_numeric_format(name: &str) -> bool {
-    matches!(name, "int32" | "int64")
+    matches!(name, "int32" | "int64" | "float" | "double")
 }
 
 /// Checks a string against a string format. Unknown formats pass.
@@ -41,20 +55,46 @@ pub fn check_str(format: &str, s: &str) -> bool {
         "ipv4" => is_ipv4(s),
         "ipv6" => is_ipv6(s),
         "hostname" => is_hostname(s),
+        "idn-hostname" => is_idn_hostname(s),
+        "idn-email" => is_idn_email(s),
+        "duration" => is_duration(s),
+        "iri" => is_iri(s),
+        "iri-reference" => is_iri_reference(s),
+        "uri-template" => is_uri_template(s),
+        "json-pointer" => is_json_pointer(s),
+        "relative-json-pointer" => is_relative_json_pointer(s),
+        "regex" => jsonschema_regex::is_valid_ecma_regex(s),
+        "byte" => is_base64(s),
         _ => true,
     }
 }
 
-/// Checks a number literal against `int32` or `int64`. The value must be an
-/// integer (by the document's meaning of integer, decided by the caller) in
-/// the signed range.
-pub fn check_int_range(format: &str, n: &Decimal) -> bool {
-    let Some(v) = n.to_i128() else {
-        return false;
+/// Checks a number against a numeric format: `int32` and `int64` need an
+/// integer in the signed range; `float` and `double` need a value within the
+/// IEEE 754 binary32 / binary64 finite range.
+pub fn check_number(format: &str, n: &Decimal) -> bool {
+    let within = |limit: &str| {
+        let Some(max) = Decimal::parse(limit) else {
+            return true;
+        };
+        let Some(min) = Decimal::parse(&format!("-{limit}")) else {
+            return true;
+        };
+        *n >= min && *n <= max
     };
     match format {
-        "int32" => i32::try_from(v).is_ok(),
-        "int64" => i64::try_from(v).is_ok(),
+        "int32" | "int64" => {
+            let Some(v) = n.to_i128() else {
+                return false;
+            };
+            if format == "int32" {
+                i32::try_from(v).is_ok()
+            } else {
+                i64::try_from(v).is_ok()
+            }
+        }
+        "float" => within("3.4028234663852886e38"),
+        "double" => within("1.7976931348623157e308"),
         _ => true,
     }
 }
@@ -187,6 +227,216 @@ pub fn is_uuid(s: &str) -> bool {
         })
 }
 
+/// RFC 3339 Appendix A ISO 8601 duration, such as `P1Y2M3DT4H5M6S` or `P2W`.
+pub fn is_duration(s: &str) -> bool {
+    let Some(body) = s.strip_prefix('P') else {
+        return false;
+    };
+    // Splits "12X..." into (12, 'X', rest).
+    fn unit(s: &str) -> Option<(char, &str)> {
+        let n = s.bytes().take_while(u8::is_ascii_digit).count();
+        if n == 0 {
+            return None;
+        }
+        let c = s[n..].chars().next()?;
+        Some((c, &s[n + c.len_utf8()..]))
+    }
+    let (date, time) = match body.split_once('T') {
+        Some((d, t)) => (d, Some(t)),
+        None => (body, None),
+    };
+    if date.is_empty() && time.is_none() {
+        return false;
+    }
+    // dur-week stands alone.
+    if let Some((c, rest)) = unit(date) {
+        if c == 'W' {
+            return rest.is_empty() && time.is_none();
+        }
+    }
+    let mut rest = date;
+    let mut order = ['Y', 'M', 'D'].iter().peekable();
+    let mut last = None;
+    while !rest.is_empty() {
+        let Some((c, r)) = unit(rest) else {
+            return false;
+        };
+        // Units appear in order, and no unit may be skipped in the middle
+        // (dur-year = Y [M [D]], dur-month = M [D], dur-day = D).
+        loop {
+            match order.next() {
+                Some(u) if *u == c => break,
+                Some(_) if last.is_some() => return false,
+                Some(_) => continue,
+                None => return false,
+            }
+        }
+        last = Some(c);
+        rest = r;
+    }
+    if let Some(t) = time {
+        if t.is_empty() {
+            return false;
+        }
+        let mut rest = t;
+        let mut order = ['H', 'M', 'S'].iter();
+        let mut started = false;
+        while !rest.is_empty() {
+            let Some((c, r)) = unit(rest) else {
+                return false;
+            };
+            loop {
+                match order.next() {
+                    Some(u) if *u == c => break,
+                    Some(_) if started => return false,
+                    Some(_) => continue,
+                    None => return false,
+                }
+            }
+            started = true;
+            rest = r;
+        }
+    }
+    true
+}
+
+/// RFC 6901 §3 JSON Pointer.
+pub fn is_json_pointer(s: &str) -> bool {
+    if s.is_empty() {
+        return true;
+    }
+    if !s.starts_with('/') {
+        return false;
+    }
+    let b = s.as_bytes();
+    b.iter()
+        .enumerate()
+        .all(|(i, &c)| c != b'~' || matches!(b.get(i + 1), Some(b'0' | b'1')))
+}
+
+/// Relative JSON Pointer (draft-bhutton-relative-json-pointer-00 §3): a
+/// non-negative integer, an optional index adjustment, then `#` or a JSON
+/// Pointer.
+pub fn is_relative_json_pointer(s: &str) -> bool {
+    let n = s.bytes().take_while(u8::is_ascii_digit).count();
+    if n == 0 || (n > 1 && s.starts_with('0')) {
+        return false;
+    }
+    let mut rest = &s[n..];
+    if let Some(r) = rest.strip_prefix(['+', '-']) {
+        let m = r.bytes().take_while(u8::is_ascii_digit).count();
+        if m == 0 || (m > 1 && r.starts_with('0')) || r.starts_with('0') {
+            return false;
+        }
+        rest = &r[m..];
+    }
+    rest == "#" || is_json_pointer(rest)
+}
+
+/// RFC 4648 §4 base64 (OpenAPI `byte`). Padding may be omitted.
+pub fn is_base64(s: &str) -> bool {
+    let body = s.trim_end_matches('=');
+    let pad = s.len() - body.len();
+    if pad > 2
+        || !body
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || c == b'+' || c == b'/')
+    {
+        return false;
+    }
+    if pad > 0 {
+        s.len().is_multiple_of(4)
+    } else {
+        body.len() % 4 != 1
+    }
+}
+
+/// RFC 6570 §2 URI Template syntax.
+pub fn is_uri_template(s: &str) -> bool {
+    let b = s.as_bytes();
+    let mut i = 0;
+    while i < b.len() {
+        match b[i] {
+            b'{' => {
+                let Some(end) = s[i..].find('}').map(|e| i + e) else {
+                    return false;
+                };
+                let mut expr = &s[i + 1..end];
+                if let Some(c) = expr.chars().next() {
+                    if "+#./;?&=,!@|".contains(c) {
+                        expr = &expr[1..];
+                    }
+                }
+                if expr.is_empty() {
+                    return false;
+                }
+                for spec in expr.split(',') {
+                    let (name, modifier) = match spec.find([':', '*']) {
+                        Some(p) => (&spec[..p], Some(&spec[p..])),
+                        None => (spec, None),
+                    };
+                    if !is_template_varname(name) {
+                        return false;
+                    }
+                    match modifier {
+                        None | Some("*") => {}
+                        Some(m) => {
+                            let Some(len) = m.strip_prefix(':') else {
+                                return false;
+                            };
+                            let ok = !len.is_empty()
+                                && len.len() <= 4
+                                && len.bytes().all(|c| c.is_ascii_digit())
+                                && !len.starts_with('0');
+                            if !ok {
+                                return false;
+                            }
+                        }
+                    }
+                }
+                i = end + 1;
+            }
+            b'%' => {
+                if !(b.get(i + 1).is_some_and(u8::is_ascii_hexdigit)
+                    && b.get(i + 2).is_some_and(u8::is_ascii_hexdigit))
+                {
+                    return false;
+                }
+                i += 3;
+            }
+            c if c < 0x21 || b"\"<>\\^`|}".contains(&c) || c == 0x7F => return false,
+            _ => {
+                // Multi-byte UTF-8 (ucschar / iprivate) is allowed.
+                i += 1;
+            }
+        }
+    }
+    true
+}
+
+fn is_template_varname(name: &str) -> bool {
+    if name.is_empty() || name.starts_with('.') || name.ends_with('.') || name.contains("..") {
+        return false;
+    }
+    let b = name.as_bytes();
+    let mut i = 0;
+    while i < b.len() {
+        match b[i] {
+            b'%' => {
+                if !(b.get(i + 1).is_some_and(u8::is_ascii_hexdigit)
+                    && b.get(i + 2).is_some_and(u8::is_ascii_hexdigit))
+                {
+                    return false;
+                }
+                i += 3;
+            }
+            c if c.is_ascii_alphanumeric() || c == b'_' || c == b'.' => i += 1,
+            _ => return false,
+        }
+    }
+    true
+}
+
 /// Dotted-quad IPv4 (RFC 2673 §3.2 `dotted-quad`): four decimal octets with
 /// no leading zeros.
 pub fn is_ipv4(s: &str) -> bool {
@@ -219,8 +469,12 @@ pub fn is_hostname(s: &str) -> bool {
             && b[0] != b'-'
             && b[b.len() - 1] != b'-'
             // RFC 5891 §4.2.3.1: "--" in positions 3 and 4 is reserved for
-            // A-labels ("xn--").
-            && !(b.len() >= 4 && &b[2..4] == b"--" && !label[..2].eq_ignore_ascii_case("xn"))
+            // A-labels ("xn--"), which must decode to valid U-labels.
+            && if b.len() >= 4 && label[..4].eq_ignore_ascii_case("xn--") {
+                is_a_label(label)
+            } else {
+                !(b.len() >= 4 && &b[2..4] == b"--")
+            }
     })
 }
 
@@ -422,6 +676,210 @@ pub fn is_uri_reference(s: &str) -> bool {
     hier_ok(s, true)
 }
 
+// ------------------------------------------------------------------ IRIs
+
+/// RFC 3987 §2.2 `ucschar` (and `iprivate`, allowed in queries).
+fn iri_char(c: char) -> bool {
+    let c = c as u32;
+    let plane_ok = |c: u32| (c & 0xFFFF) < 0xFFFE;
+    matches!(c, 0xA0..=0xD7FF | 0xF900..=0xFDCF | 0xFDF0..=0xFFEF)
+        || (0x10000..=0xEFFFD).contains(&c) && plane_ok(c) && !(0xE0000..=0xE0FFF).contains(&c)
+        || matches!(c, 0xE000..=0xF8FF)
+        || (0xF0000..=0x10FFFD).contains(&c) && plane_ok(c)
+}
+
+/// Maps an IRI onto a URI of the same shape: each allowed non-ASCII
+/// character becomes an unreserved ASCII letter.
+fn iri_as_uri(s: &str) -> Option<String> {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        if c.is_ascii() {
+            out.push(c);
+        } else if iri_char(c) {
+            out.push('a');
+        } else {
+            return None;
+        }
+    }
+    Some(out)
+}
+
+/// RFC 3987 §2.2 `IRI`.
+pub fn is_iri(s: &str) -> bool {
+    iri_as_uri(s).is_some_and(|u| is_uri(&u))
+}
+
+/// RFC 3987 §2.2 `IRI-reference`.
+pub fn is_iri_reference(s: &str) -> bool {
+    iri_as_uri(s).is_some_and(|u| is_uri_reference(&u))
+}
+
+// ------------------------------------------------------------ IDN labels
+
+/// Code points RFC 5892 §2.6 lists as DISALLOWED exceptions.
+fn idna_disallowed(c: char) -> bool {
+    matches!(
+        c as u32,
+        0x0640 | 0x07FA | 0x302E | 0x302F | 0x3031..=0x3035 | 0x303B
+    )
+}
+
+/// RFC 5892 §2.1 LetterDigits (letters, marks, decimal digits), plus the
+/// hyphen and the code points allowed by contextual rules (§2.7, §2.8).
+fn letter_digit(c: char) -> bool {
+    c == '-'
+        || (c.is_alphanumeric() && !matches!(c as u32, 0x00B2 | 0x00B3 | 0x00B9 | 0x00BC..=0x00BE))
+        || unicode_normalization::char::is_combining_mark(c)
+        || matches!(c as u32, 0x200C | 0x200D | 0x00B7 | 0x0375 | 0x05F3 | 0x05F4 | 0x30FB)
+        // §2.6 exceptions that are PVALID whatever their category.
+        || matches!(c as u32, 0x00DF | 0x03C2 | 0x06FD | 0x06FE | 0x0F0B | 0x3007)
+}
+
+fn is_greek(c: char) -> bool {
+    matches!(c as u32, 0x0370..=0x03FF | 0x1F00..=0x1FFF)
+}
+
+fn is_hebrew(c: char) -> bool {
+    matches!(c as u32, 0x0590..=0x05FF | 0xFB1D..=0xFB4F)
+}
+
+fn is_hiragana_katakana_han(c: char) -> bool {
+    matches!(c as u32,
+        0x3040..=0x309F | 0x30A0..=0x30FA | 0x30FC..=0x30FF | 0x31F0..=0x31FF | 0xFF66..=0xFF9F
+        | 0x3400..=0x4DBF | 0x4E00..=0x9FFF | 0xF900..=0xFAFF | 0x20000..=0x2A6DF | 0x2F800..=0x2FA1F)
+}
+
+/// RFC 5892 Appendix A CONTEXTO rules (A.3–A.9). CONTEXTJ rules (A.1,
+/// A.2) and the Bidi rule are left to UTS 46 processing.
+fn contexto_ok(label: &[char]) -> bool {
+    let arabic_indic = label.iter().any(|c| matches!(*c as u32, 0x0660..=0x0669));
+    let extended = label.iter().any(|c| matches!(*c as u32, 0x06F0..=0x06F9));
+    if arabic_indic && extended {
+        return false;
+    }
+    for (i, &c) in label.iter().enumerate() {
+        let before = i.checked_sub(1).and_then(|j| label.get(j)).copied();
+        let after = label.get(i + 1).copied();
+        let ok = match c as u32 {
+            0x00B7 => before == Some('l') && after == Some('l'),
+            0x0375 => after.is_some_and(is_greek),
+            0x05F3 | 0x05F4 => before.is_some_and(is_hebrew),
+            0x30FB => label.iter().any(|&x| x != c && is_hiragana_katakana_han(x)),
+            _ => true,
+        };
+        if !ok {
+            return false;
+        }
+    }
+    true
+}
+
+/// An IDNA2008 U-label (RFC 5890 §2.3.2.1): valid under UTS 46 strict
+/// processing without being changed by it, and meeting the CONTEXTO rules.
+fn is_u_label(label: &str) -> bool {
+    let chars: Vec<char> = label.chars().collect();
+    if chars.is_empty() || chars.iter().any(|&c| idna_disallowed(c)) || !contexto_ok(&chars) {
+        return false;
+    }
+    let Ok(ascii) = idna::domain_to_ascii_strict(label) else {
+        return false;
+    };
+    if ascii.len() > 63 {
+        return false;
+    }
+    // IDNA2008 does not map: the label must already be in its final form.
+    let (unicode, ok) = idna::domain_to_unicode(&ascii);
+    ok.is_ok() && unicode == label
+}
+
+/// An A-label (`xn--` + Punycode) whose decoded form is a valid U-label.
+fn is_a_label(label: &str) -> bool {
+    let Some(code) = label
+        .get(4..)
+        .filter(|_| label[..4].eq_ignore_ascii_case("xn--"))
+    else {
+        return false;
+    };
+    let Some(decoded) = idna::punycode::decode_to_string(code) else {
+        return false;
+    };
+    !decoded.is_ascii()
+        && decoded.chars().all(letter_digit)
+        && is_u_label(&decoded)
+        && idna::punycode::encode_str(&decoded).is_some_and(|re| re.eq_ignore_ascii_case(code))
+}
+
+fn ldh_label_ok(label: &str) -> bool {
+    let b = label.as_bytes();
+    !b.is_empty()
+        && b.len() <= 63
+        && b.iter().all(|c| c.is_ascii_alphanumeric() || *c == b'-')
+        && b[0] != b'-'
+        && b[b.len() - 1] != b'-'
+}
+
+/// RFC 5890 §2.3.2.3 `idn-hostname`, processed as UTS 46 (non-transitional,
+/// strict: STD3 rules, hyphen and Bidi checks, DNS length): the name must
+/// convert to ASCII, and every A-label it yields must decode to a label
+/// that also meets the RFC 5892 CONTEXTO rules.
+pub fn is_idn_hostname(s: &str) -> bool {
+    if s.is_empty() || s.ends_with(['.', '\u{3002}', '\u{FF0E}', '\u{FF61}']) {
+        return false;
+    }
+    let Ok(ascii) = idna::domain_to_ascii_strict(s) else {
+        return false;
+    };
+    if ascii.is_empty() || ascii.len() > 253 {
+        return false;
+    }
+    ascii.split('.').all(|label| {
+        if !ldh_label_ok(label) {
+            return false;
+        }
+        if label.len() >= 4 && label[..4].eq_ignore_ascii_case("xn--") {
+            let Some(decoded) = idna::punycode::decode_to_string(&label[4..]) else {
+                return false;
+            };
+            let chars: Vec<char> = decoded.chars().collect();
+            !chars
+                .iter()
+                .any(|&c| idna_disallowed(c) || !letter_digit(c))
+                && contexto_ok(&chars)
+        } else {
+            true
+        }
+    })
+}
+
+/// RFC 6531 §3.3 internationalised `Mailbox`: UTF-8 is allowed in the
+/// local part, and the domain is an IDN host name or an address literal.
+pub fn is_idn_email(s: &str) -> bool {
+    let Some(at) = s.rfind('@') else {
+        return false;
+    };
+    let (local, domain) = (&s[..at], &s[at + 1..]);
+    if local.is_empty() || domain.is_empty() {
+        return false;
+    }
+    // RFC 6531 §3.3: atext also admits any UTF8-non-ascii character.
+    let atext =
+        |c: char| !c.is_ascii() || c.is_ascii_alphanumeric() || "!#$%&'*+-/=?^_`{|}~".contains(c);
+    let local_ok = if local.starts_with('"') {
+        local.len() >= 2 && local.ends_with('"')
+    } else {
+        local
+            .split('.')
+            .all(|a| !a.is_empty() && a.chars().all(atext))
+    };
+    if !local_ok {
+        return false;
+    }
+    if domain.starts_with('[') {
+        return is_email(&format!("a@{domain}"));
+    }
+    is_idn_hostname(domain)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -515,13 +973,67 @@ mod tests {
     }
 
     #[test]
+    fn json_schema_formats() {
+        assert!(is_duration("P1Y2M3DT4H5M6S"));
+        assert!(is_duration("P2W"));
+        assert!(is_duration("PT1M"));
+        assert!(!is_duration("P"));
+        assert!(!is_duration("PT"));
+        assert!(!is_duration("P1D2Y"), "units out of order");
+        assert!(!is_duration("P1Y2D"), "month skipped");
+        assert!(!is_duration("P2W1D"));
+        assert!(is_json_pointer(""));
+        assert!(is_json_pointer("/a~0b/c~1d/"));
+        assert!(!is_json_pointer("a"));
+        assert!(!is_json_pointer("/a~2"));
+        assert!(is_relative_json_pointer("0#"));
+        assert!(is_relative_json_pointer("1/a"));
+        assert!(!is_relative_json_pointer("01/a"));
+        assert!(is_uri_template("https://x/{user}{?q,lang:2}{/path*}"));
+        assert!(!is_uri_template("{"));
+        assert!(!is_uri_template("{a b}"));
+        assert!(is_base64("aGVsbG8="));
+        assert!(is_base64("aGVsbG8"));
+        assert!(!is_base64("aGVsbG8=="));
+        assert!(!is_base64("a-b_"));
+        assert!(is_iri("https://例え.jp/ドキュメント"));
+        assert!(!is_iri("/relative"));
+        assert!(is_iri_reference("ドキュメント#節"));
+    }
+
+    #[test]
+    fn idn_formats() {
+        assert!(is_idn_hostname("実例.テスト"));
+        assert!(is_idn_hostname("xn--hxajbheg2az3al.xn--jxalpdlp"));
+        assert!(!is_idn_hostname("xn--7a"), "U+00A1 is disallowed");
+        assert!(
+            !is_idn_hostname("l\u{00B7}x"),
+            "middle dot needs l on both sides"
+        );
+        assert!(is_idn_hostname("l\u{00B7}l"));
+        assert!(is_hostname("xn--hxajbheg2az3al"));
+        assert!(!is_hostname("xn--7a"));
+        assert!(is_idn_email("用户@例子.广告"));
+        assert!(!is_idn_email("用户@"));
+    }
+
+    #[test]
+    fn number_formats() {
+        let d = |s: &str| Decimal::parse(s).unwrap();
+        assert!(check_number("float", &d("3.4e38")));
+        assert!(!check_number("float", &d("3.5e38")));
+        assert!(check_number("double", &d("-1.7e308")));
+        assert!(!check_number("double", &d("1.8e308")));
+    }
+
+    #[test]
     fn int_ranges() {
         let d = |s: &str| Decimal::parse(s).unwrap();
-        assert!(check_int_range("int32", &d("2147483647")));
-        assert!(!check_int_range("int32", &d("2147483648")));
-        assert!(check_int_range("int64", &d("-9223372036854775808")));
-        assert!(!check_int_range("int64", &d("9223372036854775808")));
-        assert!(!check_int_range("int32", &d("1.5")));
-        assert!(check_int_range("int64", &d("1e3")));
+        assert!(check_number("int32", &d("2147483647")));
+        assert!(!check_number("int32", &d("2147483648")));
+        assert!(check_number("int64", &d("-9223372036854775808")));
+        assert!(!check_number("int64", &d("9223372036854775808")));
+        assert!(!check_number("int32", &d("1.5")));
+        assert!(check_number("int64", &d("1e3")));
     }
 }

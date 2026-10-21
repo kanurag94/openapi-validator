@@ -1,0 +1,24 @@
+title: In 3.0 a required readOnly property is not required in a request
+ref: OpenAPI 3.0.4 §4.7.24.1 ("the required will take effect on the response only")
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Item'}
+        responses: {"200": {description: ok}}
+  components:
+    schemas:
+      Item: {type: object, required: [id, name], properties: {id: {type: string, readOnly: true}, name: {type: string}}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: '{"name": "a"}'
+expect:
+  valid: true

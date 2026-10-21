@@ -7,7 +7,9 @@ use serde_json::Value;
 use crate::doc::{self, LoadError, Version, Warning};
 use crate::http::{Request, Response};
 use crate::model::{Body, Builder, Responses};
-use crate::options::{Options, ServerPaths};
+use crate::options::{
+    DiscriminatorMode, FormatAssertion, IntegerSemantics, Options, ReadWriteRequired, ServerPaths,
+};
 use crate::params::Param;
 use crate::path::{split_path, Match, PathIndex, RawSegment, Template, Vars};
 use crate::report::{MatchedOperation, ProblemKind, Report};
@@ -195,8 +197,15 @@ impl Spec {
             std::mem::take(&mut b.roots.request),
             std::mem::take(&mut b.roots.response),
             &StoreOptions {
-                assert_formats: options.assert_formats,
-                discriminator_selects_branch: options.discriminator_selects_branch,
+                assert_formats: match options.formats {
+                    FormatAssertion::Always => true,
+                    FormatAssertion::Never => false,
+                    FormatAssertion::ByVersion => version == Version::V30,
+                },
+                discriminator_enforce: options.discriminator == DiscriminatorMode::Enforce,
+                lexical_integers: options.integers == IntegerSemantics::LexicalIn30,
+                relax_required: version == Version::V30
+                    || options.read_write_required == ReadWriteRequired::RelaxAlways,
             },
         )?;
         warnings.append(&mut schema_warnings);

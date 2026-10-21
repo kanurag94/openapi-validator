@@ -1,0 +1,22 @@
+title: In 3.0 the byte format must be base64
+ref: "OpenAPI 3.0.4 §4.4 (byte, base64 encoded characters); RFC 4648 §4"
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: string, format: byte}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: '"not base64!"'
+expect:
+  valid: false
+  location: body

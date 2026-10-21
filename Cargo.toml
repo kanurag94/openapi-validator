@@ -29,6 +29,9 @@ num-bigint = "0.4"
 num-traits = "0.2"
 saphyr-parser = "0.2"
 roxmltree = "0.21"
+idna = "1"
+unicode-normalization = "0.1"
+jsonschema-regex = "0.59"
 
 [profile.bench]
 debug = true

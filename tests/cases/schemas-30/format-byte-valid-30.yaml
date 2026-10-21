@@ -1,0 +1,21 @@
+title: Base64 with padding meets the byte format
+ref: OpenAPI 3.0.4 §4.4; RFC 4648 §4
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: string, format: byte}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: '"aGVsbG8="'
+expect:
+  valid: true

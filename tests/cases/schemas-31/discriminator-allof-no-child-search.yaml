@@ -1,0 +1,25 @@
+title: An allOf-style discriminator does not search child schemas
+ref: OpenAPI 3.1.1 §4.8.25.2 ("does not perform a search for child schemas or use them in validation in any way")
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Pet'}
+        responses: {"200": {description: ok}}
+  components:
+    schemas:
+      Pet: {type: object, required: [kind], properties: {kind: {type: string}}, discriminator: {propertyName: kind}}
+      Dog: {allOf: [{$ref: '#/components/schemas/Pet'}, {type: object, required: [bark], properties: {bark: {type: boolean}}}]}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: '{"kind": "Dog"}'
+expect:
+  valid: true

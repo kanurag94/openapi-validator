@@ -1,0 +1,25 @@
+title: "In 3.0, 1e2 is written with an exponent and is not an integer (gateway profile)"
+ref: "OpenAPI 3.0.4 §4.8.24 (Data Types: integer)"
+options:
+  profile: gateway
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: integer}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: "1e2"
+expect:
+  valid: false
+  kind: schema_violation
+  location: body
