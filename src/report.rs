@@ -167,6 +167,11 @@ impl Report {
             message,
         });
     }
+
+    /// Counts problems found but not kept.
+    pub(crate) fn add_omitted(&mut self, n: usize) {
+        self.omitted += n;
+    }
 }
 
 impl fmt::Display for Report {

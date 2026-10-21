@@ -6,9 +6,11 @@ use serde_json::Value;
 
 use crate::doc::{self, LoadError, Version, Warning};
 use crate::http::Request;
+use crate::model::{Body, Builder};
 use crate::options::{Options, ServerPaths};
 use crate::path::{split_path, Match, PathIndex, RawSegment, Template, Vars};
 use crate::report::{MatchedOperation, ProblemKind, Report};
+use crate::schema::{SchemaStore, StoreOptions};
 use crate::server::{base_paths, BasePath};
 
 /// HTTP methods a Path Item can describe (OpenAPI 3.1.1 §4.8.9.1).
@@ -27,6 +29,7 @@ pub(crate) struct Operation {
     pub template: usize,
     pub method: &'static str,
     pub operation_id: Option<String>,
+    pub body: Option<Body>,
 }
 
 /// A validator for one OpenAPI document. Load once and share: `Spec` is
@@ -39,6 +42,7 @@ pub struct Spec {
     pub(crate) ops: Vec<Operation>,
     /// Every distinct server base path, longest first.
     pub(crate) bases: Vec<BasePath>,
+    pub(crate) store: SchemaStore,
     warnings: Vec<Warning>,
 }
 
@@ -74,19 +78,14 @@ impl Spec {
         let version = doc::version(&root)?;
         let mut warnings = Vec::new();
         let doc_bases = base_paths(root.get("servers"), "#/servers", &mut warnings);
+        let mut b = Builder::new(&root);
+        let mut paths = PathIndex::default();
+        let mut items: Vec<PathItem> = Vec::new();
+        let mut ops: Vec<Operation> = Vec::new();
+        let mut all_bases: Vec<BasePath> = Vec::new();
 
-        let mut spec = Spec {
-            version,
-            options,
-            paths: PathIndex::default(),
-            items: Vec::new(),
-            ops: Vec::new(),
-            bases: Vec::new(),
-            warnings: Vec::new(),
-        };
-
-        if let Some(paths) = root.get("paths").and_then(Value::as_object) {
-            for (key, item) in paths {
+        if let Some(path_map) = root.get("paths").and_then(Value::as_object) {
+            for (key, item) in path_map {
                 if key.starts_with("x-") {
                     continue;
                 }
@@ -103,13 +102,12 @@ impl Spec {
                     message,
                 })?;
                 let (item, item_ptr) = doc::deref(&root, item, &loc)?;
-                let tid =
-                    spec.paths
-                        .insert(template)
-                        .map_err(|first| LoadError::DuplicateTemplate {
-                            first,
-                            second: key.clone(),
-                        })?;
+                let tid = paths
+                    .insert(template)
+                    .map_err(|first| LoadError::DuplicateTemplate {
+                        first,
+                        second: key.clone(),
+                    })?;
                 let item_bases = match item.get("servers") {
                     Some(s) => base_paths(Some(s), &format!("{item_ptr}/servers"), &mut warnings),
                     None => doc_bases.clone(),
@@ -127,36 +125,59 @@ impl Spec {
                         Some(s) => base_paths(Some(s), &format!("{op_ptr}/servers"), &mut warnings),
                         None => item_bases.clone(),
                     };
-                    for b in op_bases {
-                        if !pi.bases.contains(&b) {
-                            pi.bases.push(b);
+                    for base in op_bases {
+                        if !pi.bases.contains(&base) {
+                            pi.bases.push(base);
                         }
                     }
-                    pi.ops.push((m, spec.ops.len()));
-                    spec.ops.push(Operation {
+                    let body =
+                        b.request_body(op.get("requestBody"), &doc::join(&op_ptr, "requestBody"))?;
+                    pi.ops.push((m, ops.len()));
+                    ops.push(Operation {
                         template: tid,
                         method: m,
                         operation_id: op
                             .get("operationId")
                             .and_then(Value::as_str)
                             .map(str::to_owned),
+                        body,
                     });
                 }
                 if pi.bases.is_empty() {
                     pi.bases = item_bases;
                 }
-                for b in &pi.bases {
-                    if !spec.bases.contains(b) {
-                        spec.bases.push(b.clone());
+                for base in &pi.bases {
+                    if !all_bases.contains(base) {
+                        all_bases.push(base.clone());
                     }
                 }
-                debug_assert_eq!(tid, spec.items.len());
-                spec.items.push(pi);
+                debug_assert_eq!(tid, items.len());
+                items.push(pi);
             }
         }
-        spec.bases.sort_by_key(|b| std::cmp::Reverse(b.len()));
-        spec.warnings = warnings;
-        Ok(spec)
+        all_bases.sort_by_key(|b| std::cmp::Reverse(b.len()));
+        warnings.append(&mut b.warnings);
+        let (store, mut schema_warnings) = SchemaStore::new(
+            &root,
+            version,
+            std::mem::take(&mut b.roots.request),
+            std::mem::take(&mut b.roots.response),
+            &StoreOptions {
+                assert_formats: options.assert_formats,
+                discriminator_selects_branch: options.discriminator_selects_branch,
+            },
+        )?;
+        warnings.append(&mut schema_warnings);
+        Ok(Spec {
+            version,
+            options,
+            paths,
+            items,
+            ops,
+            bases: all_bases,
+            store,
+            warnings,
+        })
     }
 
     /// The document's OpenAPI version family.
@@ -342,7 +363,9 @@ impl Spec {
         let mut report = self.new_report();
         let guarded = catch_unwind(AssertUnwindSafe(|| {
             let mut r = self.new_report();
-            self.route_into(req, &mut r);
+            if let Some((op, _vars, _head)) = self.route_into(req, &mut r) {
+                self.check_request_body(self.ops[op].body.as_ref(), req, &mut r);
+            }
             r
         }));
         match guarded {

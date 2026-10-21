@@ -7,13 +7,17 @@ mod doc;
 pub mod format;
 mod http;
 pub mod json;
+mod media;
+mod model;
 pub mod number;
 mod options;
 mod path;
 pub mod pattern;
 mod report;
+mod schema;
 mod server;
 mod spec;
+mod validate;
 pub mod yaml;
 
 pub use doc::{LoadError, Version, Warning};
