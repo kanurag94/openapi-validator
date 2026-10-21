@@ -127,13 +127,54 @@ pub fn build(translated: &str) -> Result<Regex, String> {
 
 /// Rewrites an ECMA-262 pattern into equivalent `regex` crate syntax.
 pub fn translate(pattern: &str) -> Result<String, PatternError> {
-    Translator {
-        src: pattern.chars().collect(),
-        i: 0,
-        out: String::with_capacity(pattern.len() + 8),
-        pattern,
+    Translator::new(pattern, false).run()
+}
+
+/// Translates a pattern for the `regex` crate when it can run in linear
+/// time, or else (lookaround, backreferences) for `fancy-regex`. The flag
+/// says which engine the result is for.
+pub fn translate_any(pattern: &str) -> Result<(String, bool), PatternError> {
+    match translate(pattern) {
+        Ok(t) => Ok((t, false)),
+        Err(e) if e.reason.contains("backtracking") => {
+            Translator::new(pattern, true).run().map(|t| (t, true))
+        }
+        Err(e) => Err(e),
     }
-    .run()
+}
+
+/// Steps `fancy-regex` may take for one match before giving up.
+pub const BACKTRACK_LIMIT: usize = 100_000;
+
+/// A compiled pattern on whichever engine it needs.
+#[derive(Debug)]
+pub enum Matcher {
+    Linear(Regex),
+    Bounded(fancy_regex::Regex),
+}
+
+impl Matcher {
+    /// `None` when the bounded engine gave up (step limit reached).
+    pub fn is_match(&self, s: &str) -> Option<bool> {
+        match self {
+            Matcher::Linear(r) => Some(r.is_match(s)),
+            Matcher::Bounded(r) => r.is_match(s).ok(),
+        }
+    }
+}
+
+/// Compiles a translated pattern for the engine `translate_any` chose.
+pub fn build_any(translated: &str, backtracking: bool) -> Result<Matcher, String> {
+    if !backtracking {
+        return build(translated).map(Matcher::Linear);
+    }
+    fancy_regex::RegexBuilder::new(translated)
+        .backtrack_limit(BACKTRACK_LIMIT)
+        .delegate_size_limit(SIZE_LIMIT)
+        .delegate_dfa_size_limit(SIZE_LIMIT)
+        .build()
+        .map(Matcher::Bounded)
+        .map_err(|e| e.to_string())
 }
 
 struct Translator<'a> {
@@ -141,6 +182,22 @@ struct Translator<'a> {
     i: usize,
     out: String,
     pattern: &'a str,
+    /// Emit `fancy-regex` syntax: lookaround and backreferences are kept.
+    fancy: bool,
+}
+
+const ASCII_WORD: &str = "[A-Za-z0-9_]";
+
+impl<'a> Translator<'a> {
+    fn new(pattern: &'a str, fancy: bool) -> Translator<'a> {
+        Translator {
+            src: pattern.chars().collect(),
+            i: 0,
+            out: String::with_capacity(pattern.len() + 8),
+            pattern,
+            fancy,
+        }
+    }
 }
 
 /// One atom inside a character class.
@@ -188,11 +245,19 @@ impl Translator<'_> {
                                 self.i += 2;
                                 self.out.push_str("(?:");
                             }
-                            (Some('=' | '!'), _) => {
-                                return self.fail("lookahead needs backtracking")
+                            (Some(c @ ('=' | '!')), _) => {
+                                if !self.fancy {
+                                    return self.fail("lookahead needs backtracking");
+                                }
+                                self.i += 2;
+                                self.out.push_str(if c == '=' { "(?=" } else { "(?!" });
                             }
-                            (Some('<'), Some('=' | '!')) => {
-                                return self.fail("lookbehind needs backtracking")
+                            (Some('<'), Some(c @ ('=' | '!'))) => {
+                                if !self.fancy {
+                                    return self.fail("lookbehind needs backtracking");
+                                }
+                                self.i += 3;
+                                self.out.push_str(if c == '=' { "(?<=" } else { "(?<!" });
                             }
                             (Some('<'), _) => {
                                 self.i += 2;
@@ -308,6 +373,14 @@ impl Translator<'_> {
                 })
             }
             'b' if in_class => ClassAtom::Char('\u{8}'),
+            // ASCII word boundaries; fancy-regex cannot switch Unicode
+            // mode inline, so it gets the equivalent lookarounds.
+            'b' if self.fancy => ClassAtom::Set(format!(
+                "(?:(?<={ASCII_WORD})(?!{ASCII_WORD})|(?<!{ASCII_WORD})(?={ASCII_WORD}))"
+            )),
+            'B' if self.fancy && !in_class => ClassAtom::Set(format!(
+                "(?:(?<={ASCII_WORD})(?={ASCII_WORD})|(?<!{ASCII_WORD})(?!{ASCII_WORD}))"
+            )),
             'b' => ClassAtom::Set(r"(?-u:\b)".into()),
             'B' if !in_class => ClassAtom::Set(r"(?-u:\B)".into()),
             't' => ClassAtom::Char('\t'),
@@ -316,9 +389,30 @@ impl Translator<'_> {
             'f' => ClassAtom::Char('\u{C}'),
             'r' => ClassAtom::Char('\r'),
             '0' if !self.peek().is_some_and(|d| d.is_ascii_digit()) => ClassAtom::Char('\0'),
-            '1'..='9' => return self.fail("backreferences need backtracking"),
+            '1'..='9' if !in_class => {
+                if !self.fancy {
+                    return self.fail("backreferences need backtracking");
+                }
+                let mut n = String::from(c);
+                while let Some(d) = self.peek().filter(char::is_ascii_digit) {
+                    self.i += 1;
+                    n.push(d);
+                }
+                ClassAtom::Set(format!("\\{n}"))
+            }
             'k' if self.peek() == Some('<') => {
-                return self.fail("named backreferences need backtracking")
+                if !self.fancy {
+                    return self.fail("named backreferences need backtracking");
+                }
+                let start = self.i;
+                while let Some(x) = self.peek() {
+                    self.i += 1;
+                    if x == '>' {
+                        let body: String = self.src[start..self.i].iter().collect();
+                        return Ok(ClassAtom::Set(format!("\\k{body}")));
+                    }
+                }
+                return self.fail("unterminated named backreference");
             }
             'c' => match self.peek() {
                 Some(l) if l.is_ascii_alphabetic() => {
@@ -600,6 +694,35 @@ mod tests {
             assert_eq!(e.pattern, p);
             assert!(e.reason.contains("backtracking"), "{e}");
         }
+    }
+
+    #[test]
+    fn backtracking_features_run_bounded_when_allowed() {
+        let run = |p: &str, s: &str| {
+            let (t, fancy) = translate_any(p).unwrap();
+            assert!(fancy, "{p}");
+            build_any(&t, fancy).unwrap().is_match(s)
+        };
+        assert_eq!(run(r"^(?=.*\d)\w+$", "ab1"), Some(true));
+        assert_eq!(run(r"^(?=.*\d)\w+$", "abc"), Some(false));
+        assert_eq!(run(r"(?<!x)y", "xy"), Some(false));
+        assert_eq!(run(r"^(\w)\1$", "aa"), Some(true));
+        assert_eq!(run(r"^(?<c>\w)\k<c>$", "ab"), Some(false));
+        assert_eq!(
+            run(r"\bfoo\b(?=!)", "a foo!"),
+            Some(true),
+            "ASCII word boundary"
+        );
+        assert_eq!(
+            run(r"\bfoo\b(?=!)", "éfoo!"),
+            Some(true),
+            "é is not an ASCII word char"
+        );
+        // A step-limited engine gives up instead of running for ever.
+        let long = format!("{}c", "a".repeat(60));
+        assert!(run(r"^(?=a)(a|a)*\1b$", &long) != Some(true));
+        // Linear patterns stay on the linear engine.
+        assert_eq!(translate_any(r"^\d+$").map(|(_, f)| f), Ok(false));
     }
 
     #[test]

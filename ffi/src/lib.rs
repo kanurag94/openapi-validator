@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 use openapi_validator::{
     Credential, CredentialLocation, DiscriminatorMode, FormatAssertion, IntegerSemantics, Options,
-    ReadWriteRequired, Report, Request, Response, ServerPaths, Spec,
+    PatternEngine, ReadWriteRequired, Report, Request, Response, ServerPaths, Spec,
 };
 
 pub const OAV_OK: c_int = 0;
@@ -92,6 +92,8 @@ pub struct OavOptions {
     pub integers: c_int,
     /// 0 by version (default), 1 relax `required` in 3.1 too.
     pub read_write_required: c_int,
+    /// 0 bounded backtracking (default), 1 refuse such patterns at load.
+    pub patterns: c_int,
     /// 0 either, 1 required, 2 ignored.
     pub server_paths: c_int,
     pub max_problems: usize,
@@ -184,6 +186,7 @@ pub unsafe extern "C" fn oav_options_default(opts: *mut OavOptions) -> c_int {
             discriminator: 0,
             integers: 0,
             read_write_required: 0,
+            patterns: 0,
             server_paths: 0,
             max_problems: d.max_problems,
             max_report_bytes: d.max_report_bytes,
@@ -225,6 +228,11 @@ fn to_options(o: &OavOptions) -> Result<Options, c_int> {
         read_write_required: match o.read_write_required {
             0 => ReadWriteRequired::ByVersion,
             1 => ReadWriteRequired::RelaxAlways,
+            _ => return Err(OAV_ERR_RANGE),
+        },
+        patterns: match o.patterns {
+            0 => PatternEngine::Bounded,
+            1 => PatternEngine::LinearOnly,
             _ => return Err(OAV_ERR_RANGE),
         },
         server_paths: match o.server_paths {

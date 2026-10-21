@@ -8,7 +8,8 @@ use crate::doc::{self, LoadError, Version, Warning};
 use crate::http::{Request, Response};
 use crate::model::{Body, Builder, Responses};
 use crate::options::{
-    DiscriminatorMode, FormatAssertion, IntegerSemantics, Options, ReadWriteRequired, ServerPaths,
+    DiscriminatorMode, FormatAssertion, IntegerSemantics, Options, PatternEngine,
+    ReadWriteRequired, ServerPaths,
 };
 use crate::params::Param;
 use crate::path::{split_path, Match, PathIndex, RawSegment, Template, Vars};
@@ -206,6 +207,7 @@ impl Spec {
                 lexical_integers: options.integers == IntegerSemantics::LexicalIn30,
                 relax_required: version == Version::V30
                     || options.read_write_required == ReadWriteRequired::RelaxAlways,
+                allow_backtracking: options.patterns == PatternEngine::Bounded,
             },
         )?;
         warnings.append(&mut schema_warnings);

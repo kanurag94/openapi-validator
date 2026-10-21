@@ -57,7 +57,9 @@ pub(crate) struct SchemaStore {
     request: DirStore,
     response: DirStore,
     /// Compiled patterns by translated text, shared by both directions.
-    patterns: RwLock<HashMap<String, Arc<regex::Regex>>>,
+    patterns: RwLock<HashMap<String, Arc<crate::pattern::Matcher>>>,
+    /// Some pattern needs the bounded backtracking engine.
+    backtracking: bool,
     /// Longest in-place applicator chain in the document.
     in_place_depth: usize,
 }
@@ -67,6 +69,7 @@ pub(crate) struct StoreOptions {
     pub discriminator_enforce: bool,
     pub lexical_integers: bool,
     pub relax_required: bool,
+    pub allow_backtracking: bool,
 }
 
 /// Percent-encodes a JSON Pointer for use as a URI fragment (RFC 6901 §6).
@@ -314,6 +317,7 @@ impl SchemaStore {
             discriminator_enforce: opts.discriminator_enforce,
             lexical_integers: opts.lexical_integers,
             relax_required: opts.relax_required,
+            allow_backtracking: opts.allow_backtracking,
         };
         let mut roots = request_roots.clone();
         roots.extend(response_roots.iter().cloned());
@@ -362,6 +366,7 @@ impl SchemaStore {
                 request: DirStore::new(Direction::Request, request_roots, opts.assert_formats),
                 response: DirStore::new(Direction::Response, response_roots, opts.assert_formats),
                 patterns: RwLock::new(HashMap::new()),
+                backtracking: t.needs_backtracking,
                 in_place_depth: m.depth,
             },
             t.warnings,
@@ -399,7 +404,6 @@ impl SchemaStore {
             .with_draft(Draft::Draft202012)
             .with_registry(&self.registry)
             .offline()
-            .with_pattern_options(PatternOptions::regex())
             .should_validate_formats(dir.assert_formats)
             .should_ignore_unknown_formats(true)
             .with_keyword("x-oav-int", |_: &Map<String, Value>, _: &Value, _| {
@@ -448,6 +452,15 @@ impl SchemaStore {
                     Ok(Box::new(DirRequired(names)) as Box<dyn for<'i> Keyword<'i>>)
                 },
             );
+        // Linear-time matching unless the document has patterns that need
+        // backtracking; those run with a step limit.
+        opts = if self.backtracking {
+            opts.with_pattern_options(
+                PatternOptions::fancy_regex().backtrack_limit(crate::pattern::BACKTRACK_LIMIT),
+            )
+        } else {
+            opts.with_pattern_options(PatternOptions::regex())
+        };
         for name in format::ASSERTED {
             if !format::is_numeric_format(name) {
                 opts = opts.with_format(*name, move |s: &str| format::check_str(name, s));
@@ -533,13 +546,16 @@ impl SchemaStore {
         v
     }
 
-    pub(crate) fn regex(&self, translated: &str) -> Option<Arc<regex::Regex>> {
+    pub(crate) fn regex(&self, translated: &str) -> Option<Arc<crate::pattern::Matcher>> {
         if let Ok(map) = self.patterns.read() {
             if let Some(r) = map.get(translated) {
                 return Some(Arc::clone(r));
             }
         }
-        let r = Arc::new(crate::pattern::build(translated).ok()?);
+        let m = crate::pattern::build_any(translated, false)
+            .or_else(|_| crate::pattern::build_any(translated, true))
+            .ok()?;
+        let r = Arc::new(m);
         if let Ok(mut map) = self.patterns.write() {
             map.insert(translated.to_owned(), Arc::clone(&r));
         }

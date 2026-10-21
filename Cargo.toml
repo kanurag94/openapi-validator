@@ -25,6 +25,7 @@ categories = ["web-programming", "parser-implementations"]
 jsonschema = { version = "0.59", default-features = false, features = ["arbitrary-precision"] }
 serde_json = { version = "1", features = ["arbitrary_precision", "preserve_order"] }
 regex = "1"
+fancy-regex = "0.19"
 num-bigint = "0.4"
 num-traits = "0.2"
 saphyr-parser = "0.2"

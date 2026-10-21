@@ -1,0 +1,22 @@
+title: A negative lookbehind is honoured
+ref: "JSON Schema 2020-12 Validation §6.3.3; ECMA-262 §22.2"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /t:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: string, pattern: '(?<!x)y$'}
+        responses: {"200": {description: ok}}
+request:
+  method: POST
+  path: /t
+  headers: [["Content-Type", "application/json"]]
+  body: '"xy"'
+expect:
+  valid: false
+  location: body

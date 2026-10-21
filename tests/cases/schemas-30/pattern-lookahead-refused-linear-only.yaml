@@ -1,5 +1,7 @@
-title: "A lookahead in pattern makes the document refused"
+title: "A lookahead in pattern makes the document refused (patterns: linear-only)"
 ref: "JSON Schema Validation (Wright draft 00) §5.2.3 pattern"
+options:
+  patterns: linear-only
 document: |
   openapi: 3.0.3
   info: {title: t, version: "1"}

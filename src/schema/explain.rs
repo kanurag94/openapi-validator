@@ -312,7 +312,13 @@ impl<'a> Explainer<'a> {
                         continue;
                     };
                     if let Some(re) = self.store.regex(p) {
-                        if !re.is_match(s) {
+                        if re.is_match(s).is_none() {
+                            self.push(
+                                ipath,
+                                "could not be checked against its pattern within the step limit"
+                                    .into(),
+                            );
+                        } else if re.is_match(s) == Some(false) {
                             let src = m
                                 .get("x-oav-pattern-src")
                                 .and_then(Value::as_str)
@@ -494,7 +500,7 @@ impl<'a> Explainer<'a> {
                             continue;
                         };
                         for (name, x) in o {
-                            if rx.is_match(name) {
+                            if rx.is_match(name) == Some(true) {
                                 self.node(
                                     sch,
                                     &doc::join(&kp, re),
@@ -518,7 +524,7 @@ impl<'a> Explainer<'a> {
                         .unwrap_or_default();
                     for (name, x) in o {
                         if props.is_some_and(|p| p.contains_key(name))
-                            || pats.iter().any(|r| r.is_match(name))
+                            || pats.iter().any(|r| r.is_match(name) == Some(true))
                         {
                             continue;
                         }

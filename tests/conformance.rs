@@ -28,8 +28,8 @@
 use std::path::{Path, PathBuf};
 
 use openapi_validator::{
-    DiscriminatorMode, FormatAssertion, IntegerSemantics, Options, ReadWriteRequired, Request,
-    Response, ServerPaths, Spec,
+    DiscriminatorMode, FormatAssertion, IntegerSemantics, Options, PatternEngine,
+    ReadWriteRequired, Request, Response, ServerPaths, Spec,
 };
 use serde_json::Value;
 
@@ -102,6 +102,13 @@ fn options(v: Option<&Value>) -> Result<Options, String> {
                     Some("mathematical") => IntegerSemantics::Mathematical,
                     Some("lexical-in-30") => IntegerSemantics::LexicalIn30,
                     _ => return Err("integers must be mathematical or lexical-in-30".into()),
+                }
+            }
+            "patterns" => {
+                o.patterns = match x.as_str() {
+                    Some("bounded") => PatternEngine::Bounded,
+                    Some("linear-only") => PatternEngine::LinearOnly,
+                    _ => return Err("patterns must be bounded or linear-only".into()),
                 }
             }
             "read_write_required" => {

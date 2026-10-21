@@ -111,6 +111,7 @@ typedef struct {
     int discriminator;                 /* 0 annotation (default), 1 enforce */
     int integers;                      /* 0 mathematical (default), 1 lexical in 3.0 */
     int read_write_required;           /* 0 by version (default), 1 relax in 3.1 too */
+    int patterns;                      /* 0 bounded backtracking (default), 1 refuse at load */
     int server_paths;                  /* 0 either (default), 1 required, 2 ignored */
     size_t max_problems;               /* default 20 */
     size_t max_report_bytes;           /* default 8192 */

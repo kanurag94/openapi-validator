@@ -1,5 +1,7 @@
-title: "A negative lookahead in pattern makes the document refused"
+title: "A lookbehind in pattern makes the document refused (patterns: linear-only)"
 ref: "JSON Schema Validation 2020-12 §6.3.3 pattern"
+options:
+  patterns: linear-only
 document: |
   openapi: 3.1.0
   info: {title: t, version: "1"}
@@ -10,7 +12,7 @@ document: |
           required: true
           content:
             application/json:
-              schema: {type: string, pattern: '^(?!x)'}
+              schema: {type: string, pattern: '(?<=a)b'}
         responses: {"200": {description: ok}}
 expect:
   load_error: true

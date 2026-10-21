@@ -1,5 +1,7 @@
-title: "A lookahead in a patternProperties key makes the document refused"
-ref: "JSON Schema Core 2020-12 §10.3.2.2 patternProperties"
+title: "A negative lookahead in pattern makes the document refused (patterns: linear-only)"
+ref: "JSON Schema Validation 2020-12 §6.3.3 pattern"
+options:
+  patterns: linear-only
 document: |
   openapi: 3.1.0
   info: {title: t, version: "1"}
@@ -10,7 +12,7 @@ document: |
           required: true
           content:
             application/json:
-              schema: {type: object, patternProperties: {'^(?=a)': {}}}
+              schema: {type: string, pattern: '^(?!x)'}
         responses: {"200": {description: ok}}
 expect:
   load_error: true

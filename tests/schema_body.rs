@@ -325,8 +325,13 @@ fn patterns() {
     let t = std::time::Instant::now();
     bad(&s, &long, "body");
     assert!(t.elapsed().as_millis() < 500);
+    // Lookahead runs on the bounded engine by default...
+    let s = load("3.1.0", r#"{"type": "string", "pattern": "^(?=a)"}"#, "");
+    ok(&s, r#""abc""#);
+    bad(&s, r#""bc""#, "body");
+    // ...and is refused at load, naming the pattern, by the gateway profile.
     let d = doc("3.1.0", r#"{"type": "string", "pattern": "^(?=a)"}"#, "");
-    let e = Spec::load(d.as_bytes(), Options::default())
+    let e = Spec::load(d.as_bytes(), Options::gateway_profile())
         .err()
         .expect("lookahead refused");
     assert!(e.to_string().contains("(?=a)"), "{e}");

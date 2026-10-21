@@ -95,6 +95,18 @@ pub enum ReadWriteRequired {
     RelaxAlways,
 }
 
+/// How patterns that need backtracking (lookaround, backreferences) run.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PatternEngine {
+    /// On `fancy-regex` with a step limit per match; every other pattern
+    /// stays on the linear-time engine. A match that hits the limit is
+    /// reported, never accepted.
+    #[default]
+    Bounded,
+    /// Refuse such patterns at load, naming them.
+    LinearOnly,
+}
+
 /// Header names that are always treated as declared when
 /// `allow_unknown_headers` is false: transport headers (RFC 9110, RFC 9112).
 pub const DEFAULT_IGNORED_HEADERS: &[&str] = &[
@@ -138,6 +150,7 @@ pub struct Options {
     pub discriminator: DiscriminatorMode,
     pub integers: IntegerSemantics,
     pub read_write_required: ReadWriteRequired,
+    pub patterns: PatternEngine,
     /// Decode `+` as a space in query strings, as HTML forms and the WHATWG
     /// URL standard do. Default true.
     pub query_plus_as_space: bool,
@@ -165,6 +178,7 @@ impl Default for Options {
             discriminator: DiscriminatorMode::default(),
             integers: IntegerSemantics::default(),
             read_write_required: ReadWriteRequired::default(),
+            patterns: PatternEngine::default(),
             query_plus_as_space: true,
         }
     }
@@ -174,7 +188,8 @@ impl Options {
     /// The defaults with the gateway-oriented choices of this library's
     /// original design switched on: every listed format asserted, the
     /// discriminator enforced, OpenAPI 3.0 integers read lexically, and
-    /// readOnly/writeOnly relaxing `required` in 3.1 as in 3.0. Each goes
+    /// readOnly/writeOnly relaxing `required` in 3.1 as in 3.0, and patterns
+    /// that need backtracking refused at load. Each goes
     /// beyond what the specifications require.
     pub fn gateway_profile() -> Options {
         Options {
@@ -182,6 +197,7 @@ impl Options {
             discriminator: DiscriminatorMode::Enforce,
             integers: IntegerSemantics::LexicalIn30,
             read_write_required: ReadWriteRequired::RelaxAlways,
+            patterns: PatternEngine::LinearOnly,
             ..Options::default()
         }
     }
@@ -209,6 +225,7 @@ impl fmt::Debug for Options {
             .field("discriminator", &self.discriminator)
             .field("integers", &self.integers)
             .field("read_write_required", &self.read_write_required)
+            .field("patterns", &self.patterns)
             .field("query_plus_as_space", &self.query_plus_as_space)
             .finish()
     }

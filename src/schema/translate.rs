@@ -103,12 +103,17 @@ pub struct Options {
     pub discriminator_enforce: bool,
     pub lexical_integers: bool,
     pub relax_required: bool,
+    /// Run lookaround and backreferences on the bounded engine instead of
+    /// refusing them.
+    pub allow_backtracking: bool,
 }
 
 /// The translated skeleton for one direction.
 pub struct Translated {
     pub resource: Value,
     pub warnings: Vec<Warning>,
+    /// Some pattern needs the bounded backtracking engine.
+    pub needs_backtracking: bool,
 }
 
 /// Per-schema context passed down while translating.
@@ -138,6 +143,7 @@ struct Translator<'a> {
     nodisc: HashMap<String, String>,
     synthetic: Vec<(String, Value)>,
     pattern_cache: HashMap<String, String>,
+    needs_backtracking: bool,
     anchors: Option<HashSet<String>>,
     ids: Option<Vec<String>>,
 }
@@ -160,6 +166,7 @@ pub fn translate(
         nodisc: HashMap::new(),
         synthetic: Vec::new(),
         pattern_cache: HashMap::new(),
+        needs_backtracking: false,
         anchors: None,
         ids: None,
     };
@@ -233,6 +240,7 @@ pub fn translate(
     Ok(Translated {
         resource: skeleton,
         warnings: t.warnings,
+        needs_backtracking: t.needs_backtracking,
     })
 }
 
@@ -776,11 +784,17 @@ impl Translator<'_> {
         if let Some(t) = self.pattern_cache.get(p) {
             return Ok(t.clone());
         }
-        let translated = pattern::translate(p).map_err(|error| LoadError::Pattern {
+        let to_err = |error| LoadError::Pattern {
             location: location.to_owned(),
             error,
-        })?;
-        pattern::build(&translated).map_err(|reason| LoadError::Pattern {
+        };
+        let (translated, backtracking) = if self.opts.allow_backtracking {
+            pattern::translate_any(p).map_err(to_err)?
+        } else {
+            (pattern::translate(p).map_err(to_err)?, false)
+        };
+        self.needs_backtracking |= backtracking;
+        pattern::build_any(&translated, backtracking).map_err(|reason| LoadError::Pattern {
             location: location.to_owned(),
             error: pattern::PatternError {
                 pattern: p.to_owned(),
