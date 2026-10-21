@@ -481,7 +481,12 @@ fn xml_depth_bound(b: &[u8]) -> usize {
 
 /// Checks that an XML body is well-formed (XML 1.0 §2.1). Nesting deeper
 /// than `max_depth` is refused before parsing.
-pub(crate) fn xml(body: &[u8], media: &MediaType, max_depth: usize) -> Result<(), String> {
+pub(crate) fn xml(
+    body: &[u8],
+    media: &MediaType,
+    max_depth: usize,
+    shape: Option<&crate::xml::XmlShape>,
+) -> Result<Option<Value>, String> {
     let s = text(body, media)?;
     if xml_depth_bound(s.as_bytes()) > max_depth {
         return Err(format!(
@@ -493,9 +498,9 @@ pub(crate) fn xml(body: &[u8], media: &MediaType, max_depth: usize) -> Result<()
         nodes_limit: 1_000_000,
         ..roxmltree::ParsingOptions::default()
     };
-    roxmltree::Document::parse_with_options(&s, opts)
-        .map(|_| ())
-        .map_err(|e| format!("the body is not well-formed XML: {e}"))
+    let d = roxmltree::Document::parse_with_options(&s, opts)
+        .map_err(|e| format!("the body is not well-formed XML: {e}"))?;
+    Ok(shape.map(|sh| crate::xml::to_json(&d.root_element(), sh, 0)))
 }
 
 /// Undoes `Content-Encoding` (RFC 9110 §8.4): codings are listed in the

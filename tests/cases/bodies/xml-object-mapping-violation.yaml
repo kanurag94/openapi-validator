@@ -1,0 +1,21 @@
+title: "An XML attribute that breaks its schema is reported at its property"
+ref: "OpenAPI 3.1.1 §4.8.26 (attribute)"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /pets:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/xml:
+              schema:
+                type: object
+                required: [id, name]
+                properties:
+                  id: {type: integer, minimum: 1, xml: {attribute: true}}
+                  name: {type: string}
+        responses: {"201": {description: created}}
+request: {"method": "POST", "path": "/pets", "headers": [["Content-Type", "application/xml"]], "body": "<pet id=\"0\"><nickname>x</nickname></pet>"}
+expect: {"valid": false, "kind": "schema_violation", "location": "body/id"}

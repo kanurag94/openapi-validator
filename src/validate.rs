@@ -144,7 +144,7 @@ impl Spec {
                 },
             )
         } else if actual.is_xml() {
-            body::xml(bytes, actual, depth).map(|()| None)
+            body::xml(bytes, actual, depth, entry.xml.as_ref())
         } else if actual.ty == "text" {
             body::text(bytes, actual).map(|t| Some(coerce_text(t, &entry.shape)))
         } else {

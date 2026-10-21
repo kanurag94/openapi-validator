@@ -61,6 +61,7 @@ mod security;
 mod server;
 mod spec;
 mod validate;
+mod xml;
 pub mod yaml;
 
 pub use doc::{LoadError, Version, Warning};

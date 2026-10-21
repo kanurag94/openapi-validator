@@ -19,6 +19,8 @@ pub(crate) struct MediaEntry {
     /// Declared properties, for form and multipart bodies.
     pub props: FormProps,
     pub encodings: Vec<Encoding>,
+    /// XML mapping of the schema, for XML media types.
+    pub xml: Option<crate::xml::XmlShape>,
 }
 
 pub(crate) struct Body {
@@ -114,6 +116,12 @@ impl<'a> Builder<'a> {
                 _ => Vec::new(),
             };
             let encodings = self.encodings(media.get("encoding"), &doc::join(&mptr, "encoding"));
+            let xml = match schema_v {
+                Some(s) if mt.is_xml() => {
+                    Some(crate::xml::shape(self.root, s, self.version, None, 0))
+                }
+                _ => None,
+            };
             out.push((
                 mt,
                 MediaEntry {
@@ -122,6 +130,7 @@ impl<'a> Builder<'a> {
                     shape,
                     props,
                     encodings,
+                    xml,
                 },
             ));
         }

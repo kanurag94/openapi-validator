@@ -1,0 +1,29 @@
+title: "XML properties map to elements and attributes by the XML Object"
+ref: "OpenAPI 3.1.1 §4.8.26 (name, attribute, wrapped)"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /pets:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/xml:
+              schema: {$ref: '#/components/schemas/Pet'}
+        responses: {"201": {description: created}}
+  components:
+    schemas:
+      Pet:
+        type: object
+        required: [id, name]
+        properties:
+          id: {type: integer, xml: {attribute: true}}
+          name: {type: string, xml: {name: fullName}}
+          tags:
+            type: array
+            xml: {wrapped: true}
+            items: {type: string, xml: {name: tag}}
+        additionalProperties: false
+request: {"method": "POST", "path": "/pets", "headers": [["Content-Type", "application/xml"]], "body": "<Pet id=\"7\"><fullName>Rex</fullName><tags><tag>a</tag><tag>b</tag></tags></Pet>"}
+expect: {"valid": true}

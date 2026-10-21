@@ -1,5 +1,5 @@
-title: "Predefined entities and character references are allowed"
-ref: "XML 1.0 §4.6, OpenAPI 3.1.1 §4.8.14"
+title: "A well-formed XML body is checked against its schema through the XML Object"
+ref: "OpenAPI 3.1.1 §4.8.26 (XML Object); XML 1.0 §2.1"
 document: |
   openapi: 3.1.0
   info: {title: t, version: "1"}
@@ -13,4 +13,4 @@ document: |
               schema: {type: integer}
         responses: {"200": {description: ok}}
 request: {"method": "POST", "path": "/x", "headers": [["Content-Type", "application/xml"]], "body": "<a>&lt;x&gt; &amp; &#65;</a>"}
-expect: {"valid": true}
+expect: {"valid": false, "kind": "schema_violation", "location": "body"}
