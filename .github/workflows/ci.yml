@@ -47,3 +47,19 @@ jobs:
       - run: cargo test --workspace
       - name: Stack and work limits (release)
         run: cargo test --release --test limits
+
+  ffi-go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - run: cargo build --release -p openapi-validator-ffi
+      - name: Go cgo test
+        working-directory: ffi/go
+        run: |
+          go vet ./...
+          GOEXPERIMENT=cgocheck2 go test -count=1 -race ./...
