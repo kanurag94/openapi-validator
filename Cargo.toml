@@ -37,4 +37,17 @@ debug = true
 regex-syntax = "0.8"
 jsonschema-regex = "0.59"
 proptest = "1"
+criterion = { version = "0.5", default-features = false }
 serde_json = { version = "1", features = ["arbitrary_precision", "preserve_order"] }
+
+[[bench]]
+name = "build"
+harness = false
+
+[[bench]]
+name = "calls"
+harness = false
+
+[[bench]]
+name = "pathological"
+harness = false
