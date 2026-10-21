@@ -1,0 +1,18 @@
+title: "Response header names match case-insensitively"
+ref: "OpenAPI 3.1.1 §4.8.21, RFC 9110 §5.1"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /r:
+      get:
+        responses:
+          "200":
+            description: ok
+            headers:
+              X-Rate-Limit:
+                required: true
+                schema: {type: integer, minimum: 0}
+request: {"method": "GET", "path": "/r"}
+response: {"status": 200, "headers": [["x-RATE-limit", "10"]]}
+expect: {"valid": true}

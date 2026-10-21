@@ -1,0 +1,19 @@
+title: "A part value may contain line breaks"
+ref: "RFC 2046 §5.1.1"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /x:
+      post:
+        requestBody:
+          required: true
+          content:
+            multipart/form-data:
+              schema:
+                type: object
+                properties:
+                  note: {type: string, const: "a\r\nb"}
+        responses: {"200": {description: ok}}
+request: {"method": "POST", "path": "/x", "headers": [["Content-Type", "multipart/form-data; boundary=B"]], "body": "--B\r\nContent-Disposition: form-data; name=\"note\"\r\n\r\na\r\nb\r\n--B--\r\n"}
+expect: {"valid": true}

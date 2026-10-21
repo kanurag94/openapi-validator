@@ -1,0 +1,20 @@
+title: "A Content-Type not among the content keys is unsupported"
+ref: "OpenAPI 3.1.1 §4.8.14"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /x:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name: {type: string}
+                  age: {type: integer}
+        responses: {"200": {description: ok}}
+request: {"method": "POST", "path": "/x", "headers": [["Content-Type", "text/plain"]], "body": "hello"}
+expect: {"valid": false, "kind": "unsupported_media_type", "location": "header.content-type"}

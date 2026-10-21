@@ -1,0 +1,16 @@
+title: "Two root elements are not well-formed"
+ref: "XML 1.0 §2.1, OpenAPI 3.1.1 §4.8.14"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /x:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/xml:
+              schema: {type: integer}
+        responses: {"200": {description: ok}}
+request: {"method": "POST", "path": "/x", "headers": [["Content-Type", "application/xml"]], "body": "<a/><b/>"}
+expect: {"valid": false, "kind": "malformed_body", "location": "body"}

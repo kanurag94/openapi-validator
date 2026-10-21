@@ -1,0 +1,19 @@
+title: "1XX covers informational codes"
+ref: "OpenAPI 3.1.1 §4.8.16.2"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /r:
+      get:
+        responses:
+          "200":
+            description: ok
+            content:
+              application/json:
+                schema: {type: object}
+          "1XX":
+            description: info
+request: {"method": "GET", "path": "/r"}
+response: {"status": 103}
+expect: {"valid": true}

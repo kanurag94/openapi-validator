@@ -1,0 +1,21 @@
+title: "3.0 multipart bodies are checked the same way"
+ref: "OpenAPI 3.0.4 §4.8.15.5"
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /x:
+      post:
+        requestBody:
+          required: true
+          content:
+            multipart/form-data:
+              schema:
+                type: object
+                required: ["id"]
+                properties:
+                  id: {type: integer}
+                  note: {type: string}
+        responses: {"200": {description: ok}}
+request: {"method": "POST", "path": "/x", "headers": [["Content-Type", "multipart/form-data; boundary=B"]], "body": "--B\r\nContent-Disposition: form-data; name=\"note\"\r\n\r\na\r\n--B--\r\n"}
+expect: {"valid": false, "kind": "schema_violation", "location": "body/id"}

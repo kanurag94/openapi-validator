@@ -1,0 +1,16 @@
+title: "iso-8859-1 text is decoded"
+ref: "OpenAPI 3.1.1 §4.8.14, RFC 2046 §4.1.2"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /x:
+      post:
+        requestBody:
+          required: true
+          content:
+            text/plain:
+              schema: {type: string, maxLength: 3}
+        responses: {"200": {description: ok}}
+request: {"method": "POST", "path": "/x", "headers": [["Content-Type", "text/plain; charset=ISO-8859-1"]], "body": "abc"}
+expect: {"valid": true}

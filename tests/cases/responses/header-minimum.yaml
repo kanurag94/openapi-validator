@@ -1,0 +1,18 @@
+title: "A header value below minimum fails"
+ref: "OpenAPI 3.1.1 §4.8.21"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /r:
+      get:
+        responses:
+          "200":
+            description: ok
+            headers:
+              X-Rate-Limit:
+                required: true
+                schema: {type: integer, minimum: 0}
+request: {"method": "GET", "path": "/r"}
+response: {"status": 200, "headers": [["X-Rate-Limit", "-1"]]}
+expect: {"valid": false, "kind": "invalid_parameter", "location": "header.x-rate-limit"}

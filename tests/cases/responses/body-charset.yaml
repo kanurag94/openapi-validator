@@ -1,0 +1,17 @@
+title: "A charset parameter does not block a response match"
+ref: "OpenAPI 3.1.1 §4.8.17, RFC 9110 §8.3.1"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /r:
+      get:
+        responses:
+          "200":
+            description: ok
+            content:
+              application/json:
+                schema: {type: object}
+request: {"method": "GET", "path": "/r"}
+response: {"status": 200, "headers": [["Content-Type", "application/json;charset=UTF-8"]], "body": "{}"}
+expect: {"valid": true}

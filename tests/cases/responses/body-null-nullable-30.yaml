@@ -1,0 +1,17 @@
+title: "nullable true admits null in 3.0"
+ref: "OpenAPI 3.0.4 §4.8.24.1 (nullable)"
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /r:
+      get:
+        responses:
+          "200":
+            description: ok
+            content:
+              application/json:
+                schema: {type: object, nullable: true}
+request: {"method": "GET", "path": "/r"}
+response: {"status": 200, "headers": [["Content-Type", "application/json"]], "body": "null"}
+expect: {"valid": true}

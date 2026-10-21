@@ -1,0 +1,20 @@
+title: "A charset parameter does not stop application/json matching"
+ref: "OpenAPI 3.1.1 §4.8.14, RFC 9110 §8.3.1"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /x:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name: {type: string}
+                  age: {type: integer}
+        responses: {"200": {description: ok}}
+request: {"method": "POST", "path": "/x", "headers": [["Content-Type", "application/json; charset=utf-8"]], "body": "{\"age\": 4}"}
+expect: {"valid": true}

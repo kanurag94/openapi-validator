@@ -1,0 +1,20 @@
+title: "A required body missing altogether is reported"
+ref: "OpenAPI 3.1.1 §4.8.13 (required)"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /x:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name: {type: string}
+                  age: {type: integer}
+        responses: {"200": {description: ok}}
+request: {"method": "POST", "path": "/x"}
+expect: {"valid": false, "kind": "missing_body", "location": "body"}

@@ -1,0 +1,20 @@
+title: "A body without the close delimiter is malformed"
+ref: "RFC 2046 §5.1.1"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /x:
+      post:
+        requestBody:
+          required: true
+          content:
+            multipart/form-data:
+              schema:
+                type: object
+                properties:
+                  id: {type: integer}
+                  note: {type: string}
+        responses: {"200": {description: ok}}
+request: {"method": "POST", "path": "/x", "headers": [["Content-Type", "multipart/form-data; boundary=B"]], "body": "--B\r\nContent-Disposition: form-data; name=\"id\"\r\n\r\n1\r\n"}
+expect: {"valid": false, "kind": "malformed_body", "location": "body"}

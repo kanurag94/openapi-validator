@@ -1,0 +1,20 @@
+title: "A 3.0 document validates a JSON body the same way"
+ref: "OpenAPI 3.0.4 §4.8.13"
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /x:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name: {type: string}
+                  age: {type: integer}
+        responses: {"200": {description: ok}}
+request: {"method": "POST", "path": "/x", "headers": [["Content-Type", "application/json"]], "body": "{\"age\": \"x\"}"}
+expect: {"valid": false, "kind": "schema_violation", "location": "body/age"}

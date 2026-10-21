@@ -1,0 +1,18 @@
+title: "A response body longer than max_body_bytes is refused"
+ref: "OpenAPI 3.1.1 §4.8.17"
+options: {"max_body_bytes": 8}
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /r:
+      get:
+        responses:
+          "200":
+            description: ok
+            content:
+              application/json:
+                schema: {type: object}
+request: {"method": "GET", "path": "/r"}
+response: {"status": 200, "headers": [["Content-Type", "application/json"]], "body": "{\"a\": \"0123456789\"}"}
+expect: {"valid": false, "kind": "body_too_large", "location": "body"}

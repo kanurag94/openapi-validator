@@ -1,0 +1,17 @@
+title: "Nesting beyond max_body_depth is refused as malformed"
+ref: "OpenAPI 3.1.1 §4.8.14"
+options: {"max_body_depth": 3}
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /x:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {}
+        responses: {"200": {description: ok}}
+request: {"method": "POST", "path": "/x", "headers": [["Content-Type", "application/json"]], "body": "[[[[[1]]]]]"}
+expect: {"valid": false, "kind": "malformed_body", "location": "body"}

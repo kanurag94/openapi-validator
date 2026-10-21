@@ -1,0 +1,16 @@
+title: "UTF-8 text length counts characters, not bytes"
+ref: "OpenAPI 3.1.1 §4.8.14, JSON Schema Validation §6.3.1"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /x:
+      post:
+        requestBody:
+          required: true
+          content:
+            text/plain:
+              schema: {type: string, maxLength: 3}
+        responses: {"200": {description: ok}}
+request: {"method": "POST", "path": "/x", "headers": [["Content-Type", "text/plain; charset=utf-8"]], "body": "\u00e9\u00e9\u00e9"}
+expect: {"valid": true}

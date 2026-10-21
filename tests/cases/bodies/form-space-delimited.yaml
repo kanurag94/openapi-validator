@@ -1,0 +1,21 @@
+title: "spaceDelimited splits on encoded spaces"
+ref: "OpenAPI 3.1.1 §4.8.15.1, §4.8.12.4"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /x:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/x-www-form-urlencoded:
+              schema:
+                type: object
+                properties:
+                  tags: {type: array, items: {type: string}, minItems: 3}
+              encoding:
+                tags: {style: spaceDelimited, explode: false}
+        responses: {"200": {description: ok}}
+request: {"method": "POST", "path": "/x", "headers": [["Content-Type", "application/x-www-form-urlencoded"]], "body": "tags=a%20b%20c"}
+expect: {"valid": true}

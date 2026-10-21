@@ -1,0 +1,17 @@
+title: "A text/plain response is checked as a string"
+ref: "OpenAPI 3.1.1 §4.8.17, OpenAPI 3.1.1 §4.8.14"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /r:
+      get:
+        responses:
+          "200":
+            description: ok
+            content:
+              text/plain:
+                schema: {type: string, enum: [pong]}
+request: {"method": "GET", "path": "/r"}
+response: {"status": 200, "headers": [["Content-Type", "text/plain"]], "body": "ping"}
+expect: {"valid": false, "kind": "schema_violation", "location": "body"}

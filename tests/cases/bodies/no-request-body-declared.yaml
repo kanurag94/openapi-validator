@@ -1,0 +1,11 @@
+title: "A body on an operation without requestBody is not a problem"
+ref: "OpenAPI 3.1.1 §4.8.13"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /x:
+      post:
+        responses: {"200": {description: ok}}
+request: {"method": "POST", "path": "/x", "headers": [["Content-Type", "application/json"]], "body": "{\"a\": 1}"}
+expect: {"valid": true}

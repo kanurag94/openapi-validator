@@ -1,0 +1,17 @@
+title: "5XX covers 503"
+ref: "OpenAPI 3.1.1 §4.8.16.2"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /r:
+      get:
+        responses:
+          "5XX":
+            description: ok
+            content:
+              application/json:
+                schema: {type: object}
+request: {"method": "GET", "path": "/r"}
+response: {"status": 503, "headers": [["Content-Type", "application/json"]], "body": "{\"retry\": true}"}
+expect: {"valid": true}

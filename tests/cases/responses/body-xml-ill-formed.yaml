@@ -1,0 +1,17 @@
+title: "An ill-formed XML response is malformed"
+ref: "OpenAPI 3.1.1 §4.8.17, XML 1.0 §2.1"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /r:
+      get:
+        responses:
+          "200":
+            description: ok
+            content:
+              application/xml:
+                schema: {type: object}
+request: {"method": "GET", "path": "/r"}
+response: {"status": 200, "headers": [["Content-Type", "application/xml"]], "body": "<a><b></a>"}
+expect: {"valid": false, "kind": "malformed_body", "location": "body"}

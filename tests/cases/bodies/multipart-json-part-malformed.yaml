@@ -1,0 +1,19 @@
+title: "A JSON part that is not JSON is malformed"
+ref: "OpenAPI 3.1.1 §4.8.15.5, RFC 7578 §4, RFC 8259 §2"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /x:
+      post:
+        requestBody:
+          required: true
+          content:
+            multipart/form-data:
+              schema:
+                type: object
+                properties:
+                  meta: {type: object}
+        responses: {"200": {description: ok}}
+request: {"method": "POST", "path": "/x", "headers": [["Content-Type", "multipart/form-data; boundary=B"]], "body": "--B\r\nContent-Disposition: form-data; name=\"meta\"\r\nContent-Type: application/json\r\n\r\n{\"n\": \r\n--B--\r\n"}
+expect: {"valid": false, "kind": "malformed_body"}

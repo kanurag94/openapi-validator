@@ -1,0 +1,16 @@
+title: "An unclosed element is not well-formed"
+ref: "OpenAPI 3.1.1 §4.8.14, XML 1.0 §2.1"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /x:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/xml:
+              schema: {type: integer}
+        responses: {"200": {description: ok}}
+request: {"method": "POST", "path": "/x", "headers": [["Content-Type", "application/xml"]], "body": "<pet><name>rex</name>"}
+expect: {"valid": false, "kind": "malformed_body", "location": "body"}

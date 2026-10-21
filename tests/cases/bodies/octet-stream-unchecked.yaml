@@ -1,0 +1,16 @@
+title: "application/octet-stream content is not parsed"
+ref: "OpenAPI 3.1.1 §4.8.14 (binary content)"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /x:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/octet-stream:
+              schema: {type: integer}
+        responses: {"200": {description: ok}}
+request: {"method": "POST", "path": "/x", "headers": [["Content-Type", "application/octet-stream"]], "body": "not a number {"}
+expect: {"valid": true}

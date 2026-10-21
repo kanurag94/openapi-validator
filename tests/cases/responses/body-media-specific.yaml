@@ -1,0 +1,18 @@
+title: "The most specific response media key is chosen"
+ref: "OpenAPI 3.1.1 §4.8.17, OpenAPI 3.1.1 §4.8.14"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /r:
+      get:
+        responses:
+          "200":
+            description: ok
+            content:
+              "*/*": {}
+              application/json:
+                schema: {type: array}
+request: {"method": "GET", "path": "/r"}
+response: {"status": 200, "headers": [["Content-Type", "application/json"]], "body": "{}"}
+expect: {"valid": false, "kind": "schema_violation", "location": "body"}

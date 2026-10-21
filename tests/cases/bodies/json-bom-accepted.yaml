@@ -1,0 +1,20 @@
+title: "A single leading byte order mark is ignored"
+ref: "RFC 8259 §8.1"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /x:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name: {type: string}
+                  age: {type: integer}
+        responses: {"200": {description: ok}}
+request: {"method": "POST", "path": "/x", "headers": [["Content-Type", "application/json"]], "body": "\ufeff{\"age\": 2}"}
+expect: {"valid": true}

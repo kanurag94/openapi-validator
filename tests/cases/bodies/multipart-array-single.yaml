@@ -1,0 +1,19 @@
+title: "An array property collects a single part into an array"
+ref: "OpenAPI 3.1.1 §4.8.15.5, RFC 7578 §4"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /x:
+      post:
+        requestBody:
+          required: true
+          content:
+            multipart/form-data:
+              schema:
+                type: object
+                properties:
+                  tags: {type: array, items: {type: integer}, minItems: 1}
+        responses: {"200": {description: ok}}
+request: {"method": "POST", "path": "/x", "headers": [["Content-Type", "multipart/form-data; boundary=B"]], "body": "--B\r\nContent-Disposition: form-data; name=\"tags\"\r\n\r\n5\r\n--B--\r\n"}
+expect: {"valid": true}

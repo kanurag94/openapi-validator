@@ -1,0 +1,17 @@
+title: "A 304 response has no content to check"
+ref: "OpenAPI 3.1.1 §4.8.17, RFC 9110 §15.4.5"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /r:
+      get:
+        responses:
+          "304":
+            description: ok
+            content:
+              application/json:
+                schema: {type: object}
+request: {"method": "GET", "path": "/r"}
+response: {"status": 304}
+expect: {"valid": true}

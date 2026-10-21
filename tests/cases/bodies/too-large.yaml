@@ -1,0 +1,21 @@
+title: "A body longer than max_body_bytes is refused"
+ref: "OpenAPI 3.1.1 §4.8.13"
+options: {"max_body_bytes": 10}
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /x:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name: {type: string}
+                  age: {type: integer}
+        responses: {"200": {description: ok}}
+request: {"method": "POST", "path": "/x", "headers": [["Content-Type", "application/json"]], "body": "{\"name\": \"a long name here\"}"}
+expect: {"valid": false, "kind": "body_too_large", "location": "body"}

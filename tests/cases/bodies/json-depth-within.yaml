@@ -1,0 +1,17 @@
+title: "Nesting inside max_body_depth is accepted"
+ref: "OpenAPI 3.1.1 §4.8.14"
+options: {"max_body_depth": 8}
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /x:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {}
+        responses: {"200": {description: ok}}
+request: {"method": "POST", "path": "/x", "headers": [["Content-Type", "application/json"]], "body": "[[1]]"}
+expect: {"valid": true}

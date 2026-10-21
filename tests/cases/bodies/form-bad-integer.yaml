@@ -1,0 +1,20 @@
+title: "A form field that is not an integer fails the property"
+ref: "OpenAPI 3.1.1 §4.8.15.4, WHATWG URL §5.1"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /x:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/x-www-form-urlencoded:
+              schema:
+                type: object
+                properties:
+                  name: {type: string}
+                  age: {type: integer}
+        responses: {"200": {description: ok}}
+request: {"method": "POST", "path": "/x", "headers": [["Content-Type", "application/x-www-form-urlencoded"]], "body": "name=rex&age=three"}
+expect: {"valid": false, "kind": "schema_violation", "location": "body/age"}

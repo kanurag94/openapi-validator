@@ -1,0 +1,17 @@
+title: "A numeric-looking value is a string for a string schema"
+ref: "OpenAPI 3.1.1 §4.8.21, OpenAPI 3.1.1 §4.8.12.4 (simple)"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /r:
+      get:
+        responses:
+          "200":
+            description: ok
+            headers:
+              X-Code:
+                schema: {type: string, pattern: "^[0-9]+$"}
+request: {"method": "GET", "path": "/r"}
+response: {"status": 200, "headers": [["X-Code", "5"]]}
+expect: {"valid": true}

@@ -1,0 +1,14 @@
+title: "A document with only default accepts any status"
+ref: "OpenAPI 3.1.1 §4.8.16.1 (default)"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /r:
+      get:
+        responses:
+          "default":
+            description: any
+request: {"method": "GET", "path": "/r"}
+response: {"status": 418}
+expect: {"valid": true}

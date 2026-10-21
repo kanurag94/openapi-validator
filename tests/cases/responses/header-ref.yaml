@@ -1,0 +1,22 @@
+title: "A header given by $ref is applied"
+ref: "OpenAPI 3.1.1 §4.8.21, §4.8.23"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /r:
+      get:
+        responses:
+          "200":
+            description: ok
+            headers:
+              X-Rate-Limit: {$ref: "#/components/headers/Rate"}
+
+  components:
+    headers:
+      Rate:
+        required: true
+        schema: {type: integer}
+request: {"method": "GET", "path": "/r"}
+response: {"status": 200}
+expect: {"valid": false, "kind": "missing_parameter", "location": "header.x-rate-limit"}

@@ -1,0 +1,16 @@
+title: "An XML declaration and comments are allowed"
+ref: "OpenAPI 3.1.1 §4.8.14, XML 1.0 §2.8"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /x:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/xml:
+              schema: {type: integer}
+        responses: {"200": {description: ok}}
+request: {"method": "POST", "path": "/x", "headers": [["Content-Type", "application/xml"]], "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!-- c --><pet a=\"1\"/>"}
+expect: {"valid": true}

@@ -1,0 +1,18 @@
+title: "3.0 required response headers are enforced"
+ref: "OpenAPI 3.0.4 §4.8.21"
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /r:
+      get:
+        responses:
+          "200":
+            description: ok
+            headers:
+              X-Rate-Limit:
+                required: true
+                schema: {type: integer, minimum: 0}
+request: {"method": "GET", "path": "/r"}
+response: {"status": 200}
+expect: {"valid": false, "kind": "missing_parameter", "location": "header.x-rate-limit"}

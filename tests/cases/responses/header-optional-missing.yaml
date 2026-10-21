@@ -1,0 +1,17 @@
+title: "An optional response header may be absent"
+ref: "OpenAPI 3.1.1 §4.8.21 (required default false)"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /r:
+      get:
+        responses:
+          "200":
+            description: ok
+            headers:
+              X-Trace:
+                schema: {type: string}
+request: {"method": "GET", "path": "/r"}
+response: {"status": 200}
+expect: {"valid": true}

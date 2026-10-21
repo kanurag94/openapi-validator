@@ -1,0 +1,17 @@
+title: "A 204 matched through default still needs no body"
+ref: "OpenAPI 3.1.1 §4.8.17, RFC 9110 §15.3.5"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /r:
+      get:
+        responses:
+          "default":
+            description: ok
+            content:
+              application/json:
+                schema: {type: object}
+request: {"method": "GET", "path": "/r"}
+response: {"status": 204}
+expect: {"valid": true}

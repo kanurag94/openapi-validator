@@ -1,0 +1,17 @@
+title: "Each array header item is checked"
+ref: "OpenAPI 3.1.1 §4.8.21, OpenAPI 3.1.1 §4.8.12.4 (simple)"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /r:
+      get:
+        responses:
+          "200":
+            description: ok
+            headers:
+              X-Ids:
+                schema: {type: array, items: {type: integer}}
+request: {"method": "GET", "path": "/r"}
+response: {"status": 200, "headers": [["X-Ids", "1,x"]]}
+expect: {"valid": false, "kind": "invalid_parameter", "location": "header.x-ids/1"}

@@ -1,0 +1,24 @@
+title: "3.0 documents use the same lookup order"
+ref: "OpenAPI 3.0.4 §4.8.16.2"
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /r:
+      get:
+        responses:
+          "201":
+            description: ok
+            content:
+              application/json:
+                schema: {type: array}
+          "2XX":
+            description: ok
+            content:
+              application/json:
+                schema: {type: object}
+          "default":
+            description: d
+request: {"method": "GET", "path": "/r"}
+response: {"status": 201, "headers": [["Content-Type", "application/json"]], "body": "{}"}
+expect: {"valid": false, "kind": "schema_violation", "location": "body"}

@@ -1,0 +1,19 @@
+title: "Each repeated pair is coerced by the item schema"
+ref: "OpenAPI 3.1.1 §4.8.15.1"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /x:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/x-www-form-urlencoded:
+              schema:
+                type: object
+                properties:
+                  tags: {type: array, items: {type: integer}, maxItems: 2}
+        responses: {"200": {description: ok}}
+request: {"method": "POST", "path": "/x", "headers": [["Content-Type", "application/x-www-form-urlencoded"]], "body": "tags=1&tags=x"}
+expect: {"valid": false, "kind": "schema_violation"}

@@ -1,0 +1,21 @@
+title: "A requestBody given by $ref is applied"
+ref: "OpenAPI 3.1.1 §4.8.13, §4.8.23"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /x:
+      post:
+        requestBody: {$ref: "#/components/requestBodies/Pet"}
+        responses: {"200": {description: ok}}
+  components:
+    requestBodies:
+      Pet:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+request: {"method": "POST", "path": "/x", "headers": [["Content-Type", "application/json"]], "body": "{}"}
+expect: {"valid": false, "kind": "schema_violation", "location": "body/name"}

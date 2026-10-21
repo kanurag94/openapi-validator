@@ -1,0 +1,21 @@
+title: "LF-only line breaks are accepted"
+ref: "RFC 2046 §5.1.1, OpenAPI 3.1.1 §4.8.15.5, RFC 7578 §4"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /x:
+      post:
+        requestBody:
+          required: true
+          content:
+            multipart/form-data:
+              schema:
+                type: object
+                required: ["id"]
+                properties:
+                  id: {type: integer}
+                  note: {type: string}
+        responses: {"200": {description: ok}}
+request: {"method": "POST", "path": "/x", "headers": [["Content-Type", "multipart/form-data; boundary=B"]], "body": "--B\nContent-Disposition: form-data; name=\"id\"\n\n9\n--B--\n"}
+expect: {"valid": true}
