@@ -1,5 +1,5 @@
 title: "3.0 documents use the same form rules"
-ref: "OpenAPI 3.0.4 §4.8.15.4"
+ref: "OpenAPI 3.0.4 §4.7.15.4"
 document: |
   openapi: 3.0.3
   info: {title: t, version: "1"}

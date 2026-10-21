@@ -1,5 +1,5 @@
 title: "format time: 00:59:60+01:00 is 23:59:60 UTC"
-ref: "OpenAPI 3.0.4 §4.8.24 (Data Types); RFC 3339 §5.6"
+ref: "OpenAPI 3.0.4 §4.7.24 (Data Types); RFC 3339 §5.6"
 document: |
   openapi: 3.0.3
   info: {title: t, version: "1"}

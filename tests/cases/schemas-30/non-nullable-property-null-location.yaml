@@ -1,5 +1,5 @@
 title: "A null in a non-nullable nested property is reported at that property"
-ref: "OpenAPI 3.0.4 §4.8.24 (nullable)"
+ref: "OpenAPI 3.0.4 §4.7.24 (nullable)"
 document: |
   openapi: 3.0.3
   info: {title: t, version: "1"}

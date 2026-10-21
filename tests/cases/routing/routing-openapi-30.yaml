@@ -1,5 +1,5 @@
 title: "A 3.0 document routes templated paths the same way"
-ref: "OpenAPI 3.0.4 §4.8.8.2 (Path Templating Matching)"
+ref: "OpenAPI 3.0.4 §4.7.8.2 (Path Templating Matching)"
 document: |
   openapi: 3.0.3
   info: {title: t, version: "1"}

@@ -1,5 +1,5 @@
 title: "A 3.0 http bearer scheme accepts a bearer token"
-ref: "OpenAPI 3.0.4 §4.8.27 (Security Scheme Object)"
+ref: "OpenAPI 3.0.4 §4.7.27 (Security Scheme Object)"
 document: |
   openapi: 3.0.3
   info: {title: t, version: "1"}

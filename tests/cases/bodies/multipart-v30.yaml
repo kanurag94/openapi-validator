@@ -1,5 +1,5 @@
 title: "3.0 multipart bodies are checked the same way"
-ref: "OpenAPI 3.0.4 §4.8.15.5"
+ref: "OpenAPI 3.0.4 §4.7.15.5"
 document: |
   openapi: 3.0.3
   info: {title: t, version: "1"}

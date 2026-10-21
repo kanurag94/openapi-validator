@@ -1,5 +1,5 @@
 title: "Under 3.0 an integer may not be written with a fraction (gateway profile)"
-ref: "OpenAPI 3.0.4 §4.8.12.2; §4.4.1 data types"
+ref: "OpenAPI 3.0.4 §4.7.12.2; §4.4.1 data types"
 options:
   profile: gateway
 document: |

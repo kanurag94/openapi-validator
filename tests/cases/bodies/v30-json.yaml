@@ -1,5 +1,5 @@
 title: "A 3.0 document validates a JSON body the same way"
-ref: "OpenAPI 3.0.4 §4.8.13"
+ref: "OpenAPI 3.0.4 §4.7.13"
 document: |
   openapi: 3.0.3
   info: {title: t, version: "1"}

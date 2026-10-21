@@ -1,5 +1,5 @@
 title: "A readOnly property sent in a request is still type-checked"
-ref: "OpenAPI 3.0.4 §4.8.24 (readOnly, writeOnly)"
+ref: "OpenAPI 3.0.4 §4.7.24 (readOnly, writeOnly)"
 document: |
   openapi: 3.0.3
   info: {title: t, version: "1"}

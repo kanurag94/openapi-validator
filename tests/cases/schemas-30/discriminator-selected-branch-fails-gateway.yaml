@@ -1,5 +1,5 @@
 title: "The selected Dog branch is enforced even if Cat would match (gateway profile)"
-ref: "OpenAPI 3.0.4 §4.8.25 (Discriminator Object)"
+ref: "OpenAPI 3.0.4 §4.7.25 (Discriminator Object)"
 options:
   profile: gateway
 document: |

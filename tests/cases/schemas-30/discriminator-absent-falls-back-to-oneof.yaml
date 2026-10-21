@@ -1,5 +1,5 @@
 title: "Without the property, plain oneOf applies and nothing matches"
-ref: "OpenAPI 3.0.4 §4.8.25 (Discriminator Object)"
+ref: "OpenAPI 3.0.4 §4.7.25 (Discriminator Object)"
 document: |
   openapi: 3.0.3
   info: {title: t, version: "1"}

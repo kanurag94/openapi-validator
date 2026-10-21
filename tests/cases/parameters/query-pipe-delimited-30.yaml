@@ -1,5 +1,5 @@
 title: "A pipeDelimited array works under 3.0.4"
-ref: "OpenAPI 3.0.4 §4.8.12.4 (style examples) pipeDelimited array"
+ref: "OpenAPI 3.0.4 §4.7.12.4 (style examples) pipeDelimited array"
 document: |
   openapi: 3.0.4
   info: {title: t, version: "1"}

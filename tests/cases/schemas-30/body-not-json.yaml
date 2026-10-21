@@ -1,5 +1,5 @@
 title: "A body that is not JSON is malformed"
-ref: "RFC 8259 §2; OpenAPI 3.0.4 §4.8.14 (Media Type Object)"
+ref: "RFC 8259 §2; OpenAPI 3.0.4 §4.7.14 (Media Type Object)"
 document: |
   openapi: 3.0.3
   info: {title: t, version: "1"}

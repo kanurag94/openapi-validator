@@ -2,7 +2,9 @@
 
 This document lists where OpenAPI, JSON Schema or the HTTP RFCs are silent, say SHOULD, or leave a choice open, and what this library does in each case.
 
-The guiding rule is to never refuse a valid call. Where reasonable people differ, the behaviour is an option. Section numbers refer to OpenAPI 3.1.1 unless stated otherwise; OpenAPI 3.0.4 uses the same numbers for these objects.
+The guiding rule is to never refuse a valid call. Where reasonable people differ, the behaviour is an option. Section numbers refer to OpenAPI 3.1.1 unless stated otherwise. OpenAPI 3.0.4 numbers the same objects one level lower: the Parameter Object is §4.8.12 in 3.1.1 and §4.7.12 in 3.0.4.
+
+The defaults follow the specification text. `Options::gateway_profile()` switches on stricter, gateway-oriented choices that go beyond it; each is noted below.
 
 ## Routing
 
@@ -12,10 +14,10 @@ The guiding rule is to never refuse a valid call. Where reasonable people differ
 - **Ties between templates.** §4.8.8.2 only says concrete paths beat templated ones. Among templates, the one with the most literal characters wins, then the one whose first differing segment is literal.
 - **Server paths.** The option `server_paths` decides whether the request path may (`either`, the default), must (`required`) or must not (`ignored`) start with a server path. Server paths are stripped as whole segments only.
 - **Operation servers.** Following §4.8.10.1, the server path used must serve the matched operation itself, not just a sibling operation on the same path item.
-- **Server variables without a default.** The variable is substituted as empty and a load warning is recorded.
+- **Server variables without `enum`.** The value is open, so any segment matches; `default` is only the value used when none is supplied (§4.8.6.1). A missing `default` is a load warning.
 - **Relative server URLs.** A relative URL such as `v1` is read as `/v1`, because there is no document URL at run time.
 - **Method case.** Methods are case-sensitive (RFC 9110 §9.1): `GET` matches the `get` operation and `get` does not.
-- **HEAD requests.** Without a `head` operation, HEAD is checked as GET (RFC 9110 §9.3.2), and the response body is not checked.
+- **HEAD requests.** Without a `head` operation, HEAD is checked as GET (RFC 9110 §9.3.2). A response to HEAD must not carry content.
 - **Unexpected request bodies.** A body sent to an operation without a `requestBody` is not reported.
 
 ## Parameters
@@ -39,10 +41,11 @@ The guiding rule is to never refuse a valid call. Where reasonable people differ
 ## Security
 
 - **Scope.** Only the presence of credentials is checked (§4.8.27). The `security_hook` option can verify them.
-- **HTTP schemes.** The `Authorization` header must start with the scheme as a whole, case-insensitive token, followed by whitespace and a non-empty credential (RFC 9110 §11.4). Any `Authorization` line may satisfy it.
+- **HTTP schemes.** The `Authorization` header must start with the scheme as a whole, case-insensitive token, followed by whitespace and a non-empty credential (RFC 9110 §11.4).
+- **Repeated single-value headers.** `Authorization` and `Content-Type` sent on more than one line are reported, because they take one value and a sender MUST NOT repeat them (RFC 9110 §5.3, §8.3, §11.6.2).
 - **OAuth 2 and OpenID Connect.** These need `Authorization: Bearer <token>` (RFC 6750 §2.1).
 - **Mutual TLS and unknown scheme types.** These are never refused, because they are not visible in the HTTP message.
-- **Undefined scheme names.** A requirement naming an undefined scheme is a load error (§4.8.30.2).
+- **Undefined scheme names.** A requirement naming an undefined scheme is a load error (§4.8.30.1).
 - **Incomplete API key schemes.** An `apiKey` scheme without `in` or `name` loads with a warning and is not checked.
 
 ## Bodies
@@ -62,29 +65,30 @@ The guiding rule is to never refuse a valid call. Where reasonable people differ
 
 - **Status lookup.** The exact code is tried first, then a range such as `2XX` in any case, then `default` (§4.8.16.2).
 - **Empty bodies.** An empty body where content is declared is reported, except for HEAD requests and 204 and 304 responses (RFC 9110 §15.3.5, §15.4.5).
+- **Content where none is allowed.** A response to HEAD, or a 204 or 304 response, that carries content is reported (RFC 9110 §9.3.2, §15.3.5, §15.4.5).
 - **Undeclared bodies.** A body where no content is declared is not reported.
 - **Header values.** Values are literal text in simple style and are never re-read as JSON (§4.8.21). Each repeated line is checked.
 - **Content-Type headers.** A declared `Content-Type` response header is ignored (§4.8.17.1).
 
 ## Schemas
 
-- **3.0 `nullable`.** It applies only when `type` is in the same schema object, `enum` must still list `null`, and it is never pushed into `allOf` or `oneOf` (3.0.4 §4.8.24.1).
+- **3.0 `nullable`.** It applies only when `type` is in the same schema object, `enum` must still list `null`, and it is never pushed into `allOf` or `oneOf` (3.0.4 §4.7.24.1).
 - **Unknown keywords in 3.0.** Keywords that are not part of the 3.0 Schema Object, such as `const` or `if`, are ignored.
-- **Integers.** In 3.0 an integer must be written without a fraction or exponent, so `1.0` is rejected. In 3.1 any number with a zero fraction is an integer (JSON Schema 2020-12 §6.1.1).
+- **Integers.** Any number with a zero fraction is an integer, so `1.0` and `1e2` are integers, in 3.0 (3.0.4 §4.4) and 3.1 (JSON Schema 2020-12 §6.1.1). The option `integers: LexicalIn30` applies the older 3.0.3 reading, where an integer is written without a fraction or exponent (gateway profile).
 - **Count keywords written as numbers.** Values such as `2.0` are counts. Beyond the 64-bit range, a maximum is unbounded and a minimum is unreachable. Negative or fractional counts are dropped with a warning.
-- **Formats.** date, time, date-time, email, uuid, uri, uri-reference, ipv4, ipv6, hostname, int32 and int64 are asserted. All other formats are annotations (JSON Schema 2020-12 §7.2). The option `assert_formats` turns assertion off.
-- **Hostnames.** Each label must contain only letters, digits and hyphens (RFC 1123). Punycode labels are not decoded or checked against IDNA rules.
+- **Formats.** Every JSON Schema 2020-12 format (§7.3) and OpenAPI's int32, int64, float, double and byte are implemented. In 3.1 they are annotations by default, as the format-annotation vocabulary requires (§7.2.1). In 3.0 they are asserted, which 3.0 allows. The option `formats` (`Always`, `Never`) overrides this; the gateway profile asserts them always. Unknown formats are always annotations.
+- **Host names.** `hostname` labels contain only letters, digits and hyphens (RFC 1123), and `xn--` labels must decode to valid IDNA2008 labels. `idn-hostname` follows UTS 46 processing (non-transitional, strict) plus the RFC 5892 contextual rules.
 - **Patterns.** Patterns are translated from ECMA-262 to the linear-time `regex` crate, keeping ECMA meanings. Lookaround and backreferences are a load error that names the pattern.
-- **Discriminator.** When the payload has the discriminator property, its value must be a mapped name, and the payload is checked against that schema (§4.8.25). When every `oneOf` or `anyOf` branch is mapped, the named branch alone decides; the option `discriminator_selects_branch` turns this off. Without the property, the plain `oneOf` or `anyOf` applies.
-- **Discriminator cycles.** When a child schema extends its base through `allOf`, the reference uses a copy of the base without the dispatch, so the common base-and-children pattern does not loop.
-- **readOnly and writeOnly.** These properties are dropped from `required` in the matching direction, including through `$ref` and `allOf`. Sending them is allowed, since the specification only says they SHOULD NOT be sent.
+- **Discriminator.** By default it is an annotation: it "MUST NOT change the validation outcome" (§4.8.25), so `oneOf` and `anyOf` decide alone and an allOf-style base never searches its children. The option `discriminator: Enforce` requires the value to be a mapped name and checks the payload against that schema alone (gateway profile).
+- **Discriminator cycles.** When a base lists a child in `oneOf` or `anyOf` and the child extends the base through `allOf`, the child's reference uses a copy of the base without that `oneOf`/`anyOf`, so the schema does not refer to itself without end.
+- **readOnly and writeOnly.** In 3.0, a required readOnly property is required in responses only and a writeOnly one in requests only (3.0.4 §4.7.24.1), including through `$ref` and `allOf`. In 3.1 they are annotations and `required` applies in both directions (§4.8.24.3.2); the option `read_write_required: RelaxAlways` applies the 3.0 rule (gateway profile). Sending them is never refused.
 - **Equality.** `enum`, `const` and `uniqueItems` compare numbers by value and ignore the key order of objects (JSON Schema 2020-12 §4.2.2).
 - **Fragment references in 3.1.** A `#` reference in a schema without `$id` resolves against the OpenAPI document root.
 - **Metaschema references.** References to the JSON Schema metaschemas are allowed, because they are built in and nothing is fetched.
 
 ## Parsing and limits
 
-- **JSON.** Duplicate keys, invalid UTF-8 and lone surrogate escapes are refused (RFC 8259 §4, §8). One leading byte order mark is ignored.
+- **JSON.** Duplicate keys, invalid UTF-8 and lone surrogate escapes are refused. RFC 8259 §4 leaves duplicate names to the parser, so parsers disagree on them; I-JSON (RFC 7493 §2.3, §2.1) forbids them, and refusing them closes a parser differential between gateway and service. One leading byte order mark is ignored (RFC 8259 §8.1).
 - **Large numbers.** Numbers with an exponent beyond ±4096 or more than 4096 digits are refused, so exact comparison stays bounded.
 - **Nesting.** Documents may nest 128 levels. Bodies may nest `max_body_depth` levels (128 by default), lowered per document so that body depth multiplied by schema depth stays within a fixed stack budget.
 - **In-place schema chains.** At most 64 nested `$ref`, `allOf`, `anyOf` and similar keywords, and at most 100,000 subschemas, may apply to one value. Larger documents are refused at load, because the schema engine would take exponential time.

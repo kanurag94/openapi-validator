@@ -1,7 +1,7 @@
 //! ECMAScript (ECMA-262) regular expressions translated to the `regex` crate.
 //!
 //! JSON Schema `pattern` and `patternProperties` use ECMA-262 syntax
-//! (JSON Schema Validation 2020-12 §4.3, §6.3.3; OpenAPI 3.0.4 §4.8.24.1).
+//! (JSON Schema Validation 2020-12 §4.3, §6.3.3; OpenAPI 3.0.4 §4.7.24.1).
 //! The `regex` crate matches in linear time, which a proxy needs, but its
 //! syntax and some meanings differ. This module rewrites a pattern so the
 //! `regex` crate gives the ECMA-262 answer:

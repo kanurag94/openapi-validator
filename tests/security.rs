@@ -147,7 +147,7 @@ fn mutual_tls_is_not_refused() {
     allowed(get(&s, "", &[]));
 }
 
-// §4.8.30.2: every scheme name must be defined.
+// §4.8.30.1: every scheme name must be defined.
 #[test]
 fn unknown_scheme_is_a_load_error() {
     let d = r#"{"openapi": "3.1.0", "info": {"title": "t", "version": "1"}, "security": [{"nope": []}], "paths": {}}"#;

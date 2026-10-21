@@ -1,9 +1,9 @@
 //! Non-JSON request and response bodies.
 //!
-//! - `application/x-www-form-urlencoded` (OpenAPI 3.1.1 §4.8.15.4, WHATWG
+//! - `application/x-www-form-urlencoded` (OpenAPI 3.1.1 §4.8.14.4, WHATWG
 //!   URL §5.1): pairs become an object, each property read with its Encoding
 //!   Object `style` and `explode` (default `form`, exploded).
-//! - `multipart/form-data` (RFC 7578, OpenAPI 3.1.1 §4.8.15.5): each part
+//! - `multipart/form-data` (RFC 7578, OpenAPI 3.1.1 §4.8.14.5): each part
 //!   becomes a property; JSON parts are parsed, others are text.
 //! - `text/plain`: the text, read as the schema's type allows.
 //! - XML: must be well-formed. Its content is not checked against the
@@ -326,7 +326,7 @@ pub(crate) fn multipart(
             .and_then(|e| e.content_type.as_ref())
             .is_some_and(MediaType::is_json);
         let shape = props_shape(props, &part.name);
-        // Default part types (OpenAPI 3.0.4 §4.8.15.1): objects are JSON;
+        // Default part types (OpenAPI 3.0.4 §4.7.15.1): objects are JSON;
         // arrays take their items' type, so each item is its own part.
         let object = matches!(shape, Some(Shape::Object(_)));
         let is_json = part

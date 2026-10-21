@@ -47,7 +47,7 @@ fn bad(spec: &Spec, body: &str, location: &str) {
     );
 }
 
-// OpenAPI 3.0.4 §4.8.24.1 `nullable`: only with `type` in the same object.
+// OpenAPI 3.0.4 §4.7.24.1 `nullable`: only with `type` in the same object.
 #[test]
 fn oas30_nullable_applies_only_with_type() {
     let s = load("3.0.3", r#"{"type": "string", "nullable": true}"#, "");
@@ -63,7 +63,7 @@ fn oas30_nullable_applies_only_with_type() {
     bad(&s, "null", "body");
 }
 
-// OpenAPI 3.0.4 §4.8.24.1: other keywords keep their say, so `enum` without
+// OpenAPI 3.0.4 §4.7.24.1: other keywords keep their say, so `enum` without
 // `null` still refuses null.
 #[test]
 fn oas30_nullable_respects_enum() {
@@ -111,7 +111,7 @@ fn oas31_nullable_is_an_annotation() {
     ok(&s, r#""x""#);
 }
 
-// OpenAPI 3.0.4 §4.8.23 Reference Object: siblings of `$ref` are ignored.
+// OpenAPI 3.0.4 §4.7.23 Reference Object: siblings of `$ref` are ignored.
 #[test]
 fn oas30_ref_siblings_are_ignored() {
     let s = load(
@@ -188,7 +188,7 @@ fn numbers_are_exact() {
     bad(&s, "2147483648", "body");
 }
 
-// OpenAPI 3.0.4 §4.8.24.1: boolean exclusiveMinimum/exclusiveMaximum.
+// OpenAPI 3.0.4 §4.7.24.1: boolean exclusiveMinimum/exclusiveMaximum.
 #[test]
 fn oas30_boolean_exclusive_bounds() {
     let s = load(
@@ -241,7 +241,7 @@ fn boolean_schemas() {
     ok(&s, "[]");
 }
 
-// OpenAPI 3.0.4 §4.8.24.1 and 3.1.1 §4.8.24.4: readOnly properties drop out
+// OpenAPI 3.0.4 §4.7.24.1 and 3.1.1 §4.8.24.4: readOnly properties drop out
 // of `required` for requests, including through `$ref`; sending one is
 // allowed (SHOULD NOT, not MUST NOT).
 #[test]

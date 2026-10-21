@@ -1,4 +1,4 @@
-//! Parameter Objects (OpenAPI 3.1.1 §4.8.12; 3.0.4 §4.8.12).
+//! Parameter Objects (OpenAPI 3.1.1 §4.8.12; 3.0.4 §4.7.12).
 
 use openapi_validator::{Options, ProblemKind, Report, Request, Spec};
 

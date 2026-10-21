@@ -1,5 +1,5 @@
 title: "int64 accepts 9223372036854775807"
-ref: "OpenAPI 3.0.4 §4.8.24 (Data Types: int64)"
+ref: "OpenAPI 3.0.4 §4.7.24 (Data Types: int64)"
 document: |
   openapi: 3.0.3
   info: {title: t, version: "1"}

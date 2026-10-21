@@ -1,5 +1,5 @@
 title: "A cookie parameter is checked under 3.0.4"
-ref: "OpenAPI 3.0.4 §4.8.12.2 (in: cookie)"
+ref: "OpenAPI 3.0.4 §4.7.12.2 (in: cookie)"
 document: |
   openapi: 3.0.4
   info: {title: t, version: "1"}

@@ -1,5 +1,5 @@
 title: "An integer satisfies type number"
-ref: "JSON Schema Validation (Wright draft 00) §5.5.2 type; OpenAPI 3.0.4 §4.8.24"
+ref: "JSON Schema Validation (Wright draft 00) §5.5.2 type; OpenAPI 3.0.4 §4.7.24"
 document: |
   openapi: 3.0.3
   info: {title: t, version: "1"}

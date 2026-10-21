@@ -38,7 +38,7 @@ pub enum LoadError {
     /// (OpenAPI 3.1.1 §4.8.8.2).
     DuplicateTemplate { first: String, second: String },
     /// A security requirement names a scheme not in
-    /// `components.securitySchemes` (OpenAPI 3.1.1 §4.8.30.2).
+    /// `components.securitySchemes` (OpenAPI 3.1.1 §4.8.30.1).
     UnknownSecurityScheme { name: String, location: String },
     /// Any other structural problem.
     Invalid { location: String, message: String },

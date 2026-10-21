@@ -1,5 +1,5 @@
 title: "A JSON-encoded form field is checked against its schema"
-ref: "OpenAPI 3.1.1 §4.8.15.1 (contentType), §4.8.15.4"
+ref: "OpenAPI 3.1.1 §4.8.15.1 (contentType), §4.8.14.4"
 document: |
   openapi: 3.1.0
   info: {title: t, version: "1"}

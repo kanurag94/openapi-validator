@@ -1,5 +1,5 @@
 title: "An exploded form object property of the wrong type is refused under 3.0.4"
-ref: "OpenAPI 3.0.4 §4.8.12.4 (style examples) form* object"
+ref: "OpenAPI 3.0.4 §4.7.12.4 (style examples) form* object"
 document: |
   openapi: 3.0.4
   info: {title: t, version: "1"}

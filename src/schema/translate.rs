@@ -4,15 +4,15 @@
 //! document, inside a skeleton that holds nothing else, so every local
 //! `$ref` keeps working unchanged. One skeleton is built per direction,
 //! because `readOnly` and `writeOnly` change `required` differently for
-//! requests and responses (OpenAPI 3.0.4 §4.8.24.1, 3.1.1 §4.8.24.4).
+//! requests and responses (OpenAPI 3.0.4 §4.7.24.1, 3.1.1 §4.8.24.4).
 //!
 //! OpenAPI 3.0 (Schema Object, JSON Schema Wright draft 00 subset):
 //! - `nullable: true` adds `"null"` to `type`, only when `type` is in the
-//!   same object (3.0.4 §4.8.24.1). `enum` keeps its own say: `null` must be
+//!   same object (3.0.4 §4.7.24.1). `enum` keeps its own say: `null` must be
 //!   listed to be allowed. `allOf`/`oneOf` structure is never rewritten.
 //! - boolean `exclusiveMinimum`/`exclusiveMaximum` become the 2020-12
 //!   numeric form;
-//! - keywords beside `$ref` are ignored (3.0.4 §4.8.23);
+//! - keywords beside `$ref` are ignored (3.0.4 §4.7.23);
 //! - `integer` means the JSON integer production, so `1.0` and `1e2` are not
 //!   integers (custom keyword `x-oav-int`);
 //! - keywords that are not part of the 3.0 Schema Object are dropped (they
@@ -44,7 +44,7 @@ pub enum Direction {
     Response,
 }
 
-/// Keywords of the OpenAPI 3.0 Schema Object (3.0.4 §4.8.24.1).
+/// Keywords of the OpenAPI 3.0 Schema Object (3.0.4 §4.7.24.1).
 const OAS30_KEYWORDS: &[&str] = &[
     "title",
     "multipleOf",
@@ -897,7 +897,7 @@ impl Translator<'_> {
         }
     }
 
-    /// Enforces a Discriminator Object (OpenAPI 3.0.4 §4.8.25, 3.1.1
+    /// Enforces a Discriminator Object (OpenAPI 3.0.4 §4.7.25, 3.1.1
     /// §4.8.25): when the payload carries the property, its value must name
     /// a mapped schema and the payload is checked against that schema. When
     /// every `oneOf`/`anyOf` branch is mapped, the named branch alone decides

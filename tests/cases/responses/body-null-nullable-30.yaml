@@ -1,5 +1,5 @@
 title: "nullable true admits null in 3.0"
-ref: "OpenAPI 3.0.4 §4.8.24.1 (nullable)"
+ref: "OpenAPI 3.0.4 §4.7.24.1 (nullable)"
 document: |
   openapi: 3.0.3
   info: {title: t, version: "1"}

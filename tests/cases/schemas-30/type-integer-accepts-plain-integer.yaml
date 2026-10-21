@@ -1,5 +1,5 @@
 title: "A JSON integer literal satisfies type integer"
-ref: "OpenAPI 3.0.4 §4.8.24 (Data Types: integer)"
+ref: "OpenAPI 3.0.4 §4.7.24 (Data Types: integer)"
 document: |
   openapi: 3.0.3
   info: {title: t, version: "1"}

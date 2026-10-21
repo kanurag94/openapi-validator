@@ -1,5 +1,5 @@
 title: "A discriminator value that names no branch is reported at the property (gateway profile)"
-ref: "OpenAPI 3.0.4 §4.8.25 (Discriminator Object)"
+ref: "OpenAPI 3.0.4 §4.7.25 (Discriminator Object)"
 options:
   profile: gateway
 document: |

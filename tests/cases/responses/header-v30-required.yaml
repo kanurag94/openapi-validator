@@ -1,5 +1,5 @@
 title: "3.0 required response headers are enforced"
-ref: "OpenAPI 3.0.4 §4.8.21"
+ref: "OpenAPI 3.0.4 §4.7.21"
 document: |
   openapi: 3.0.3
   info: {title: t, version: "1"}

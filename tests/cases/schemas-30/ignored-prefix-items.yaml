@@ -1,5 +1,5 @@
 title: "prefixItems is not a 3.0 keyword and constrains nothing"
-ref: "OpenAPI 3.0.4 §4.8.24 (JSON Schema keywords taken from the Wright draft; others are not part of the Schema Object)"
+ref: "OpenAPI 3.0.4 §4.7.24 (JSON Schema keywords taken from the Wright draft; others are not part of the Schema Object)"
 document: |
   openapi: 3.0.3
   info: {title: t, version: "1"}

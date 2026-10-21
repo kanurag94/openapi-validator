@@ -1,5 +1,5 @@
 title: "9.223372036854775807e18 is exactly int64 max"
-ref: "OpenAPI 3.1.1 §4.8.24.2 (Data Types: int64); JSON Schema Core 2020-12 §4.2.1"
+ref: "OpenAPI 3.1.1 §4.4 (Data Types: int64); JSON Schema Core 2020-12 §4.2.1"
 document: |
   openapi: 3.1.0
   info: {title: t, version: "1"}

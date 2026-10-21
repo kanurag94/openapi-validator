@@ -1,5 +1,5 @@
 title: "Unencoded reserved characters other than & are part of the value"
-ref: "OpenAPI 3.1.1 §4.8.15.4, RFC 3986 §2.2"
+ref: "OpenAPI 3.1.1 §4.8.14.4, RFC 3986 §2.2"
 document: |
   openapi: 3.1.0
   info: {title: t, version: "1"}

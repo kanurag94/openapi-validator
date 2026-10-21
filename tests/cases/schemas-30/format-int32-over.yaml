@@ -1,5 +1,5 @@
 title: "int32 rejects 2147483648"
-ref: "OpenAPI 3.0.4 §4.8.24 (Data Types: int32)"
+ref: "OpenAPI 3.0.4 §4.7.24 (Data Types: int32)"
 document: |
   openapi: 3.0.3
   info: {title: t, version: "1"}

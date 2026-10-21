@@ -1,5 +1,5 @@
 title: "allOf-style discriminator dispatches to the child named by the value (gateway profile)"
-ref: "OpenAPI 3.0.4 §4.8.25 (Discriminator Object)"
+ref: "OpenAPI 3.0.4 §4.7.25 (Discriminator Object)"
 options:
   profile: gateway
 document: |

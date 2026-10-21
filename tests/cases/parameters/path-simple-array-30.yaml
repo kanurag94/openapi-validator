@@ -1,5 +1,5 @@
 title: "A simple path array is comma-separated under 3.0 as well"
-ref: "OpenAPI 3.0.4 §4.8.12.4 (style examples) simple array"
+ref: "OpenAPI 3.0.4 §4.7.12.4 (style examples) simple array"
 document: |
   openapi: 3.0.4
   info: {title: t, version: "1"}

@@ -1,5 +1,5 @@
 title: "3.0 documents use the same lookup order"
-ref: "OpenAPI 3.0.4 §4.8.16.2"
+ref: "OpenAPI 3.0.4 §4.7.16.2"
 document: |
   openapi: 3.0.3
   info: {title: t, version: "1"}

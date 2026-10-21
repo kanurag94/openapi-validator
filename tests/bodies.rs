@@ -55,7 +55,7 @@ const FORM_SCHEMA: &str = r#"{"type": "object", "required": ["name"], "propertie
     "meta": {"type": "object", "properties": {"k": {"type": "integer"}}}
 }, "additionalProperties": false}"#;
 
-// §4.8.15.4 urlencoded forms, with Encoding Object style and explode.
+// §4.8.14.4 urlencoded forms, with Encoding Object style and explode.
 #[test]
 fn urlencoded_form() {
     let s = spec(&format!(
