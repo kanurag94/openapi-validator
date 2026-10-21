@@ -711,10 +711,8 @@ impl Translator<'_> {
                         let t = std::mem::take(t);
                         out.insert("type".into(), json!([t, "null"]));
                     }
-                    Some(Value::Array(a)) => {
-                        if !a.iter().any(|t| t == "null") {
-                            a.push(Value::String("null".into()));
-                        }
+                    Some(Value::Array(a)) if !a.iter().any(|t| t == "null") => {
+                        a.push(Value::String("null".into()));
                     }
                     _ => {}
                 }
