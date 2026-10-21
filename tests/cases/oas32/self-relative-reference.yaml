@@ -1,0 +1,21 @@
+title: "Relative references resolve against $self, so a fragment still means this document"
+ref: "OpenAPI 3.2.0 §4.1 $self; RFC 3986 §5.1.1"
+document: |
+  openapi: 3.2.0
+  $self: /pets/openapi
+  info: {title: t, version: "1"}
+  paths:
+    /pets:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {$ref: "openapi#/components/schemas/Pet"}
+        responses:
+          "201": {description: created}
+  components:
+    schemas:
+      Pet: {type: object, required: [name]}
+request: {method: POST, path: /pets, headers: [["Content-Type", "application/json"]], body: "{\"name\": \"rex\"}"}
+expect: {valid: true}

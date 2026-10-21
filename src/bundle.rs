@@ -36,6 +36,8 @@ fn without_fragment(uri: &str) -> &str {
 /// merged tree, and its `$anchor`s (name to pointer, relative to its root).
 struct Doc {
     uri: String,
+    /// The URI it was supplied under, when `$self` names it otherwise.
+    retrieval: String,
     root: String,
     anchors: HashMap<String, String>,
     /// `(pointer within the document, absolute $id)` for every `$id`.
@@ -118,27 +120,49 @@ fn anchors(v: &Value, uri: &str) -> HashMap<String, String> {
     out
 }
 
+/// The URI an OpenAPI 3.2 document names itself with `$self` (§4.8.1),
+/// resolved against the URI it was supplied under.
+fn self_uri(v: &Value, retrieval: &str) -> String {
+    let is_32 = v
+        .get("openapi")
+        .and_then(Value::as_str)
+        .is_some_and(|s| s.starts_with("3.2"));
+    v.get("$self")
+        .and_then(Value::as_str)
+        .filter(|_| is_32)
+        .and_then(|s| resolve(retrieval, s))
+        .map(|u| without_fragment(&u).to_owned())
+        .unwrap_or_else(|| retrieval.to_owned())
+}
+
 /// Merges `entry` (at `entry_uri`) with `others` into one document.
 pub(crate) fn merge(
     entry_uri: &str,
     entry: Value,
     others: Vec<(String, Value)>,
 ) -> Result<Value, LoadError> {
-    let entry_base = resolve("oav:///", entry_uri).unwrap_or_else(|| entry_uri.to_owned());
-    let entry_uri = without_fragment(&entry_base).to_owned();
+    let entry_retrieval = resolve("oav:///", entry_uri).unwrap_or_else(|| entry_uri.to_owned());
+    let entry_retrieval = without_fragment(&entry_retrieval).to_owned();
+    // Supplied URIs are retrieval URIs: they resolve against the entry
+    // document's retrieval URI, not its `$self`.
+    let entry_base = entry_retrieval.clone();
+    let entry_uri = self_uri(&entry, &entry_retrieval);
     let mut docs = vec![Doc {
         anchors: anchors(&entry, &entry_uri),
         ids: ids(&entry, &entry_uri),
         uri: entry_uri,
+        retrieval: entry_retrieval,
         root: "#".to_owned(),
     }];
     for (i, (uri, v)) in others.iter().enumerate() {
         let abs = resolve(&entry_base, uri).unwrap_or_else(|| uri.clone());
-        let abs = without_fragment(&abs).to_owned();
+        let retrieval = without_fragment(&abs).to_owned();
+        let abs = self_uri(v, &retrieval);
         docs.push(Doc {
             anchors: anchors(v, &abs),
             ids: ids(v, &abs),
             uri: abs,
+            retrieval,
             root: format!("#/{}/{i}", escape_token(DOCUMENTS_KEY)),
         });
     }
@@ -215,7 +239,12 @@ fn target(
     if scoped && uri == base {
         return Ok(format!("#{fragment}"));
     }
-    let Some(doc) = docs.iter().find(|d| d.uri == uri) else {
+    // `$self` is the interoperable name; the retrieval URI also works.
+    let doc = docs
+        .iter()
+        .find(|d| d.uri == uri)
+        .or_else(|| docs.iter().find(|d| d.retrieval == uri));
+    let Some(doc) = doc else {
         // Not a supplied document: kept (an embedded `$id`, a metaschema)
         // for the loader to judge.
         return Ok(if !scoped && r.starts_with('#') {
@@ -314,6 +343,31 @@ mod tests {
         assert_eq!(
             merged["x-oav-documents"]["1"]["example"]["$ref"], "not a ref",
             "data is not rewritten"
+        );
+    }
+
+    #[test]
+    fn oas32_s4_8_1_self_names_the_document() {
+        let entry = json!({"openapi": "3.2.0", "$self": "https://api.example.com/v2/openapi",
+            "paths": {"/p": {"$ref": "https://api.example.com/v2/openapi#/components/pathItems/P"},
+                      "/q": {"$ref": "items#/q"}, "/r": {"$ref": "items.yaml#/q"}}});
+        let items = json!({"q": {"get": {}}});
+        let merged = merge(
+            "file:///src/openapi.yaml",
+            entry,
+            vec![("items.yaml".into(), items)],
+        )
+        .unwrap();
+        assert_eq!(merged["paths"]["/p"]["$ref"], "#/components/pathItems/P");
+        // Relative to `$self`, `items` is not a supplied document.
+        assert_eq!(
+            merged["paths"]["/q"]["$ref"],
+            "https://api.example.com/v2/items#/q"
+        );
+        // A retrieval URI resolved against `$self` is not one either.
+        assert_eq!(
+            merged["paths"]["/r"]["$ref"],
+            "https://api.example.com/v2/items.yaml#/q"
         );
     }
 

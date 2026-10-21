@@ -90,10 +90,10 @@ impl<'a> Builder<'a> {
         content: Option<&Value>,
         ptr: &str,
         dir: Direction,
-    ) -> Vec<(MediaType, MediaEntry)> {
+    ) -> Result<Vec<(MediaType, MediaEntry)>, LoadError> {
         let mut out = Vec::new();
         let Some(map) = content.and_then(Value::as_object) else {
-            return out;
+            return Ok(out);
         };
         for (key, media) in map {
             let mptr = doc::join(ptr, key);
@@ -101,6 +101,7 @@ impl<'a> Builder<'a> {
                 self.warn(&mptr, "not a media type or media range; ignored");
                 continue;
             };
+            let (media, mptr) = self.media(media, &mptr)?;
             let schema_v = media.get("schema");
             let schema = schema_v.map(|_| self.roots.id(dir, &doc::join(&mptr, "schema")));
             // Shapes and encodings matter only for bodies parsed from text.
@@ -134,7 +135,17 @@ impl<'a> Builder<'a> {
                 },
             ));
         }
-        out
+        Ok(out)
+    }
+
+    /// A Media Type Object, which OpenAPI 3.2 lets be a Reference Object
+    /// (§4.7 `mediaTypes`).
+    pub fn media(&self, media: &'a Value, ptr: &str) -> Result<(&'a Value, String), LoadError> {
+        if self.version >= Version::V32 {
+            doc::deref(self.root, media, ptr)
+        } else {
+            Ok((media, ptr.to_owned()))
+        }
     }
 
     /// A Request Body Object, following Reference Objects.
@@ -151,7 +162,7 @@ impl<'a> Builder<'a> {
             body.get("content"),
             &doc::join(&bptr, "content"),
             Direction::Request,
-        );
+        )?;
         Ok(Some(Body {
             required: body.get("required") == Some(&Value::Bool(true)),
             content,
@@ -299,7 +310,7 @@ impl Builder<'_> {
             r.get("content"),
             &doc::join(&rptr, "content"),
             Direction::Response,
-        );
+        )?;
         Ok(Resp { headers, content })
     }
 

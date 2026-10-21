@@ -25,9 +25,67 @@ pub(crate) const METHODS: [&str; 8] = [
     "get", "put", "post", "delete", "options", "head", "patch", "trace",
 ];
 
+/// One operation of a Path Item.
+pub(crate) struct ItemOp<'a> {
+    /// The field it is under: `get`, or an `additionalOperations` key.
+    pub key: String,
+    /// The method as sent in a request: `GET`, or the key as written.
+    pub wire: String,
+    pub op: &'a Value,
+    pub ptr: String,
+}
+
+/// The operations of a Path Item, fixed fields first. OpenAPI 3.2 adds
+/// `query` and `additionalOperations` (§4.10.1), whose keys are methods
+/// with the capitalization sent; an entry for a method a fixed field
+/// already describes is ignored.
+pub(crate) fn item_operations<'a>(
+    item: &'a Value,
+    item_ptr: &str,
+    version: Version,
+) -> Vec<ItemOp<'a>> {
+    let mut out: Vec<ItemOp<'a>> = Vec::new();
+    let fixed: &[&str] = if version >= Version::V32 {
+        &[
+            "get", "put", "post", "delete", "options", "head", "patch", "trace", "query",
+        ]
+    } else {
+        &METHODS
+    };
+    for &m in fixed {
+        if let Some(op) = item.get(m).filter(|o| o.is_object()) {
+            out.push(ItemOp {
+                key: m.to_owned(),
+                wire: m.to_ascii_uppercase(),
+                op,
+                ptr: doc::join(item_ptr, m),
+            });
+        }
+    }
+    if version >= Version::V32 {
+        let extra_ptr = doc::join(item_ptr, "additionalOperations");
+        for (k, op) in item
+            .get("additionalOperations")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+        {
+            if op.is_object() && !out.iter().any(|o| o.wire == *k) {
+                out.push(ItemOp {
+                    key: k.clone(),
+                    wire: k.clone(),
+                    op,
+                    ptr: doc::join(&extra_ptr, k),
+                });
+            }
+        }
+    }
+    out
+}
+
 pub(crate) struct PathItem {
-    /// `(method key, operation index)`.
-    pub ops: Vec<(&'static str, usize)>,
+    /// `(method as sent, operation index)`.
+    pub ops: MethodOps,
     /// Server base paths of the path item and its operations.
     pub bases: Vec<BasePath>,
 }
@@ -35,7 +93,8 @@ pub(crate) struct PathItem {
 pub(crate) struct Operation {
     /// The path template; a webhook's name, or a callback's expression.
     pub path: String,
-    pub method: &'static str,
+    /// The field the operation is under, such as `get`.
+    pub method: String,
     pub operation_id: Option<String>,
     /// Server base paths that serve this operation (OpenAPI 3.1.1
     /// §4.8.10.1: operation `servers` replace the path item's).
@@ -90,10 +149,10 @@ struct Ctx<'r> {
 }
 
 /// `(method key, operation index)` for each method of a Path Item.
-type MethodOps = Vec<(&'static str, usize)>;
+type MethodOps = Vec<(String, usize)>;
 
 /// The Path Items a webhook or callback name selects, if declared.
-type Named<'a> = Option<Vec<&'a [(&'static str, usize)]>>;
+type Named<'a> = Option<Vec<&'a [(String, usize)]>>;
 
 /// A problem to report: kind, location, message.
 type Problem = (ProblemKind, &'static str, String);
@@ -126,39 +185,38 @@ impl<'r> Ctx<'r> {
         path: &str,
         item: &'r Value,
         item_ptr: &str,
-        method: &'static str,
+        it: &ItemOp<'r>,
         bases: Vec<BasePath>,
         reached: Reached,
     ) -> Result<usize, LoadError> {
-        let op = &item[method];
-        let op_ptr = doc::join(item_ptr, method);
-        let body = b.request_body(op.get("requestBody"), &doc::join(&op_ptr, "requestBody"))?;
-        let mut params = b.params(item, item_ptr, op, &op_ptr, self.version)?;
+        let (op, op_ptr) = (it.op, &it.ptr);
+        let body = b.request_body(op.get("requestBody"), &doc::join(op_ptr, "requestBody"))?;
+        let mut params = b.params(item, item_ptr, op, op_ptr, self.version)?;
         if reached == Reached::Named {
             params.retain(|p| p.location != crate::params::In::Path);
         }
         // Operation `security` replaces the document's, even when empty.
         let security = match b.requirements(
             op.get("security"),
-            &doc::join(&op_ptr, "security"),
+            &doc::join(op_ptr, "security"),
             &self.schemes,
         )? {
             Some(r) => Some(r),
             None => self.doc_security.clone(),
         };
         let declared = security::declared(&self.schemes, security.as_deref());
-        let responses = b.responses(op.get("responses"), &doc::join(&op_ptr, "responses"))?;
+        let responses = b.responses(op.get("responses"), &doc::join(op_ptr, "responses"))?;
         let operation_id = op
             .get("operationId")
             .and_then(Value::as_str)
             .map(str::to_owned);
         if let (Some(id), Some(cbs)) = (&operation_id, op.get("callbacks")) {
             self.pending
-                .push((id.clone(), cbs, doc::join(&op_ptr, "callbacks")));
+                .push((id.clone(), cbs, doc::join(op_ptr, "callbacks")));
         }
         self.ops.push(Operation {
             path: path.to_owned(),
-            method,
+            method: it.key.clone(),
             operation_id,
             bases,
             body,
@@ -179,11 +237,9 @@ impl<'r> Ctx<'r> {
         item_ptr: &str,
     ) -> Result<MethodOps, LoadError> {
         let mut out = Vec::new();
-        for m in METHODS {
-            if item.get(m).is_some_and(Value::is_object) {
-                let o = self.operation(b, label, item, item_ptr, m, Vec::new(), Reached::Named)?;
-                out.push((m, o));
-            }
+        for it in item_operations(item, item_ptr, self.version) {
+            let o = self.operation(b, label, item, item_ptr, &it, Vec::new(), Reached::Named)?;
+            out.push((it.wire, o));
         }
         Ok(out)
     }
@@ -232,9 +288,22 @@ impl<'r> Ctx<'r> {
 }
 
 impl Spec {
-    /// Parses and indexes an OpenAPI 3.0.x or 3.1.x document (JSON or YAML).
+    /// Parses and indexes an OpenAPI 3.0.x, 3.1.x or 3.2.x document (JSON
+    /// or YAML).
     pub fn load(bytes: &[u8], options: Options) -> Result<Spec, LoadError> {
-        guard_load(|| Self::load_value(doc::parse(bytes, options.yaml_merge_keys)?, options))
+        guard_load(|| {
+            let root = doc::parse(bytes, options.yaml_merge_keys)?;
+            // A 3.2 document can name itself with `$self` (§4.8.1), and
+            // references may use that name.
+            let root = match root.get("$self").and_then(Value::as_str) {
+                Some(uri) if doc::version(&root) == Ok(Version::V32) => {
+                    let uri = uri.to_owned();
+                    crate::bundle::merge(&uri, root, Vec::new())?
+                }
+                _ => root,
+            };
+            Self::load_value(root, options)
+        })
     }
 
     /// Loads a description spread over several documents. `entry` is the
@@ -313,13 +382,11 @@ impl Spec {
                     ops: Vec::new(),
                     bases: Vec::new(),
                 };
-                for m in METHODS {
-                    let Some(op) = item.get(m).filter(|o| o.is_object()) else {
-                        continue;
-                    };
-                    let op_ptr = doc::join(&item_ptr, m);
-                    let op_bases = match op.get("servers") {
-                        Some(s) => base_paths(Some(s), &format!("{op_ptr}/servers"), &mut warnings),
+                for it in item_operations(item, &item_ptr, version) {
+                    let op_bases = match it.op.get("servers") {
+                        Some(s) => {
+                            base_paths(Some(s), &format!("{}/servers", it.ptr), &mut warnings)
+                        }
                         None => item_bases.clone(),
                     };
                     for base in &op_bases {
@@ -328,8 +395,8 @@ impl Spec {
                         }
                     }
                     let o =
-                        cx.operation(&mut b, key, item, &item_ptr, m, op_bases, Reached::Path)?;
-                    pi.ops.push((m, o));
+                        cx.operation(&mut b, key, item, &item_ptr, &it, op_bases, Reached::Path)?;
+                    pi.ops.push((it.wire, o));
                 }
                 if pi.bases.is_empty() {
                     pi.bases = item_bases;
@@ -505,39 +572,19 @@ impl Spec {
             }
         };
         // Methods are case-sensitive (RFC 9110 §9.1): `GET` is the `get` key.
-        let key = METHODS
-            .iter()
-            .find(|k| k.to_ascii_uppercase() == req.method)
-            .copied();
-        let find = |k: &str| item.ops.iter().find(|(mk, _)| *mk == k).map(|(_, o)| *o);
-        match key {
-            Some(k) => {
-                if let Some(op) = find(k) {
-                    if !served(op) {
-                        return Route::PathNotFound;
-                    }
-                    return Route::Found {
-                        op,
-                        vars: m.vars,
-                        head_as_get: false,
-                    };
-                }
-                if k == "head" {
-                    if let Some(op) = find("get") {
-                        if !served(op) {
-                            return Route::PathNotFound;
-                        }
-                        return Route::Found {
-                            op,
-                            vars: m.vars,
-                            head_as_get: true,
-                        };
-                    }
-                }
-                Route::MethodNotAllowed {
-                    template: m.template,
-                }
-            }
+        let find = |k: &str| item.ops.iter().find(|(mk, _)| mk == k).map(|(_, o)| *o);
+        let hit = match find(req.method) {
+            Some(op) => Some((op, false)),
+            None if req.method == "HEAD" => find("GET").map(|op| (op, true)),
+            None => None,
+        };
+        match hit {
+            Some((op, head_as_get)) if served(op) => Route::Found {
+                op,
+                vars: m.vars,
+                head_as_get,
+            },
+            Some(_) => Route::PathNotFound,
             None => Route::MethodNotAllowed {
                 template: m.template,
             },
@@ -548,7 +595,7 @@ impl Spec {
         let o = &self.ops[op];
         MatchedOperation {
             path: o.path.clone(),
-            method: o.method.to_owned(),
+            method: o.method.clone(),
             operation_id: o.operation_id.clone(),
         }
     }
@@ -591,7 +638,7 @@ impl Spec {
                 let allowed: Vec<String> = self.items[template]
                     .ops
                     .iter()
-                    .map(|(m, _)| m.to_ascii_uppercase())
+                    .map(|(m, _)| m.clone())
                     .collect();
                 report.push(
                     ProblemKind::MethodNotAllowed,
@@ -774,23 +821,19 @@ impl Spec {
                 ),
             ));
         };
-        let key = METHODS
-            .iter()
-            .find(|k| k.to_ascii_uppercase() == req.method)
-            .copied();
         let mut out = Vec::new();
         for ops in &items {
-            let find = |k: &str| ops.iter().find(|(m, _)| *m == k).map(|(_, o)| *o);
-            match key.and_then(|k| find(k).map(|o| (o, false))) {
-                Some(hit) => out.push(hit),
-                None if key == Some("head") => out.extend(find("get").map(|o| (o, true))),
+            let find = |k: &str| ops.iter().find(|(m, _)| m == k).map(|(_, o)| *o);
+            match find(req.method) {
+                Some(o) => out.push((o, false)),
+                None if req.method == "HEAD" => out.extend(find("GET").map(|o| (o, true))),
                 None => {}
             }
         }
         if out.is_empty() {
             let mut allowed: Vec<String> = items
                 .iter()
-                .flat_map(|ops| ops.iter().map(|(m, _)| m.to_ascii_uppercase()))
+                .flat_map(|ops| ops.iter().map(|(m, _)| m.clone()))
                 .collect();
             allowed.dedup();
             return Err((

@@ -97,7 +97,8 @@ pub struct MatchedOperation {
     /// Path template as written in the document, such as `/pets/{id}`; for
     /// a webhook its name, and for a callback its expression.
     pub path: String,
-    /// Lower-case method key, such as `get`.
+    /// The field the operation is under: a lower-case method such as
+    /// `get`, or an OpenAPI 3.2 `additionalOperations` key such as `LINK`.
     pub method: String,
     pub operation_id: Option<String>,
 }

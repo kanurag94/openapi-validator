@@ -470,12 +470,9 @@ pub(crate) fn check(root: &Value, version: Version) -> Vec<Warning> {
             continue;
         };
         l.servers(item.get("servers"), &doc::join(&iptr, "servers"));
-        for m in crate::spec::METHODS {
-            if let Some(op) = item.get(m) {
-                let optr = doc::join(&iptr, m);
-                l.servers(op.get("servers"), &doc::join(&optr, "servers"));
-                l.operation(key, item, &iptr, op, &optr, &mut ids);
-            }
+        for it in crate::spec::item_operations(item, &iptr, version) {
+            l.servers(it.op.get("servers"), &doc::join(&it.ptr, "servers"));
+            l.operation(key, item, &iptr, it.op, &it.ptr, &mut ids);
         }
     }
     if version == Version::V30 {

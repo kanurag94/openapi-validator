@@ -433,7 +433,7 @@ impl Translator<'_> {
             }
             // A plain-name fragment refers to an `$anchor` (JSON Schema
             // 2020-12 §8.2.2); only 3.1 schemas have anchors.
-            if self.version == Version::V31 && self.anchor_exists(frag) {
+            if self.version != Version::V30 && self.anchor_exists(frag) {
                 return Ok(());
             }
             return Err(LoadError::BrokenRef {
@@ -441,7 +441,7 @@ impl Translator<'_> {
                 location: ptr.to_owned(),
             });
         }
-        if self.version == Version::V31 && self.embedded_id_exists(&resolve(&ctx.base, r)) {
+        if self.version != Version::V30 && self.embedded_id_exists(&resolve(&ctx.base, r)) {
             return Ok(());
         }
         Err(LoadError::ExternalRef {
@@ -876,7 +876,7 @@ impl Translator<'_> {
                 wo |= b;
             }
         }
-        if self.version == Version::V31 || !m.contains_key("$ref") {
+        if self.version != Version::V30 || !m.contains_key("$ref") {
             for member in m
                 .get("allOf")
                 .and_then(Value::as_array)

@@ -7,10 +7,12 @@ use serde_json::Value;
 use crate::pattern::PatternError;
 
 /// The OpenAPI version family of a document.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[non_exhaustive]
 pub enum Version {
     V30,
     V31,
+    V32,
 }
 
 /// Why a document was refused.
@@ -19,7 +21,7 @@ pub enum Version {
 pub enum LoadError {
     /// The bytes are not valid JSON or YAML.
     Parse(String),
-    /// The `openapi` field is missing or not 3.0.x / 3.1.x.
+    /// The `openapi` field is missing or not 3.0.x, 3.1.x or 3.2.x.
     UnsupportedVersion(String),
     /// A `$ref` points outside the document. Validation never reads files or
     /// the network.
@@ -142,6 +144,7 @@ pub fn version(root: &Value) -> Result<Version, LoadError> {
     match (parts.next(), parts.next()) {
         (Some("3"), Some("0")) => Ok(Version::V30),
         (Some("3"), Some("1")) => Ok(Version::V31),
+        (Some("3"), Some("2")) => Ok(Version::V32),
         _ => Err(LoadError::UnsupportedVersion(v)),
     }
 }
@@ -289,7 +292,8 @@ mod tests {
         assert_eq!(version(&json!({"openapi": "3.0.3"})), Ok(Version::V30));
         assert_eq!(version(&json!({"openapi": "3.1.0"})), Ok(Version::V31));
         assert!(version(&json!({"swagger": "2.0"})).is_err());
-        assert!(version(&json!({"openapi": "3.2.0"})).is_err());
+        assert_eq!(version(&json!({"openapi": "3.2.0"})), Ok(Version::V32));
+        assert!(version(&json!({"openapi": "3.3.0"})).is_err());
         assert!(version(&json!({})).is_err());
     }
 

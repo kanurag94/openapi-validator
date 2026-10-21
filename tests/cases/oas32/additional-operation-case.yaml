@@ -1,0 +1,37 @@
+title: "Methods are case-sensitive, so link is not LINK"
+ref: "OpenAPI 3.2.0 §4.9.1; RFC 9110 §9.1"
+document: |
+  openapi: 3.2.0
+  info: {title: t, version: "1"}
+  paths:
+    /search:
+      query:
+        operationId: search
+        requestBody:
+          required: true
+          content:
+            application/json:
+              $ref: "#/components/mediaTypes/Filter"
+        responses:
+          "200": {description: ok}
+      additionalOperations:
+        LINK:
+          operationId: link
+          parameters:
+            - {name: Link, in: header, required: true, schema: {type: string}}
+          responses:
+            "204": {description: linked}
+        POST:
+          operationId: ignoredBecausePostIsAFixedField
+          responses:
+            "201": {description: created}
+      post:
+        operationId: create
+        responses:
+          "200": {description: ok}
+  components:
+    mediaTypes:
+      Filter:
+        schema: {type: object, required: [q], properties: {q: {type: string}}}
+request: {method: link, path: /search, headers: [["Link", "</a>"]]}
+expect: {valid: false, kind: method_not_allowed}

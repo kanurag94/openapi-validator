@@ -334,12 +334,11 @@ impl Builder<'_> {
                         sub: "json".into(),
                         params: Vec::new(),
                     });
-                    let id = media.get("schema").map(|_| {
-                        self.roots.id(
-                            dir,
-                            &doc::join(&doc::join(&doc::join(&pptr, "content"), key), "schema"),
-                        )
-                    });
+                    let (media, mptr) =
+                        self.media(media, &doc::join(&doc::join(&pptr, "content"), key))?;
+                    let id = media
+                        .get("schema")
+                        .map(|_| self.roots.id(dir, &doc::join(&mptr, "schema")));
                     ParamValue::Content { media: mt, id }
                 }
                 None => ParamValue::Any,

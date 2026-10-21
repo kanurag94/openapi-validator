@@ -1,0 +1,21 @@
+title: "References may name the document by its $self URI"
+ref: "OpenAPI 3.2.0 §4.1 $self, §4.1.2.2.1"
+document: |
+  openapi: 3.2.0
+  $self: https://api.example.com/pets/openapi
+  info: {title: t, version: "1"}
+  paths:
+    /pets:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {$ref: "https://api.example.com/pets/openapi#/components/schemas/Pet"}
+        responses:
+          "201": {description: created}
+  components:
+    schemas:
+      Pet: {type: object, required: [name]}
+request: {method: POST, path: /pets, headers: [["Content-Type", "application/json"]], body: "{}"}
+expect: {valid: false, kind: schema_violation}
