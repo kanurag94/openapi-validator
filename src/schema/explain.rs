@@ -26,7 +26,7 @@ pub(crate) fn explain(
     instance: &Value,
     max: usize,
 ) -> (Vec<(String, String)>, usize) {
-    let Some(resource) = dir.resource() else {
+    let Some(resource) = store.resource() else {
         return (vec![(String::new(), "does not match its schema".into())], 0);
     };
     let mut e = Explainer {
@@ -173,7 +173,7 @@ impl<'a> Explainer<'a> {
 
     /// `jsonschema`'s verdict for the schema at `ptr`.
     fn valid_at(&self, ptr: &str, inst: &Value) -> Option<bool> {
-        match &*self.dir.sub_validator(ptr) {
+        match &*self.store.sub_validator(self.dir, ptr) {
             Ok(v) => Some(v.is_valid(inst)),
             Err(_) => None,
         }
@@ -403,6 +403,22 @@ impl<'a> Explainer<'a> {
                             ipath,
                             format!("must contain at most {} matching items", max.unwrap_or(0)),
                         );
+                    }
+                }
+                "x-oav-required" => {
+                    let key = match self.dir.direction() {
+                        super::Direction::Request => "request",
+                        super::Direction::Response => "response",
+                    };
+                    let (Some(o), Some(names)) =
+                        (inst.as_object(), kv.get(key).and_then(Value::as_array))
+                    else {
+                        continue;
+                    };
+                    for n in names.iter().filter_map(Value::as_str) {
+                        if !o.contains_key(n) {
+                            self.push(&child(ipath, n), "is required".into());
+                        }
                     }
                 }
                 "required" => {

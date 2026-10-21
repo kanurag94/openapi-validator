@@ -124,11 +124,10 @@ struct Ctx {
 struct Translator<'a> {
     root: &'a Value,
     version: Version,
-    dir: Direction,
     opts: &'a Options,
     warnings: Vec<Warning>,
     pending: Vec<String>,
-    done_roots: Vec<String>,
+    done_roots: HashSet<String>,
     /// Discriminator base pointer -> pointers of schemas it can select.
     disc_targets: HashMap<String, HashSet<String>>,
     /// Base pointer -> pointer of its copy without dispatch.
@@ -139,23 +138,20 @@ struct Translator<'a> {
     ids: Option<Vec<String>>,
 }
 
-/// Translates the schemas at `roots` (and everything they reference) for one
-/// direction.
+/// Translates the schemas at `roots` (and everything they reference).
 pub fn translate(
     root: &Value,
     version: Version,
-    dir: Direction,
     roots: &[String],
     opts: &Options,
 ) -> Result<Translated, LoadError> {
     let mut t = Translator {
         root,
         version,
-        dir,
         opts,
         warnings: Vec::new(),
         pending: roots.to_vec(),
-        done_roots: Vec::new(),
+        done_roots: HashSet::new(),
         disc_targets: HashMap::new(),
         nodisc: HashMap::new(),
         synthetic: Vec::new(),
@@ -180,7 +176,7 @@ pub fn translate(
         };
         let out = t.schema(src, &ptr, &ctx)?;
         place(&mut skeleton, root, &ptr, out);
-        t.done_roots.push(ptr);
+        t.done_roots.insert(ptr);
     }
     // Copies of discriminator bases without their dispatch.
     while let Some((ptr, src_ptr)) = t.next_nodisc() {
@@ -213,7 +209,7 @@ pub fn translate(
             };
             let out = t.schema(src, &p, &ctx)?;
             place(&mut skeleton, root, &p, out);
-            t.done_roots.push(p);
+            t.done_roots.insert(p);
         }
     }
     let mut synth = Map::new();
@@ -285,10 +281,6 @@ fn place(skeleton: &mut Value, source: &Value, ptr: &str, value: Value) {
     }
 }
 
-fn ptr_covers(root: &str, ptr: &str) -> bool {
-    ptr == root || (ptr.starts_with(root) && ptr.as_bytes().get(root.len()) == Some(&b'/'))
-}
-
 impl Translator<'_> {
     fn warn(&mut self, location: &str, message: impl Into<String>) {
         self.warnings.push(Warning {
@@ -297,8 +289,20 @@ impl Translator<'_> {
         });
     }
 
+    /// True when `ptr` lies inside an already translated root. Checks each
+    /// pointer prefix, so the cost is the pointer's depth.
     fn covered(&self, ptr: &str) -> bool {
-        self.done_roots.iter().any(|r| ptr_covers(r, ptr))
+        if self.done_roots.contains(ptr) {
+            return true;
+        }
+        let mut end = ptr.len();
+        while let Some(slash) = ptr[..end].rfind('/') {
+            if self.done_roots.contains(&ptr[..slash]) {
+                return true;
+            }
+            end = slash;
+        }
+        false
     }
 
     fn next_nodisc(&mut self) -> Option<(String, String)> {
@@ -600,21 +604,29 @@ impl Translator<'_> {
                     let Some(names) = val.as_array() else {
                         continue;
                     };
-                    let kept: Vec<Value> = names
-                        .iter()
-                        .filter(|n| {
-                            let Some(n) = n.as_str() else {
-                                return false;
-                            };
-                            let (ro, wo) = visible.get(n).copied().unwrap_or((false, false));
-                            match self.dir {
-                                Direction::Request => !ro,
-                                Direction::Response => !wo,
-                            }
-                        })
-                        .cloned()
-                        .collect();
-                    out.insert(k.clone(), Value::Array(kept));
+                    // A readOnly property is required only in responses and a
+                    // writeOnly one only in requests; both directions share
+                    // one translation, so those names go to `x-oav-required`.
+                    let mut always = Vec::new();
+                    let mut request_only = Vec::new();
+                    let mut response_only = Vec::new();
+                    for n in names.iter().filter_map(Value::as_str) {
+                        let (ro, wo) = visible.get(n).copied().unwrap_or((false, false));
+                        let v = Value::String(n.to_owned());
+                        match (ro, wo) {
+                            (false, false) => always.push(v),
+                            (true, false) => response_only.push(v),
+                            (false, true) => request_only.push(v),
+                            (true, true) => {}
+                        }
+                    }
+                    out.insert(k.clone(), Value::Array(always));
+                    if !request_only.is_empty() || !response_only.is_empty() {
+                        out.insert(
+                            "x-oav-required".into(),
+                            json!({"request": request_only, "response": response_only}),
+                        );
+                    }
                 }
                 "dependentRequired" => {
                     if val.is_object() {

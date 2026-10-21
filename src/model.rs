@@ -101,10 +101,18 @@ impl<'a> Builder<'a> {
             };
             let schema_v = media.get("schema");
             let schema = schema_v.map(|_| self.roots.id(dir, &doc::join(&mptr, "schema")));
-            let shape = schema_v.map_or(Shape::Primitive(crate::params::Types::ANY), |s| {
-                shape_of(self.root, s, self.version)
-            });
-            let props = schema_v.map(|s| self.form_props(s)).unwrap_or_default();
+            // Shapes and encodings matter only for bodies parsed from text.
+            let textual = mt.is_form() || mt.is_multipart_form() || mt.ty == "text" || mt.ty == "*";
+            let shape = match schema_v {
+                Some(s) if textual => shape_of(self.root, s, self.version),
+                _ => Shape::Primitive(crate::params::Types::ANY),
+            };
+            let props = match schema_v {
+                Some(s) if mt.is_form() || mt.is_multipart_form() || mt.ty == "*" => {
+                    self.form_props(s)
+                }
+                _ => Vec::new(),
+            };
             let encodings = self.encodings(media.get("encoding"), &doc::join(&mptr, "encoding"));
             out.push((
                 mt,
