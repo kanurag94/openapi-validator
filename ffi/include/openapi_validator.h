@@ -137,6 +137,21 @@ int oav_options_default(oav_options *opts);
  * not null) is a message to free with oav_string_free. */
 int oav_spec_load(const uint8_t *doc, size_t doc_len, const oav_options *opts,
                   oav_spec **out, char **error);
+typedef struct {
+    const char *uri;    /* the URI references use for this document */
+    size_t uri_len;
+    const uint8_t *data;
+    size_t data_len;
+} oav_document;
+
+/* Loads a description spread over several documents. `entry` is the OpenAPI
+ * document at `entry_uri`; `others` are the documents it refers to. Nothing
+ * is fetched: a reference to a document not supplied is a load error.
+ * Ownership as for oav_spec_load. */
+int oav_spec_load_documents(const char *entry_uri, size_t entry_uri_len,
+                            const uint8_t *entry, size_t entry_len,
+                            const oav_document *others, size_t others_len,
+                            const oav_options *opts, oav_spec **out, char **error);
 void oav_spec_free(oav_spec *spec);
 
 int oav_validate_request(const oav_spec *spec, const oav_request *request,

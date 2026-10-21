@@ -324,6 +324,86 @@ pub unsafe extern "C" fn oav_spec_load(
     })
 }
 
+/// One document of a multi-document description.
+#[repr(C)]
+pub struct OavDocument {
+    pub uri: *const c_char,
+    pub uri_len: usize,
+    pub data: *const u8,
+    pub data_len: usize,
+}
+
+/// Like `oav_spec_load`, for a description spread over several documents:
+/// `entry` is the OpenAPI document at `entry_uri`, and `others` are the
+/// documents it refers to, each with the URI references use for it.
+#[no_mangle]
+pub unsafe extern "C" fn oav_spec_load_documents(
+    entry_uri: *const c_char,
+    entry_uri_len: usize,
+    entry: *const u8,
+    entry_len: usize,
+    others: *const OavDocument,
+    others_len: usize,
+    opts: *const OavOptions,
+    out: *mut *mut OavSpec,
+    error: *mut *mut c_char,
+) -> c_int {
+    guard(|| {
+        if out.is_null() {
+            return OAV_ERR_NULL;
+        }
+        unsafe { out.write(std::ptr::null_mut()) };
+        if !error.is_null() {
+            unsafe { error.write(std::ptr::null_mut()) };
+        }
+        let uri = match unsafe { text(entry_uri, entry_uri_len) } {
+            Ok(u) => u,
+            Err(e) => return e,
+        };
+        let Some(entry) = (unsafe { bytes(entry, entry_len) }) else {
+            return OAV_ERR_NULL;
+        };
+        let mut docs = Vec::with_capacity(others_len);
+        if others_len > 0 {
+            if others.is_null() {
+                return OAV_ERR_NULL;
+            }
+            // SAFETY: the caller guarantees `others_len` valid documents.
+            for d in unsafe { std::slice::from_raw_parts(others, others_len) } {
+                let u = match unsafe { text(d.uri, d.uri_len) } {
+                    Ok(u) => u,
+                    Err(e) => return e,
+                };
+                let Some(b) = (unsafe { bytes(d.data, d.data_len) }) else {
+                    return OAV_ERR_NULL;
+                };
+                docs.push((u, b));
+            }
+        }
+        let options = if opts.is_null() {
+            Options::default()
+        } else {
+            match to_options(unsafe { &*opts }) {
+                Ok(o) => o,
+                Err(e) => return e,
+            }
+        };
+        match Spec::load_documents(uri, entry, &docs, options) {
+            Ok(spec) => {
+                unsafe { out.write(Box::into_raw(Box::new(OavSpec(spec)))) };
+                OAV_OK
+            }
+            Err(e) => {
+                if !error.is_null() {
+                    let msg = CString::new(e.to_string().replace('\0', " ")).unwrap_or_default();
+                    unsafe { error.write(msg.into_raw()) };
+                }
+                OAV_ERR_LOAD
+            }
+        }
+    })
+}
+
 /// Frees a validator. Null is ignored.
 #[no_mangle]
 pub unsafe extern "C" fn oav_spec_free(spec: *mut OavSpec) {

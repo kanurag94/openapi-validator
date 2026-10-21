@@ -78,3 +78,20 @@ func TestConcurrentUse(t *testing.T) {
 		t.Fatal("empty version")
 	}
 }
+
+func TestLoadDocuments(t *testing.T) {
+	entry := []byte("openapi: 3.1.0\ninfo: {title: t, version: '1'}\npaths:\n  /p/{id}:\n    $ref: paths.yaml#/item\n")
+	paths := []byte("item:\n  get:\n    parameters:\n      - {name: id, in: path, required: true, schema: {type: integer}}\n    responses: {'200': {description: ok}}\n")
+	s, err := LoadDocuments("https://x.example/openapi.yaml", entry, []Document{{URI: "paths.yaml", Data: paths}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	r, _ := s.ValidateRequest(&Request{Method: "GET", Path: "/p/x"})
+	if r.Valid() || r.Problems[0].Location != "path.id" {
+		t.Fatalf("expected path.id problem, got %+v", r)
+	}
+	if _, err := LoadDocuments("https://x.example/openapi.yaml", entry, nil); err == nil {
+		t.Fatal("expected a missing-document error")
+	}
+}

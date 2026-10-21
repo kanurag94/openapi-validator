@@ -81,6 +81,51 @@ func Load(doc []byte) (*Spec, error) {
 	return s, nil
 }
 
+// Document is one document of a multi-document description.
+type Document struct {
+	URI  string
+	Data []byte
+}
+
+// LoadDocuments loads a description spread over several documents: entry
+// is the OpenAPI document at entryURI, and others are the documents it
+// refers to. Nothing is fetched.
+func LoadDocuments(entryURI string, entry []byte, others []Document) (*Spec, error) {
+	var opts C.oav_options
+	if rc := C.oav_options_default(&opts); rc != C.OAV_OK {
+		return nil, fmt.Errorf("oav_options_default: %d", int(rc))
+	}
+	var pin runtime.Pinner
+	defer pin.Unpin()
+	uri, uriLen := cstr(&pin, entryURI)
+	data, dataLen := cbytes(&pin, entry)
+	var docs *C.oav_document
+	if len(others) > 0 {
+		size := C.size_t(len(others)) * C.size_t(unsafe.Sizeof(C.oav_document{}))
+		docs = (*C.oav_document)(C.malloc(size))
+		defer C.free(unsafe.Pointer(docs))
+		view := unsafe.Slice(docs, len(others))
+		for i, d := range others {
+			view[i].uri, view[i].uri_len = cstr(&pin, d.URI)
+			view[i].data, view[i].data_len = cbytes(&pin, d.Data)
+		}
+	}
+	var p *C.oav_spec
+	var cerr *C.char
+	rc := C.oav_spec_load_documents(uri, uriLen, data, dataLen, docs, C.size_t(len(others)), &opts, &p, &cerr)
+	if rc != C.OAV_OK {
+		msg := fmt.Sprintf("load failed (%d)", int(rc))
+		if cerr != nil {
+			msg = C.GoString(cerr)
+			C.oav_string_free(cerr)
+		}
+		return nil, errors.New(msg)
+	}
+	s := &Spec{p: p}
+	runtime.SetFinalizer(s, func(s *Spec) { s.Close() })
+	return s, nil
+}
+
 // Close frees the validator. It is safe to call more than once.
 func (s *Spec) Close() {
 	if s.p != nil {

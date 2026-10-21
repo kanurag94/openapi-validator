@@ -79,17 +79,35 @@ pub(crate) enum Route<'a> {
 impl Spec {
     /// Parses and indexes an OpenAPI 3.0.x or 3.1.x document (JSON or YAML).
     pub fn load(bytes: &[u8], options: Options) -> Result<Spec, LoadError> {
-        match catch_unwind(AssertUnwindSafe(|| Self::load_inner(bytes, options))) {
-            Ok(r) => r,
-            Err(_) => Err(LoadError::Invalid {
-                location: "#".into(),
-                message: "internal error while loading the document".into(),
-            }),
-        }
+        guard_load(|| Self::load_value(doc::parse(bytes)?, options))
     }
 
-    fn load_inner(bytes: &[u8], options: Options) -> Result<Spec, LoadError> {
-        let root = doc::parse(bytes)?;
+    /// Loads a description spread over several documents. `entry` is the
+    /// OpenAPI document at `entry_uri`; `others` are the documents it refers
+    /// to, each with the URI references use for it (relative URIs resolve
+    /// against `entry_uri`). Nothing is fetched: a reference to a document
+    /// not supplied is a load error.
+    pub fn load_documents(
+        entry_uri: &str,
+        entry: &[u8],
+        others: &[(&str, &[u8])],
+        options: Options,
+    ) -> Result<Spec, LoadError> {
+        guard_load(|| {
+            let root = doc::parse(entry)?;
+            let mut parsed = Vec::with_capacity(others.len());
+            for (uri, bytes) in others {
+                let v = doc::parse(bytes).map_err(|e| match e {
+                    LoadError::Parse(m) => LoadError::Parse(format!("{uri}: {m}")),
+                    other => other,
+                })?;
+                parsed.push(((*uri).to_owned(), v));
+            }
+            Self::load_value(crate::bundle::merge(entry_uri, root, parsed)?, options)
+        })
+    }
+
+    fn load_value(root: Value, options: Options) -> Result<Spec, LoadError> {
         let version = doc::version(&root)?;
         let mut warnings = Vec::new();
         let doc_bases = base_paths(root.get("servers"), "#/servers", &mut warnings);
@@ -502,6 +520,16 @@ impl Spec {
             );
             r
         })
+    }
+}
+
+fn guard_load(f: impl FnOnce() -> Result<Spec, LoadError>) -> Result<Spec, LoadError> {
+    match catch_unwind(AssertUnwindSafe(f)) {
+        Ok(r) => r,
+        Err(_) => Err(LoadError::Invalid {
+            location: "#".into(),
+            message: "internal error while loading the document".into(),
+        }),
     }
 }
 

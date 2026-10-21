@@ -42,6 +42,7 @@
 #![forbid(unsafe_code)]
 
 mod body;
+mod bundle;
 mod doc;
 pub mod format;
 mod http;

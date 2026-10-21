@@ -9,8 +9,8 @@
 //!
 //! The schema is given an `$id` (unless it has one) so that `#`
 //! references resolve within it, as they would at a document root.
-//! Remote references are refused by design (no network access), so the
-//! groups that need them fail to load and count as failures.
+//! Remote references resolve to the suite's `remotes/` documents, which are
+//! supplied to the loader (nothing is fetched).
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -34,8 +34,42 @@ fn document(schema: &Value) -> Value {
     })
 }
 
+/// The suite's remote documents, as `(URI, bytes)` under
+/// `http://localhost:1234/`, supplied to the loader instead of fetched.
+fn remotes(root: &Path) -> Vec<(String, Vec<u8>)> {
+    let base = root.join("remotes");
+    let mut out = Vec::new();
+    let mut stack = vec![base.clone()];
+    while let Some(d) = stack.pop() {
+        let Ok(rd) = std::fs::read_dir(&d) else {
+            continue;
+        };
+        for e in rd.flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                stack.push(p);
+            } else if p.extension().is_some_and(|x| x == "json") {
+                let rel = p
+                    .strip_prefix(&base)
+                    .unwrap_or(&p)
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                if let Ok(b) = std::fs::read(&p) {
+                    out.push((format!("http://localhost:1234/{rel}"), b));
+                }
+            }
+        }
+    }
+    out
+}
+
 /// `(passed, total, details)` for one suite file.
-fn run_file(path: &Path, opts: &Options, details: &mut String) -> (usize, usize) {
+fn run_file(
+    path: &Path,
+    opts: &Options,
+    remotes: &[(&str, &[u8])],
+    details: &mut String,
+) -> (usize, usize) {
     let Ok(text) = std::fs::read_to_string(path) else {
         return (0, 0);
     };
@@ -47,7 +81,12 @@ fn run_file(path: &Path, opts: &Options, details: &mut String) -> (usize, usize)
         let desc = g["description"].as_str().unwrap_or("");
         let tests = g["tests"].as_array().cloned().unwrap_or_default();
         let doc = document(&g["schema"]).to_string();
-        let spec = Spec::load(doc.as_bytes(), opts.clone());
+        let spec = Spec::load_documents(
+            "https://suite.test/openapi.json",
+            doc.as_bytes(),
+            remotes,
+            opts.clone(),
+        );
         for t in &tests {
             total += 1;
             let want = t["valid"].as_bool().unwrap_or(false);
@@ -107,6 +146,11 @@ fn json_schema_test_suite() {
         return;
     };
     let dir = root.join("tests/draft2020-12");
+    let owned = remotes(&root);
+    let remotes: Vec<(&str, &[u8])> = owned
+        .iter()
+        .map(|(u, b)| (u.as_str(), b.as_slice()))
+        .collect();
     let mut details = String::new();
     let mut summary = String::new();
     let mut all = (0usize, 0usize);
@@ -118,7 +162,7 @@ fn json_schema_test_suite() {
             "{}",
             f.file_name().unwrap_or_default().to_string_lossy()
         );
-        let (p, t) = run_file(&f, &required, &mut details);
+        let (p, t) = run_file(&f, &required, &remotes, &mut details);
         all.0 += p;
         all.1 += t;
         let _ = writeln!(
@@ -142,7 +186,7 @@ fn json_schema_test_suite() {
             .to_string_lossy()
             .to_string();
         let _ = writeln!(details, "optional/format/{name}");
-        let (p, t) = run_file(&f, &asserting, &mut details);
+        let (p, t) = run_file(&f, &asserting, &remotes, &mut details);
         fmt.0 += p;
         fmt.1 += t;
         let _ = writeln!(summary, "{:>4}/{:<4} optional/format/{name}", p, t);

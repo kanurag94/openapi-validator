@@ -29,7 +29,7 @@ use crate::doc::{LoadError, Version};
 use crate::format;
 use crate::number::{self, Decimal};
 pub(crate) use translate::Direction;
-use translate::DOC_URI;
+pub(crate) use translate::DOC_URI;
 
 /// Index of a compiled-on-demand schema root.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

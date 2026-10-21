@@ -145,7 +145,8 @@ struct Translator<'a> {
     pattern_cache: HashMap<String, String>,
     needs_backtracking: bool,
     anchors: Option<HashSet<String>>,
-    ids: Option<Vec<String>>,
+    /// Absolute `$id` (without fragment) to the pointer of its schema.
+    ids: Option<HashMap<String, String>>,
 }
 
 /// Translates the schemas at `roots` (and everything they reference).
@@ -395,6 +396,19 @@ impl Translator<'_> {
     }
 
     fn check_ref(&mut self, r: &str, ptr: &str, ctx: &Ctx) -> Result<(), LoadError> {
+        // The whole document named by its own URI (multi-document loads
+        // write cross-document references this way inside `$id` scopes).
+        if let Some(frag) = r.strip_prefix(DOC_URI).and_then(|f| f.strip_prefix('#')) {
+            let target = doc::canonical_pointer(&format!("#{frag}")).unwrap_or_default();
+            if doc::lookup(self.root, &target).is_none() {
+                return Err(LoadError::BrokenRef {
+                    reference: r.to_owned(),
+                    location: ptr.to_owned(),
+                });
+            }
+            self.pending.push(target);
+            return Ok(());
+        }
         if let Some(frag) = r.strip_prefix('#') {
             if frag.is_empty() || frag.starts_with('/') {
                 let target = if ctx.resource_ptr == "#" {
@@ -1058,11 +1072,11 @@ fn mapping_entries(d: &Value) -> Vec<(String, String)> {
 
 /// Every `$anchor`/`$dynamicAnchor` name, and every `$id` without its
 /// fragment, anywhere in the document.
-fn collect_ids(root: &Value) -> (HashSet<String>, Vec<String>) {
+fn collect_ids(root: &Value) -> (HashSet<String>, HashMap<String, String>) {
     let mut anchors = HashSet::new();
-    let mut ids = Vec::new();
-    let mut stack = vec![(root, DOC_URI.to_owned())];
-    while let Some((v, base)) = stack.pop() {
+    let mut ids = HashMap::new();
+    let mut stack = vec![(root, DOC_URI.to_owned(), "#".to_owned())];
+    while let Some((v, base, ptr)) = stack.pop() {
         match v {
             Value::Object(m) => {
                 for key in ["$anchor", "$dynamicAnchor"] {
@@ -1077,11 +1091,16 @@ fn collect_ids(root: &Value) -> (HashSet<String>, Vec<String>) {
                     .filter(|i| !i.starts_with('#'))
                 {
                     base = resolve(&base, id);
-                    ids.push(base.split('#').next().unwrap_or("").to_owned());
+                    ids.entry(base.split('#').next().unwrap_or("").to_owned())
+                        .or_insert_with(|| ptr.clone());
                 }
-                stack.extend(m.values().map(|c| (c, base.clone())));
+                stack.extend(m.iter().map(|(k, c)| (c, base.clone(), doc::join(&ptr, k))));
             }
-            Value::Array(a) => stack.extend(a.iter().map(|c| (c, base.clone()))),
+            Value::Array(a) => stack.extend(
+                a.iter()
+                    .enumerate()
+                    .map(|(i, c)| (c, base.clone(), doc::join(&ptr, &i.to_string()))),
+            ),
             _ => {}
         }
     }
@@ -1125,8 +1144,13 @@ impl Translator<'_> {
             return true;
         }
         self.ensure_ids();
-        self.ids
-            .as_ref()
-            .is_some_and(|ids| ids.iter().any(|id| id == base))
+        // The resource must be translated too, or the engine cannot find it.
+        match self.ids.as_ref().and_then(|ids| ids.get(base)).cloned() {
+            Some(ptr) => {
+                self.pending.push(ptr);
+                true
+            }
+            None => false,
+        }
     }
 }
