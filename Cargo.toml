@@ -27,6 +27,7 @@ serde_json = { version = "1", features = ["arbitrary_precision"] }
 regex = "1"
 num-bigint = "0.4"
 num-traits = "0.2"
+saphyr-parser = "0.2"
 
 [profile.bench]
 debug = true

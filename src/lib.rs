@@ -5,3 +5,4 @@
 
 pub mod json;
 pub mod number;
+pub mod yaml;
