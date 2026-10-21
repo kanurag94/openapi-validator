@@ -12,6 +12,7 @@ use crate::params::Param;
 use crate::path::{split_path, Match, PathIndex, RawSegment, Template, Vars};
 use crate::report::{MatchedOperation, ProblemKind, Report};
 use crate::schema::{SchemaStore, StoreOptions};
+use crate::security::{self, Requirement, Schemes};
 use crate::server::{base_paths, BasePath};
 use crate::validate::Declared;
 
@@ -33,6 +34,9 @@ pub(crate) struct Operation {
     pub operation_id: Option<String>,
     pub body: Option<Body>,
     pub params: Vec<Param>,
+    /// `None`: no security applies.
+    pub security: Option<Vec<Requirement>>,
+    pub declared: Declared,
 }
 
 /// A validator for one OpenAPI document. Load once and share: `Spec` is
@@ -46,6 +50,7 @@ pub struct Spec {
     /// Every distinct server base path, longest first.
     pub(crate) bases: Vec<BasePath>,
     pub(crate) store: SchemaStore,
+    pub(crate) schemes: Schemes,
     warnings: Vec<Warning>,
 }
 
@@ -82,6 +87,8 @@ impl Spec {
         let mut warnings = Vec::new();
         let doc_bases = base_paths(root.get("servers"), "#/servers", &mut warnings);
         let mut b = Builder::new(&root);
+        let schemes = b.schemes()?;
+        let doc_security = b.requirements(root.get("security"), "#/security", &schemes)?;
         let mut paths = PathIndex::default();
         let mut items: Vec<PathItem> = Vec::new();
         let mut ops: Vec<Operation> = Vec::new();
@@ -136,6 +143,16 @@ impl Spec {
                     let body =
                         b.request_body(op.get("requestBody"), &doc::join(&op_ptr, "requestBody"))?;
                     let params = b.params(item, &item_ptr, op, &op_ptr, version)?;
+                    // Operation `security` replaces the document's, even when empty.
+                    let sec = match b.requirements(
+                        op.get("security"),
+                        &doc::join(&op_ptr, "security"),
+                        &schemes,
+                    )? {
+                        Some(r) => Some(r),
+                        None => doc_security.clone(),
+                    };
+                    let declared = security::declared(&schemes, sec.as_deref());
                     pi.ops.push((m, ops.len()));
                     ops.push(Operation {
                         template: tid,
@@ -146,6 +163,8 @@ impl Spec {
                             .map(str::to_owned),
                         body,
                         params,
+                        security: sec,
+                        declared,
                     });
                 }
                 if pi.bases.is_empty() {
@@ -181,6 +200,7 @@ impl Spec {
             ops,
             bases: all_bases,
             store,
+            schemes,
             warnings,
         })
     }
@@ -370,7 +390,15 @@ impl Spec {
             let mut r = self.new_report();
             if let Some((op, vars, _head)) = self.route_into(req, &mut r) {
                 let o = &self.ops[op];
-                self.check_params(&o.params, &vars, req, &Declared::default(), &mut r);
+                if self.options.check_security {
+                    if let Some(reqs) = &o.security {
+                        if let Some(why) = security::check(&self.schemes, reqs, req, &self.options)
+                        {
+                            r.push(ProblemKind::MissingCredentials, "security", why);
+                        }
+                    }
+                }
+                self.check_params(&o.params, &vars, req, &o.declared, &mut r);
                 self.check_request_body(o.body.as_ref(), req, &mut r);
             }
             r

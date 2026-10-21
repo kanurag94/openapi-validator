@@ -16,6 +16,7 @@ mod path;
 pub mod pattern;
 mod report;
 mod schema;
+mod security;
 mod server;
 mod spec;
 mod validate;
