@@ -1,0 +1,35 @@
+name: Fuzz
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  fuzz:
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [load, validate_request, json, yaml, pattern]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: fuzz
+      - run: cargo install cargo-fuzz --locked
+      - name: Seed the load target with the conformance documents
+        if: matrix.target == 'load'
+        run: |
+          mkdir -p fuzz/corpus/load
+          cp fuzz/documents/*.yaml fuzz/corpus/load/
+      - name: Fuzz for ten minutes
+        working-directory: fuzz
+        run: cargo fuzz run -O ${{ matrix.target }} -- -max_total_time=600 -rss_limit_mb=2048 -timeout=10
+      - name: Keep crashes
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-artifacts-${{ matrix.target }}
+          path: fuzz/artifacts

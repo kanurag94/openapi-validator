@@ -76,3 +76,19 @@ jobs:
         run: git clone --depth 1 https://github.com/json-schema-org/JSON-Schema-Test-Suite.git "$RUNNER_TEMP/jsts"
       - name: Run draft 2020-12 through the OpenAPI 3.1 path
         run: JSON_SCHEMA_TEST_SUITE="$RUNNER_TEMP/jsts" cargo test --release --test json_schema_suite -- --nocapture
+
+  fuzz-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: fuzz
+      - run: cargo install cargo-fuzz --locked
+      - name: Run each target briefly
+        working-directory: fuzz
+        run: |
+          for t in load validate_request json yaml pattern; do
+            cargo fuzz run -O "$t" -- -max_total_time=30 -rss_limit_mb=2048 -timeout=10
+          done
