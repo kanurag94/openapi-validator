@@ -1,0 +1,24 @@
+title: A YAML merge key copies the parameters of an anchored mapping
+ref: "YAML 1.1 merge type (tag:yaml.org,2002:merge); OpenAPI 3.1.1 §4.3"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  x-common: &limit
+    name: limit
+    in: query
+    schema: {type: integer, maximum: 10}
+  paths:
+    /items:
+      get:
+        parameters:
+          - <<: *limit
+            required: true
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: /items
+  query: limit=50
+expect:
+  valid: false
+  kind: invalid_parameter
+  location: query.limit

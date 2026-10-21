@@ -155,6 +155,9 @@ pub struct Options {
     /// load warning becomes a load error). Default false: such documents
     /// load, with warnings.
     pub strict_document: bool,
+    /// Read YAML `<<` keys as merge keys, as most YAML tools do. Default
+    /// true; false gives the YAML 1.2 reading (an ordinary key).
+    pub yaml_merge_keys: bool,
     /// Decode `+` as a space in query strings, as HTML forms and the WHATWG
     /// URL standard do. Default true.
     pub query_plus_as_space: bool,
@@ -184,6 +187,7 @@ impl Default for Options {
             read_write_required: ReadWriteRequired::default(),
             patterns: PatternEngine::default(),
             strict_document: false,
+            yaml_merge_keys: true,
             query_plus_as_space: true,
         }
     }
@@ -232,6 +236,7 @@ impl fmt::Debug for Options {
             .field("read_write_required", &self.read_write_required)
             .field("patterns", &self.patterns)
             .field("strict_document", &self.strict_document)
+            .field("yaml_merge_keys", &self.yaml_merge_keys)
             .field("query_plus_as_space", &self.query_plus_as_space)
             .finish()
     }

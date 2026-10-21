@@ -100,7 +100,7 @@ pub const MAX_DOC_DEPTH: usize = 128;
 pub const MAX_REF_CHAIN: usize = 32;
 
 /// Parses JSON (when the first character is `{`) or YAML 1.2.
-pub fn parse(bytes: &[u8]) -> Result<Value, LoadError> {
+pub fn parse(bytes: &[u8], yaml_merge_keys: bool) -> Result<Value, LoadError> {
     let trimmed = bytes.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(bytes);
     let first = trimmed.iter().find(|c| !c.is_ascii_whitespace());
     if first == Some(&b'{') {
@@ -116,6 +116,7 @@ pub fn parse(bytes: &[u8]) -> Result<Value, LoadError> {
             bytes,
             crate::yaml::Limits {
                 max_depth: MAX_DOC_DEPTH,
+                merge_keys: yaml_merge_keys,
                 ..crate::yaml::Limits::default()
             },
         )

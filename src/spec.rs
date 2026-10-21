@@ -79,7 +79,7 @@ pub(crate) enum Route<'a> {
 impl Spec {
     /// Parses and indexes an OpenAPI 3.0.x or 3.1.x document (JSON or YAML).
     pub fn load(bytes: &[u8], options: Options) -> Result<Spec, LoadError> {
-        guard_load(|| Self::load_value(doc::parse(bytes)?, options))
+        guard_load(|| Self::load_value(doc::parse(bytes, options.yaml_merge_keys)?, options))
     }
 
     /// Loads a description spread over several documents. `entry` is the
@@ -94,10 +94,10 @@ impl Spec {
         options: Options,
     ) -> Result<Spec, LoadError> {
         guard_load(|| {
-            let root = doc::parse(entry)?;
+            let root = doc::parse(entry, options.yaml_merge_keys)?;
             let mut parsed = Vec::with_capacity(others.len());
             for (uri, bytes) in others {
-                let v = doc::parse(bytes).map_err(|e| match e {
+                let v = doc::parse(bytes, options.yaml_merge_keys).map_err(|e| match e {
                     LoadError::Parse(m) => LoadError::Parse(format!("{uri}: {m}")),
                     other => other,
                 })?;

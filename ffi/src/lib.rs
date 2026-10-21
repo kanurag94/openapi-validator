@@ -96,6 +96,8 @@ pub struct OavOptions {
     pub patterns: c_int,
     /// Refuse documents that break a MUST of the specification.
     pub strict_document: bool,
+    /// Read YAML `<<` as merge keys (default true).
+    pub yaml_merge_keys: bool,
     /// 0 either, 1 required, 2 ignored.
     pub server_paths: c_int,
     pub max_problems: usize,
@@ -190,6 +192,7 @@ pub unsafe extern "C" fn oav_options_default(opts: *mut OavOptions) -> c_int {
             read_write_required: 0,
             patterns: 0,
             strict_document: d.strict_document,
+            yaml_merge_keys: d.yaml_merge_keys,
             server_paths: 0,
             max_problems: d.max_problems,
             max_report_bytes: d.max_report_bytes,
@@ -234,6 +237,7 @@ fn to_options(o: &OavOptions) -> Result<Options, c_int> {
             _ => return Err(OAV_ERR_RANGE),
         },
         strict_document: o.strict_document,
+        yaml_merge_keys: o.yaml_merge_keys,
         patterns: match o.patterns {
             0 => PatternEngine::Bounded,
             1 => PatternEngine::LinearOnly,

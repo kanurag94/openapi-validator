@@ -25,6 +25,9 @@ pub struct Limits {
     pub max_depth: usize,
     /// Maximum number of nodes, counting every alias expansion.
     pub max_nodes: usize,
+    /// Read `<<` keys as merge keys (YAML 1.1 merge type), as most YAML
+    /// tooling still does. Off, `<<` is an ordinary key (YAML 1.2).
+    pub merge_keys: bool,
 }
 
 impl Default for Limits {
@@ -32,6 +35,7 @@ impl Default for Limits {
         Limits {
             max_depth: 128,
             max_nodes: 4_000_000,
+            merge_keys: true,
         }
     }
 }
@@ -68,6 +72,8 @@ enum Frame {
         anchor: usize,
         nodes: usize,
         depth: usize,
+        /// Values of `<<` keys, in order.
+        merges: Vec<Value>,
     },
 }
 
@@ -149,6 +155,7 @@ fn build(text: &str, limits: Limits) -> Result<Value, YamlError> {
                     anchor,
                     nodes: 1,
                     depth: 0,
+                    merges: Vec::new(),
                 });
                 continue;
             }
@@ -163,14 +170,43 @@ fn build(text: &str, limits: Limits) -> Result<Value, YamlError> {
             },
             Event::MappingEnd => match stack.pop() {
                 Some(Frame::Map {
-                    map,
+                    mut map,
                     key,
                     anchor,
                     nodes,
                     depth,
+                    merges,
                 }) => {
                     if key.is_some() {
                         return Err(err(&span, "mapping key without a value"));
+                    }
+                    // Explicit keys win; among merged mappings, earlier ones
+                    // win (YAML 1.1 merge type).
+                    for source in merges {
+                        let maps = match source {
+                            Value::Object(m) => vec![m],
+                            Value::Array(a) => {
+                                let mut v = Vec::new();
+                                for x in a {
+                                    match x {
+                                        Value::Object(m) => v.push(m),
+                                        _ => return Err(err(&span, "a merge key needs mappings")),
+                                    }
+                                }
+                                v
+                            }
+                            _ => {
+                                return Err(err(
+                                    &span,
+                                    "a merge key needs a mapping or a list of mappings",
+                                ))
+                            }
+                        };
+                        for m in maps {
+                            for (k, v) in m {
+                                map.entry(k).or_insert(v);
+                            }
+                        }
                     }
                     finish(Value::Object(map), anchor, nodes, depth + 1, &mut anchors)
                 }
@@ -246,6 +282,7 @@ fn build(text: &str, limits: Limits) -> Result<Value, YamlError> {
                 key,
                 nodes,
                 depth,
+                merges,
                 ..
             }) => {
                 *nodes = nodes.saturating_add(built.nodes);
@@ -260,6 +297,7 @@ fn build(text: &str, limits: Limits) -> Result<Value, YamlError> {
                         }
                         *key = Some(k);
                     }
+                    Some(k) if k == "<<" && limits.merge_keys => merges.push(built.value),
                     Some(k) => {
                         map.insert(k, built.value);
                     }
@@ -458,7 +496,22 @@ mod tests {
     fn anchors_aliases_and_merge_key() {
         let v = y("x: &a {k: 1}\ny: *a\nz:\n  <<: *a").unwrap();
         assert_eq!(v["y"], json!({"k": 1}));
-        assert_eq!(v["z"], json!({"<<": {"k": 1}}));
+        assert_eq!(v["z"], json!({"k": 1}), "merge key");
+        let v = y("a: &a {k: 1, m: 1}\nb: &b {k: 2, n: 2}\nc:\n  k: 0\n  <<: [*a, *b]").unwrap();
+        assert_eq!(
+            v["c"],
+            json!({"k": 0, "m": 1, "n": 2}),
+            "explicit keys and earlier sources win"
+        );
+        let off = parse(
+            b"x: &a {k: 1}\nz:\n  <<: *a",
+            Limits {
+                merge_keys: false,
+                ..Limits::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(off["z"], json!({"<<": {"k": 1}}), "YAML 1.2 reading");
     }
 
     #[test]

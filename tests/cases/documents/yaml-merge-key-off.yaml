@@ -1,0 +1,23 @@
+title: With merge keys off, << is an ordinary key, so the parameter has no name
+ref: "YAML 1.2 §10.3 (no merge type)"
+options:
+  yaml_merge_keys: false
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  x-common: &limit
+    name: limit
+    in: query
+    schema: {type: integer, maximum: 10}
+  paths:
+    /items:
+      get:
+        parameters:
+          - <<: *limit
+        responses: {"200": {description: ok}}
+request:
+  method: GET
+  path: /items
+  query: limit=50
+expect:
+  valid: true
