@@ -1,0 +1,15 @@
+title: "A template variable needs a non-empty value, so /pets/ does not match /pets/{id}"
+ref: "OpenAPI 3.1.1 §4.8.8.2 (Path Templating Matching)"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /pets/{id}:
+      get: {parameters: [{name: id, in: path, required: true, schema: {type: string}}], responses: {"200": {description: ok}}}
+request:
+  method: "GET"
+  path: "/pets/"
+expect:
+  valid: false
+  kind: "path_not_found"
+  location: "path"

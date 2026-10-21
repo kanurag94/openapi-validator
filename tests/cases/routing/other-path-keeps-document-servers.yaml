@@ -1,0 +1,19 @@
+title: "A path without its own servers still uses the document servers"
+ref: "OpenAPI 3.1.1 §4.8.1.1 (OpenAPI Object servers field)"
+options:
+  server_paths: "required"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  servers:
+    - url: /v1
+  paths:
+    /pets:
+      servers: [{url: /v2}]
+      get: {responses: {"200": {description: ok}}}
+    /orders: {get: {responses: {"200": {description: ok}}}}
+request:
+  method: "GET"
+  path: "/v1/orders"
+expect:
+  valid: true

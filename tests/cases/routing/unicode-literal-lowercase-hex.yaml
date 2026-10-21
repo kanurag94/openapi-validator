@@ -1,0 +1,12 @@
+title: "Percent-encoding hex digits are case-insensitive"
+ref: "RFC 3986 §6.2.2.1"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /café: {get: {responses: {"200": {description: ok}}}}
+request:
+  method: "GET"
+  path: "/caf%c3%a9"
+expect:
+  valid: true

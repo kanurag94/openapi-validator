@@ -1,0 +1,17 @@
+title: "A path value outside the parameter enum is invalid"
+ref: "OpenAPI 3.1.1 §4.8.12.1 (Parameter Locations, path)"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /reports/{period}:
+      get:
+        parameters: [{name: period, in: path, required: true, schema: {type: string, enum: [daily, weekly]}}]
+        responses: {"200": {description: ok}}
+request:
+  method: "GET"
+  path: "/reports/yearly"
+expect:
+  valid: false
+  kind: "invalid_parameter"
+  location: "path.period"

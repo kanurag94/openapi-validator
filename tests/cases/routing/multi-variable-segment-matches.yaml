@@ -1,0 +1,18 @@
+title: "A segment with several variables and literal separators matches"
+ref: "OpenAPI 3.1.1 §4.8.8.2 (Path Templating Matching)"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /r/{a}-{b}.{ext}:
+      get:
+        parameters:
+          - {name: a, in: path, required: true, schema: {type: string}}
+          - {name: b, in: path, required: true, schema: {type: string}}
+          - {name: ext, in: path, required: true, schema: {type: string, enum: [json, xml]}}
+        responses: {"200": {description: ok}}
+request:
+  method: "GET"
+  path: "/r/x-y.json"
+expect:
+  valid: true

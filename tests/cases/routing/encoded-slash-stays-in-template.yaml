@@ -1,0 +1,15 @@
+title: "%2F inside a segment stays in that segment and is captured by the variable"
+ref: "RFC 3986 §2.2 / OpenAPI 3.1.1 §4.8.8.2"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /files/{name}:
+      get:
+        parameters: [{name: name, in: path, required: true, schema: {type: string, const: a/b}}]
+        responses: {"200": {description: ok}}
+request:
+  method: "GET"
+  path: "/files/a%2Fb"
+expect:
+  valid: true

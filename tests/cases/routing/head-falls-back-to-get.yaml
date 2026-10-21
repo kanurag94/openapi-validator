@@ -1,0 +1,12 @@
+title: "HEAD without a head operation is checked as the GET operation"
+ref: "RFC 9110 §9.3.2"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /pets: {get: {responses: {"200": {description: ok}}}}
+request:
+  method: "HEAD"
+  path: "/pets"
+expect:
+  valid: true

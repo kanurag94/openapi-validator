@@ -1,0 +1,18 @@
+title: "A 3.0 document strips server paths the same way"
+ref: "OpenAPI 3.0.4 §4.8.5 (Server Object)"
+options:
+  server_paths: "required"
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  servers:
+    - url: https://api.example.com/{v}
+      variables:
+        v: {default: v1, enum: [v1, v2]}
+  paths:
+    /pets: {get: {responses: {"200": {description: ok}}}}
+request:
+  method: "GET"
+  path: "/v2/pets"
+expect:
+  valid: true

@@ -1,0 +1,14 @@
+title: "A request that is only a prefix of a declared path does not match it"
+ref: "OpenAPI 3.1.1 §4.8.8 (Paths Object)"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /pets/toys: {get: {responses: {"200": {description: ok}}}}
+request:
+  method: "GET"
+  path: "/pets"
+expect:
+  valid: false
+  kind: "path_not_found"
+  location: "path"

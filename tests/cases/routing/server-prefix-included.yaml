@@ -1,0 +1,14 @@
+title: "A request path that includes the server path matches"
+ref: "OpenAPI 3.1.1 §4.8.5 (Server Object)"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  servers:
+    - url: /v1
+  paths:
+    /pets: {get: {responses: {"200": {description: ok}}}}
+request:
+  method: "GET"
+  path: "/v1/pets"
+expect:
+  valid: true

@@ -1,0 +1,20 @@
+title: "A path parameter defined by $ref to components is applied"
+ref: "OpenAPI 3.1.1 §4.8.23 (Reference Object)"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  components:
+    parameters:
+      PetId: {name: id, in: path, required: true, schema: {type: integer, minimum: 1}}
+  paths:
+    /pets/{id}:
+      get:
+        parameters: [{$ref: '#/components/parameters/PetId'}]
+        responses: {"200": {description: ok}}
+request:
+  method: "GET"
+  path: "/pets/0"
+expect:
+  valid: false
+  kind: "invalid_parameter"
+  location: "path.id"

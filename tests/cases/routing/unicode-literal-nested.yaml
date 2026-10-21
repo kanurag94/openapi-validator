@@ -1,0 +1,12 @@
+title: "A non-Latin literal segment matches its percent-encoded form"
+ref: "RFC 3986 §2.1"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /商品/list: {get: {responses: {"200": {description: ok}}}}
+request:
+  method: "GET"
+  path: "/%E5%95%86%E5%93%81/list"
+expect:
+  valid: true

@@ -1,0 +1,29 @@
+title: "The authentication scheme token is case-insensitive (basic)"
+ref: "RFC 9110 §11.1 (authentication scheme is case-insensitive)"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  components:
+    securitySchemes:
+      hkey: {type: apiKey, in: header, name: X-Api-Key}
+      qkey: {type: apiKey, in: query, name: api_key}
+      ckey: {type: apiKey, in: cookie, name: session}
+      basic: {type: http, scheme: basic}
+      bearer: {type: http, scheme: bearer, bearerFormat: JWT}
+      digest: {type: http, scheme: digest}
+      oauth:
+        type: oauth2
+        flows:
+          clientCredentials: {tokenUrl: 'https://auth.example.com/token', scopes: {read: r, write: w}}
+      oidc: {type: openIdConnect, openIdConnectUrl: 'https://auth.example.com/.well-known/openid-configuration'}
+      mtls: {type: mutualTLS}
+  security: [{basic: []}]
+  paths:
+    /pets:
+      get: {responses: {"200": {description: ok}}}
+request:
+  method: "GET"
+  path: "/pets"
+  headers: [["Authorization", "basic dXNlcjpwYXNz"]]
+expect:
+  valid: true

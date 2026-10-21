@@ -1,0 +1,16 @@
+title: "A server URL ending in / strips the same path as without it"
+ref: "OpenAPI 3.1.1 §4.8.5 (Server Object)"
+options:
+  server_paths: "required"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  servers:
+    - url: https://api.example.com/v1/
+  paths:
+    /pets: {get: {responses: {"200": {description: ok}}}}
+request:
+  method: "GET"
+  path: "/v1/pets"
+expect:
+  valid: true

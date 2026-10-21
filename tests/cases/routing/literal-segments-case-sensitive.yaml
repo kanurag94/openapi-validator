@@ -1,0 +1,14 @@
+title: "Path literals are compared case-sensitively, so /Pets does not match /pets"
+ref: "RFC 3986 §6.2.2.1 (path is case-sensitive)"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /pets: {get: {responses: {"200": {description: ok}}}}
+request:
+  method: "GET"
+  path: "/Pets"
+expect:
+  valid: false
+  kind: "path_not_found"
+  location: "path"

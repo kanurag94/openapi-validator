@@ -1,0 +1,15 @@
+title: "A variable surrounded by literal text in one segment matches"
+ref: "OpenAPI 3.1.1 §4.8.8.2 (Path Templating Matching)"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /files/report-{id}.pdf:
+      get:
+        parameters: [{name: id, in: path, required: true, schema: {type: integer}}]
+        responses: {"200": {description: ok}}
+request:
+  method: "GET"
+  path: "/files/report-7.pdf"
+expect:
+  valid: true

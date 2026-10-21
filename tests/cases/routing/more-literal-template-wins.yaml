@@ -1,0 +1,21 @@
+title: "Among matching templates the one with more literal characters is chosen"
+ref: "OpenAPI 3.1.1 §4.8.8.2 (Path Templating Matching)"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /items/{id}/details:
+      get:
+        parameters: [{name: id, in: path, required: true, schema: {type: string}}]
+        responses: {"200": {description: ok}}
+    /{kind}/{id}/details:
+      post:
+        parameters:
+          - {name: kind, in: path, required: true, schema: {type: string}}
+          - {name: id, in: path, required: true, schema: {type: string}}
+        responses: {"200": {description: ok}}
+request:
+  method: "GET"
+  path: "/items/7/details"
+expect:
+  valid: true

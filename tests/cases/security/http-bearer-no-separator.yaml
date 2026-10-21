@@ -1,0 +1,31 @@
+title: "Bearer glued to the token without whitespace does not match the scheme"
+ref: "RFC 6750 §2.1 (Authorization Request Header Field)"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  components:
+    securitySchemes:
+      hkey: {type: apiKey, in: header, name: X-Api-Key}
+      qkey: {type: apiKey, in: query, name: api_key}
+      ckey: {type: apiKey, in: cookie, name: session}
+      basic: {type: http, scheme: basic}
+      bearer: {type: http, scheme: bearer, bearerFormat: JWT}
+      digest: {type: http, scheme: digest}
+      oauth:
+        type: oauth2
+        flows:
+          clientCredentials: {tokenUrl: 'https://auth.example.com/token', scopes: {read: r, write: w}}
+      oidc: {type: openIdConnect, openIdConnectUrl: 'https://auth.example.com/.well-known/openid-configuration'}
+      mtls: {type: mutualTLS}
+  security: [{bearer: []}]
+  paths:
+    /pets:
+      get: {responses: {"200": {description: ok}}}
+request:
+  method: "GET"
+  path: "/pets"
+  headers: [["Authorization", "Bearerabc"]]
+expect:
+  valid: false
+  kind: "missing_credentials"
+  location: "security"

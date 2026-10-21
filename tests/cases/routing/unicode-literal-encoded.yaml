@@ -1,0 +1,12 @@
+title: "A unicode literal segment matches its UTF-8 percent-encoded form"
+ref: "RFC 3986 §2.1 / OpenAPI 3.1.1 §4.8.8"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /café: {get: {responses: {"200": {description: ok}}}}
+request:
+  method: "GET"
+  path: "/caf%C3%A9"
+expect:
+  valid: true

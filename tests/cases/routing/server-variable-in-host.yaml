@@ -1,0 +1,18 @@
+title: "A server variable in the host does not affect the path prefix"
+ref: "OpenAPI 3.1.1 §4.8.6 (Server Variable Object)"
+options:
+  server_paths: "required"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  servers:
+    - url: https://{region}.example.com/v1
+      variables:
+        region: {default: eu, enum: [eu, us]}
+  paths:
+    /pets: {get: {responses: {"200": {description: ok}}}}
+request:
+  method: "GET"
+  path: "/v1/pets"
+expect:
+  valid: true

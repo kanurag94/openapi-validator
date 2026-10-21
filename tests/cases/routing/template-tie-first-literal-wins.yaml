@@ -1,0 +1,19 @@
+title: "When templates tie on literal characters, the one whose first differing segment is literal wins"
+ref: "OpenAPI 3.1.1 §4.8.8.2 (Path Templating Matching)"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /{x}/b/c:
+      post:
+        parameters: [{name: x, in: path, required: true, schema: {type: string}}]
+        responses: {"200": {description: ok}}
+    /a/{y}/c:
+      get:
+        parameters: [{name: y, in: path, required: true, schema: {type: string}}]
+        responses: {"200": {description: ok}}
+request:
+  method: "GET"
+  path: "/a/b/c"
+expect:
+  valid: true

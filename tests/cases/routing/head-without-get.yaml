@@ -1,0 +1,14 @@
+title: "HEAD on a path with neither head nor get operations is method_not_allowed"
+ref: "RFC 9110 §9.3.2"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /pets: {post: {responses: {"200": {description: ok}}}}
+request:
+  method: "HEAD"
+  path: "/pets"
+expect:
+  valid: false
+  kind: "method_not_allowed"
+  location: "method"

@@ -1,0 +1,33 @@
+title: "An undeclared cookie is refused when unknown cookies are refused"
+ref: "OpenAPI 3.1.1 §4.8.12"
+options:
+  allow_unknown_cookies: false
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  components:
+    securitySchemes:
+      hkey: {type: apiKey, in: header, name: X-Api-Key}
+      qkey: {type: apiKey, in: query, name: api_key}
+      ckey: {type: apiKey, in: cookie, name: session}
+      basic: {type: http, scheme: basic}
+      bearer: {type: http, scheme: bearer, bearerFormat: JWT}
+      digest: {type: http, scheme: digest}
+      oauth:
+        type: oauth2
+        flows:
+          clientCredentials: {tokenUrl: 'https://auth.example.com/token', scopes: {read: r, write: w}}
+      oidc: {type: openIdConnect, openIdConnectUrl: 'https://auth.example.com/.well-known/openid-configuration'}
+      mtls: {type: mutualTLS}
+  security: [{ckey: []}]
+  paths:
+    /pets:
+      get: {responses: {"200": {description: ok}}}
+request:
+  method: "GET"
+  path: "/pets"
+  headers: [["Cookie", "session=s; tracker=1"]]
+expect:
+  valid: false
+  kind: "unknown_parameter"
+  location: "cookie.tracker"

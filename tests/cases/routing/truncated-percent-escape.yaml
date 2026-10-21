@@ -1,0 +1,14 @@
+title: "A trailing percent sign with no hex digits is a malformed path"
+ref: "RFC 3986 §2.1"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /pets/{id}:
+      get: {parameters: [{name: id, in: path, required: true, schema: {type: string}}], responses: {"200": {description: ok}}}
+request:
+  method: "GET"
+  path: "/pets/abc%4"
+expect:
+  valid: false
+  kind: "malformed_path"

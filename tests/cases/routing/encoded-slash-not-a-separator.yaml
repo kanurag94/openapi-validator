@@ -1,0 +1,14 @@
+title: "%2F is not a segment separator, so /a%2Fb does not match the two-segment path /a/b"
+ref: "RFC 3986 §2.2"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /a/b: {get: {responses: {"200": {description: ok}}}}
+request:
+  method: "GET"
+  path: "/a%2Fb"
+expect:
+  valid: false
+  kind: "path_not_found"
+  location: "path"

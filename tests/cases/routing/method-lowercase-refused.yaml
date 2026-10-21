@@ -1,0 +1,14 @@
+title: "Method names are case-sensitive, so lowercase get does not match the GET operation"
+ref: "RFC 9110 §9.1"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /pets: {get: {responses: {"200": {description: ok}}}}
+request:
+  method: "get"
+  path: "/pets"
+expect:
+  valid: false
+  kind: "method_not_allowed"
+  location: "method"

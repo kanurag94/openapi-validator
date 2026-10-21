@@ -1,0 +1,20 @@
+title: "Each variable captured from a shared segment is checked against its schema"
+ref: "OpenAPI 3.1.1 §4.8.12.1 (Parameter Locations, path)"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /r/{a}-{b}.{ext}:
+      get:
+        parameters:
+          - {name: a, in: path, required: true, schema: {type: string}}
+          - {name: b, in: path, required: true, schema: {type: string}}
+          - {name: ext, in: path, required: true, schema: {type: string, enum: [json, xml]}}
+        responses: {"200": {description: ok}}
+request:
+  method: "GET"
+  path: "/r/x-y.txt"
+expect:
+  valid: false
+  kind: "invalid_parameter"
+  location: "path.ext"

@@ -1,0 +1,16 @@
+title: "A value other than the concrete literal falls through to the template"
+ref: "OpenAPI 3.1.1 §4.8.8.2 (Path Templating Matching)"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /pets/mine: {get: {responses: {"200": {description: ok}}}}
+    /pets/{id}:
+      get: {parameters: [{name: id, in: path, required: true, schema: {type: integer}}], responses: {"200": {description: ok}}}
+request:
+  method: "GET"
+  path: "/pets/abc"
+expect:
+  valid: false
+  kind: "invalid_parameter"
+  location: "path.id"

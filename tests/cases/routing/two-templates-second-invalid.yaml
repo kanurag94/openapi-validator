@@ -1,0 +1,19 @@
+title: "The second of two template values is checked against its own schema"
+ref: "OpenAPI 3.1.1 §4.8.12.1 (Parameter Locations, path)"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /users/{uid}/orders/{oid}:
+      get:
+        parameters:
+          - {name: uid, in: path, required: true, schema: {type: integer}}
+          - {name: oid, in: path, required: true, schema: {type: integer}}
+        responses: {"200": {description: ok}}
+request:
+  method: "GET"
+  path: "/users/3/orders/abc"
+expect:
+  valid: false
+  kind: "invalid_parameter"
+  location: "path.oid"

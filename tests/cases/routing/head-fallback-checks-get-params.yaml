@@ -1,0 +1,17 @@
+title: "HEAD checked as GET still needs GET's required parameters"
+ref: "RFC 9110 §9.3.2"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /pets:
+      get:
+        parameters: [{name: limit, in: query, required: true, schema: {type: integer}}]
+        responses: {"200": {description: ok}}
+request:
+  method: "HEAD"
+  path: "/pets"
+expect:
+  valid: false
+  kind: "missing_parameter"
+  location: "query.limit"

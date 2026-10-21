@@ -1,0 +1,17 @@
+title: "Any of several servers may supply the prefix"
+ref: "OpenAPI 3.1.1 §4.8.1.1 (OpenAPI Object servers field)"
+options:
+  server_paths: "required"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  servers:
+    - url: /v1
+    - url: /v2
+  paths:
+    /pets: {get: {responses: {"200": {description: ok}}}}
+request:
+  method: "GET"
+  path: "/v2/pets"
+expect:
+  valid: true

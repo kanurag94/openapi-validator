@@ -1,0 +1,16 @@
+title: "An explicit head operation is used instead of GET's"
+ref: "OpenAPI 3.1.1 §4.8.9.1 (head field)"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /pets:
+      get:
+        parameters: [{name: limit, in: query, required: true, schema: {type: integer}}]
+        responses: {"200": {description: ok}}
+      head: {responses: {"200": {description: ok}}}
+request:
+  method: "HEAD"
+  path: "/pets"
+expect:
+  valid: true
