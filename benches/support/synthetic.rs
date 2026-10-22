@@ -61,12 +61,16 @@ pub fn document(paths: usize, chain: usize) -> String {
     s
 }
 
-/// A valid POST body for `Model*_0` with `depth` nested children.
+/// A valid POST body for `Model*_0` with `depth` nested children. `id` is
+/// readOnly but required, and in OpenAPI 3.1 `required` still applies to
+/// requests, so every level sends it.
 pub fn body(depth: usize) -> String {
-    let mut b = String::from(r#"{"name": "leaf", "count": 1, "price": 9.99, "status": "active"}"#);
+    let mut b = String::from(
+        r#"{"id": "2eb8aa08-aa98-11ea-b4aa-73b441d16380", "name": "leaf", "count": 1, "price": 9.99, "status": "active"}"#,
+    );
     for _ in 0..depth {
         b = format!(
-            r#"{{"name": "node", "count": 2, "price": 0.5, "status": "pending", "created": "2024-01-01T00:00:00Z", "labels": {{"a": "b"}}, "child": {b}}}"#
+            r#"{{"id": "2eb8aa08-aa98-11ea-b4aa-73b441d16380", "name": "node", "count": 2, "price": 0.5, "status": "pending", "created": "2024-01-01T00:00:00Z", "labels": {{"a": "b"}}, "child": {b}}}"#
         );
     }
     b
