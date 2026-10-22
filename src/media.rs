@@ -106,12 +106,13 @@ impl MediaType {
                 }
             })
         });
-        if !self.params.is_empty() && !params_match {
-            // Parameters differ: still the same type, but less specific than
-            // an exact match. `charset` is advisory for most types.
-            return Some(2);
-        }
-        Some(if self.params.is_empty() { 2 } else { 3 })
+        // Parameters that differ still match the type, only less specifically
+        // than an exact match: `charset` is advisory for most types.
+        Some(if !self.params.is_empty() && params_match {
+            3
+        } else {
+            2
+        })
     }
 }
 
@@ -170,6 +171,18 @@ mod tests {
         );
         assert_eq!(best_match(&entries, &mt("application/xml")).unwrap().1, 1);
         assert_eq!(best_match(&entries, &mt("text/plain")).unwrap().1, 0);
+        // Matching parameters rank above none; `charset` ignores case, other
+        // parameters do not (RFC 9110 §8.3.1).
+        let rank = |range: &str, actual: &str| mt(range).match_rank(&mt(actual));
+        assert_eq!(
+            rank("text/plain; charset=utf-8", "text/plain; charset=UTF-8"),
+            Some(3)
+        );
+        assert_eq!(rank("text/plain; charset=utf-8", "text/plain"), Some(2));
+        assert_eq!(rank("text/plain", "text/plain; charset=utf-8"), Some(2));
+        assert_eq!(rank("text/plain; v=A", "text/plain; v=A"), Some(3));
+        assert_eq!(rank("text/plain; v=A", "text/plain; v=a"), Some(2));
+        assert_eq!(rank("text/plain; v=A", "text/html; v=A"), None);
         let only = vec![(mt("application/json"), 0)];
         assert!(best_match(&only, &mt("text/plain")).is_none());
     }
