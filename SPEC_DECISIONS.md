@@ -32,7 +32,7 @@ The defaults follow the specification text. `Options::gateway_profile()` switche
 - **Empty arrays.** `list=` is an empty array in both explode modes.
 - **Repeated parameters.** A non-exploded array sent twice has its items combined. A primitive sent twice has each value checked.
 - **Header lists.** Items in list-valued headers are trimmed, so `a, b` is accepted (RFC 9110 §5.6.1).
-- **Repeated header lines.** Every line is checked on its own (RFC 9110 §5.3).
+- **Repeated header lines.** Lines with one name are one value, their contents joined with commas (RFC 9110 §5.3), so a scalar header sent on two lines is not a valid integer. `Set-Cookie` is the exception (see Responses).
 - **Cookie values.** Values are percent-decoded when the escapes are valid and taken as written otherwise (RFC 6265). The 3.2 `style: cookie` removes no percent-encoding (3.2 Appendix D).
 - **`in: querystring` (3.2 §4.12.1).** Form content is read as written; any other media type is percent-decoded first (3.2 Appendix E). Problems are parameter problems at `querystring`. While one is declared, the query string is not split into pairs for unknown-parameter checks.
 - **`allowEmptyValue`.** The field is deprecated and changes nothing; the schema decides whether an empty value is valid.
@@ -73,7 +73,7 @@ The defaults follow the specification text. `Options::gateway_profile()` switche
 - **Empty bodies.** An empty body where content is declared is reported, except for HEAD requests and 204 and 304 responses (RFC 9110 §15.3.5, §15.4.5).
 - **Content where none is allowed.** A response to HEAD, or a 204 or 304 response, that carries content is reported (RFC 9110 §9.3.2, §15.3.5, §15.4.5).
 - **Undeclared bodies.** A body where no content is declared is not reported.
-- **Header values.** Values are literal text in simple style and are never re-read as JSON (§4.8.21). Each repeated line is checked.
+- **Header values.** Values are literal text in simple style and are never re-read as JSON (§4.8.21). Repeated lines are joined with commas and checked as one value (RFC 9110 §5.3).
 - **Content-Type headers.** A declared `Content-Type` response header is ignored (§4.8.17.1).
 - **Set-Cookie.** Its lines are never split on commas (RFC 9110 §5.3). An object schema takes one property per line (`name=rest`), an array one item per line, and `content` sees the lines joined with LF (3.2 §4.21.3). This applies in every version.
 

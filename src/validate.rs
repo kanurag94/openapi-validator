@@ -497,7 +497,7 @@ impl Spec {
                         }
                         In::Header => headers
                             .get(&p.name.to_ascii_lowercase())
-                            .map(|l| l.iter().map(|s| (*s).to_owned()).collect())
+                            .map(|l| vec![l.join(", ")])
                             .unwrap_or_default(),
                         In::QueryString => Vec::new(),
                     };
@@ -560,16 +560,16 @@ impl Spec {
                                 );
                             }
                         }
-                        // Every line of a repeated header is checked.
+                        // RFC 9110 §5.3: field lines with one name are one
+                        // value, their contents joined with commas.
                         Some(lines) => {
-                            for line in lines {
-                                self.check_param_value(
-                                    p,
-                                    header_value(line, shape, p.explode),
-                                    &label,
-                                    report,
-                                );
-                            }
+                            let joined = lines.join(", ");
+                            self.check_param_value(
+                                p,
+                                header_value(&joined, shape, p.explode),
+                                &label,
+                                report,
+                            );
                         }
                     }
                 }
@@ -751,21 +751,18 @@ impl Spec {
                 self.check_set_cookie(p, lines, &label, report);
                 continue;
             }
-            for line in lines {
-                match &p.value {
-                    // Header values are literal text in simple style; they are
-                    // never re-read as JSON.
-                    ParamValue::Schema { shape, .. } => self.check_param_value(
-                        p,
-                        header_value(line, shape, p.explode),
-                        &label,
-                        report,
-                    ),
-                    ParamValue::Content { media, id } => {
-                        self.check_content_param(media, *id, line, &label, report)
-                    }
-                    ParamValue::QueryString { .. } | ParamValue::Any => {}
+            // RFC 9110 §5.3: the lines are one value, joined with commas.
+            let line = lines.join(", ");
+            match &p.value {
+                // Header values are literal text in simple style; they are
+                // never re-read as JSON.
+                ParamValue::Schema { shape, .. } => {
+                    self.check_param_value(p, header_value(&line, shape, p.explode), &label, report)
                 }
+                ParamValue::Content { media, id } => {
+                    self.check_content_param(media, *id, &line, &label, report)
+                }
+                ParamValue::QueryString { .. } | ParamValue::Any => {}
             }
         }
         if !self.options.validate_body {
