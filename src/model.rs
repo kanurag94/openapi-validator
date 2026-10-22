@@ -132,7 +132,15 @@ impl<'a> Builder<'a> {
             let (prefix_encoding, item_encoding) = self.positional(media, &mptr, 0);
             let parts = if mt.ty == "multipart" && self.version >= Version::V32 {
                 let rest = media.get("itemSchema");
-                part_shapes(self.root, media.get("schema"), rest, self.version, 0)
+                let mut budget = crate::xml::SHAPE_BUDGET;
+                part_shapes(
+                    self.root,
+                    media.get("schema"),
+                    rest,
+                    self.version,
+                    0,
+                    &mut budget,
+                )
             } else {
                 PartShapes::default()
             };
@@ -461,15 +469,21 @@ impl PartShapes {
     }
 }
 
-fn part_shape(root: &Value, s: Option<&Value>, version: Version, depth: usize) -> PartShape {
+fn part_shape(
+    root: &Value,
+    s: Option<&Value>,
+    version: Version,
+    depth: usize,
+    budget: &mut usize,
+) -> PartShape {
     let any = Value::Bool(true);
     let schema = s.unwrap_or(&any);
     PartShape {
         default: default_part_type(root, s),
         shape: shape_of(root, schema, version),
-        xml: crate::xml::shape(root, schema, version, None, 0),
+        xml: crate::xml::shape_in(root, schema, version, None, 0, budget),
         nested: if depth < MAX_ENCODING_NESTING {
-            part_shapes(root, Some(schema), None, version, depth + 1)
+            part_shapes(root, Some(schema), None, version, depth + 1, budget)
         } else {
             PartShapes::default()
         },
@@ -484,7 +498,14 @@ fn part_shapes(
     rest: Option<&Value>,
     version: Version,
     depth: usize,
+    budget: &mut usize,
 ) -> PartShapes {
+    // Recursive schemas fan out at every position; past the budget the
+    // parts are read by their own media types alone.
+    if *budget == 0 {
+        return PartShapes::default();
+    }
+    *budget -= 1;
     let schema = schema.map(|s| {
         s.get("$ref")
             .and_then(Value::as_str)
@@ -496,13 +517,13 @@ fn part_shapes(
         .and_then(Value::as_array)
         .map(|a| {
             a.iter()
-                .map(|p| part_shape(root, Some(p), version, depth))
+                .map(|p| part_shape(root, Some(p), version, depth, budget))
                 .collect()
         })
         .unwrap_or_default();
     let rest = rest.or_else(|| schema.and_then(|s| s.get("items")));
     PartShapes {
         prefix,
-        rest: Some(Box::new(part_shape(root, rest, version, depth))),
+        rest: Some(Box::new(part_shape(root, rest, version, depth, budget))),
     }
 }

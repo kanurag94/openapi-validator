@@ -911,7 +911,13 @@ impl Translator<'_> {
     /// `(readOnly, writeOnly)` of a property schema, following `$ref` and
     /// `allOf` (bounded).
     fn access_flags(&self, s: &Value, depth: usize) -> (bool, bool) {
-        if depth > doc::MAX_REF_CHAIN {
+        self.access_flags_in(s, depth, &mut HashSet::new())
+    }
+
+    /// The flags are or-ed, so a schema reached again adds nothing; `seen`
+    /// keeps the walk linear.
+    fn access_flags_in(&self, s: &Value, depth: usize, seen: &mut HashSet<usize>) -> (bool, bool) {
+        if depth > doc::MAX_REF_CHAIN || !seen.insert(s as *const Value as usize) {
             return (false, false);
         }
         let Some(m) = s.as_object() else {
@@ -926,7 +932,7 @@ impl Translator<'_> {
                 wo = false;
             }
             if let Some(t) = doc::lookup_ref(self.root, r) {
-                let (a, b) = self.access_flags(t, depth + 1);
+                let (a, b) = self.access_flags_in(t, depth + 1, seen);
                 ro |= a;
                 wo |= b;
             }
@@ -938,7 +944,7 @@ impl Translator<'_> {
                 .into_iter()
                 .flatten()
             {
-                let (a, b) = self.access_flags(member, depth + 1);
+                let (a, b) = self.access_flags_in(member, depth + 1, seen);
                 ro |= a;
                 wo |= b;
             }
@@ -948,7 +954,18 @@ impl Translator<'_> {
 
     /// Collects property flags from an `allOf` member, following `$ref`.
     fn collect_props(&self, s: &Value, into: &mut HashMap<String, (bool, bool)>, depth: usize) {
-        if depth > doc::MAX_REF_CHAIN {
+        self.collect_props_in(s, into, depth, &mut HashSet::new());
+    }
+
+    /// Each schema's properties are collected once (linear walk).
+    fn collect_props_in(
+        &self,
+        s: &Value,
+        into: &mut HashMap<String, (bool, bool)>,
+        depth: usize,
+        seen: &mut HashSet<usize>,
+    ) {
+        if depth > doc::MAX_REF_CHAIN || !seen.insert(s as *const Value as usize) {
             return;
         }
         let Some(m) = s.as_object() else {
@@ -956,7 +973,7 @@ impl Translator<'_> {
         };
         if let Some(r) = m.get("$ref").and_then(Value::as_str) {
             if let Some(t) = doc::lookup_ref(self.root, r) {
-                self.collect_props(t, into, depth + 1);
+                self.collect_props_in(t, into, depth + 1, seen);
             }
             if self.version == Version::V30 {
                 return;
@@ -976,7 +993,7 @@ impl Translator<'_> {
             .into_iter()
             .flatten()
         {
-            self.collect_props(member, into, depth + 1);
+            self.collect_props_in(member, into, depth + 1, seen);
         }
     }
 

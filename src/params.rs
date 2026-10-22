@@ -7,7 +7,7 @@
 //! schema allows them; when a value could be read two ways (a schema that
 //! allows both strings and integers), it is valid if either reading is.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use serde_json::{Map, Number, Value};
 
@@ -162,11 +162,23 @@ pub(crate) fn resolve<'a>(root: &'a Value, mut s: &'a Value) -> &'a Value {
     s
 }
 
-fn types_of(root: &Value, s: &Value, version: Version, depth: usize) -> Types {
+/// The types a schema admits. `seen` holds the schemas already visited in
+/// this computation: the result is a union, so a schema reached again (by a
+/// cycle or a shared reference) adds nothing, which keeps the walk linear.
+fn types_of(
+    root: &Value,
+    s: &Value,
+    version: Version,
+    depth: usize,
+    seen: &mut HashSet<usize>,
+) -> Types {
     if depth > 16 {
         return Types::ANY;
     }
     let s = resolve(root, s);
+    if !seen.insert(s as *const Value as usize) {
+        return Types(0);
+    }
     let Some(m) = s.as_object() else {
         return Types::ANY;
     };
@@ -184,7 +196,7 @@ fn types_of(root: &Value, s: &Value, version: Version, depth: usize) -> Types {
     if t.0 == 0 {
         for key in ["allOf", "anyOf", "oneOf"] {
             for member in m.get(key).and_then(Value::as_array).into_iter().flatten() {
-                t = t.union(types_of(root, member, version, depth + 1));
+                t = t.union(types_of(root, member, version, depth + 1, seen));
             }
         }
     }
@@ -209,38 +221,46 @@ fn collect_props(
     version: Version,
     out: &mut Vec<(String, Types)>,
     depth: usize,
+    seen: &mut HashSet<usize>,
 ) {
     if depth > 16 {
         return;
     }
     let s = resolve(root, s);
+    // Each schema's properties are collected once.
+    if !seen.insert(s as *const Value as usize) {
+        return;
+    }
     if let Some(props) = s.get("properties").and_then(Value::as_object) {
         for (name, p) in props {
             if !out.iter().any(|(n, _)| n == name) {
-                out.push((name.clone(), types_of(root, p, version, depth + 1)));
+                out.push((
+                    name.clone(),
+                    types_of(root, p, version, depth + 1, &mut HashSet::new()),
+                ));
             }
         }
     }
     for key in ["allOf", "anyOf", "oneOf"] {
         for member in s.get(key).and_then(Value::as_array).into_iter().flatten() {
-            collect_props(root, member, version, out, depth + 1);
+            collect_props(root, member, version, out, depth + 1, seen);
         }
     }
 }
 
 pub(crate) fn shape_of(root: &Value, s: &Value, version: Version) -> Shape {
-    let t = types_of(root, s, version, 0);
+    let t = types_of(root, s, version, 0, &mut HashSet::new());
     let non_null = t.without_null();
     if non_null == Types::ARR {
         let r = resolve(root, s);
-        let items = r
-            .get("items")
-            .map_or(Types::ANY, |i| types_of(root, i, version, 1));
+        let items = r.get("items").map_or(Types::ANY, |i| {
+            types_of(root, i, version, 1, &mut HashSet::new())
+        });
         return Shape::Array(items);
     }
     if non_null == Types::OBJ {
         let mut props = Vec::new();
-        collect_props(root, s, version, &mut props, 0);
+        collect_props(root, s, version, &mut props, 0, &mut HashSet::new());
         return Shape::Object(props);
     }
     Shape::Primitive(t)

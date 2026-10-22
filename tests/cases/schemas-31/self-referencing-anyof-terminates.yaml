@@ -1,0 +1,17 @@
+title: "A schema that only refers to itself loads quickly and accepts the value"
+ref: "JSON Schema Core 2020-12 §8.2.3.1"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /p:
+      get:
+        parameters:
+          - {name: q, in: query, schema: {$ref: "#/components/schemas/S"}}
+        responses:
+          "200": {description: ok}
+  components:
+    schemas:
+      S: {anyOf: [{$ref: "#/components/schemas/S"}, {$ref: "#/components/schemas/S"}, {$ref: "#/components/schemas/S"}, {$ref: "#/components/schemas/S"}]}
+request: {method: GET, path: /p, query: "q=1"}
+expect: {valid: true}

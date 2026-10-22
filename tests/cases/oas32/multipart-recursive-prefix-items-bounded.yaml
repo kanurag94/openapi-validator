@@ -1,0 +1,19 @@
+title: "Recursive prefixItems in a multipart schema load in bounded time"
+ref: "OpenAPI 3.2.0 §4.14.5.2"
+document: |
+  openapi: 3.2.0
+  info: {title: t, version: "1"}
+  paths:
+    /x:
+      post:
+        requestBody:
+          content:
+            multipart/mixed:
+              schema: {$ref: "#/components/schemas/S"}
+        responses:
+          "200": {description: ok}
+  components:
+    schemas:
+      S: {type: array, xml: {nodeType: element}, prefixItems: [{$ref: "#/components/schemas/S"}, {$ref: "#/components/schemas/S"}, {$ref: "#/components/schemas/S"}, {$ref: "#/components/schemas/S"}, {$ref: "#/components/schemas/S"}]}
+request: {method: POST, path: /x, headers: [["Content-Type", "multipart/mixed; boundary=b"]], body: "--b\r\n\r\nx\r\n--b--\r\n"}
+expect: {valid: false}

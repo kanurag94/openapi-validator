@@ -4,7 +4,7 @@
 //! breaks. They are load warnings by default (a flawed description should
 //! not refuse every call), and load errors with `Options::strict_document`.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use serde_json::Value;
 
@@ -200,6 +200,18 @@ impl<'a> Lint<'a> {
     /// Whether `prop` is required by `s`: by `required` here or in an
     /// `allOf` member, or by every `oneOf`/`anyOf` branch.
     fn requires(&self, s: &Value, prop: &str, depth: usize) -> bool {
+        self.requires_in(s, prop, depth, &mut HashMap::new())
+    }
+
+    /// `memo` holds each schema's answer; one still being worked out (a
+    /// cycle) counts as not requiring, so the walk is linear.
+    fn requires_in(
+        &self,
+        s: &Value,
+        prop: &str,
+        depth: usize,
+        memo: &mut HashMap<usize, bool>,
+    ) -> bool {
         if depth > 16 {
             return true;
         }
@@ -208,6 +220,11 @@ impl<'a> Lint<'a> {
             .and_then(Value::as_str)
             .and_then(|r| doc::lookup_ref(self.root, r))
             .unwrap_or(s);
+        let key = s as *const Value as usize;
+        if let Some(&known) = memo.get(&key) {
+            return known;
+        }
+        memo.insert(key, false);
         let here = s
             .get("required")
             .and_then(Value::as_array)
@@ -215,13 +232,15 @@ impl<'a> Lint<'a> {
         let all_of = s
             .get("allOf")
             .and_then(Value::as_array)
-            .is_some_and(|a| a.iter().any(|m| self.requires(m, prop, depth + 1)));
+            .is_some_and(|a| a.iter().any(|m| self.requires_in(m, prop, depth + 1, memo)));
         let branches = ["oneOf", "anyOf"].iter().any(|k| {
             s.get(*k).and_then(Value::as_array).is_some_and(|a| {
-                !a.is_empty() && a.iter().all(|m| self.requires(m, prop, depth + 1))
+                !a.is_empty() && a.iter().all(|m| self.requires_in(m, prop, depth + 1, memo))
             })
         });
-        here || all_of || branches
+        let answer = here || all_of || branches;
+        memo.insert(key, answer);
+        answer
     }
 
     /// OpenAPI 3.2 §4.26.1: `attribute` and `wrapped` MUST NOT be used
@@ -414,8 +433,21 @@ impl<'a> Lint<'a> {
     }
 
     fn property_names(&self, s: &Value, depth: usize) -> Vec<String> {
+        let mut out = Vec::new();
+        self.property_names_in(s, depth, &mut HashSet::new(), &mut out);
+        out
+    }
+
+    /// Each schema's names are collected once, so the walk is linear.
+    fn property_names_in(
+        &self,
+        s: &Value,
+        depth: usize,
+        seen: &mut HashSet<usize>,
+        out: &mut Vec<String>,
+    ) {
         if depth > 16 {
-            return Vec::new();
+            return;
         }
         let s = match s
             .get("$ref")
@@ -425,17 +457,17 @@ impl<'a> Lint<'a> {
             Some(t) => t,
             None => s,
         };
-        let mut out: Vec<String> = s
-            .get("properties")
-            .and_then(Value::as_object)
-            .map(|p| p.keys().cloned().collect())
-            .unwrap_or_default();
+        if !seen.insert(s as *const Value as usize) {
+            return;
+        }
+        if let Some(p) = s.get("properties").and_then(Value::as_object) {
+            out.extend(p.keys().cloned());
+        }
         for key in ["allOf", "anyOf", "oneOf"] {
             for m in s.get(key).and_then(Value::as_array).into_iter().flatten() {
-                out.extend(self.property_names(m, depth + 1));
+                self.property_names_in(m, depth + 1, seen, out);
             }
         }
-        out
     }
 
     fn responses(&mut self, v: &'a Value, ptr: &str) {

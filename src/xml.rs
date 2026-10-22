@@ -89,6 +89,34 @@ pub(crate) fn shape(
     name: Option<&str>,
     depth: usize,
 ) -> XmlShape {
+    let mut budget = SHAPE_BUDGET;
+    shape_in(root, s, version, name, depth, &mut budget)
+}
+
+/// Mapping nodes built for one body's schema. Recursive schemas expand
+/// along every property and `prefixItems` entry, so the build is bounded
+/// by a node budget as well as by depth; past it, values are read untyped.
+pub(crate) const SHAPE_BUDGET: usize = 4096;
+
+/// [`shape`] drawing on a shared `budget`.
+pub(crate) fn shape_in(
+    root: &Value,
+    s: &Value,
+    version: Version,
+    name: Option<&str>,
+    depth: usize,
+    budget: &mut usize,
+) -> XmlShape {
+    if *budget == 0 {
+        return XmlShape {
+            name: name.map(str::to_owned),
+            namespace: None,
+            node: Node::Element,
+            nullable: false,
+            kind: Kind::Any,
+        };
+    }
+    *budget -= 1;
     let own_xml = s.get("xml");
     let own_node = own_xml
         .and_then(|x| x.get("nodeType"))
@@ -101,7 +129,14 @@ pub(crate) fn shape(
         let target = resolve(root, s);
         if !std::ptr::eq(target, s) {
             let n = ref_name(s);
-            return shape(root, target, version, n.as_deref().or(name), depth + 1);
+            return shape_in(
+                root,
+                target,
+                version,
+                n.as_deref().or(name),
+                depth + 1,
+                budget,
+            );
         }
     }
     let target = resolve(root, s);
@@ -164,7 +199,10 @@ pub(crate) fn shape(
             .flatten()
         {
             if !props.iter().any(|(n, _)| n == p) {
-                props.push((p.clone(), shape(root, ps, version, Some(p), depth + 1)));
+                props.push((
+                    p.clone(),
+                    shape_in(root, ps, version, Some(p), depth + 1, budget),
+                ));
             }
         }
         for key in ["allOf", "anyOf", "oneOf"] {
@@ -180,13 +218,20 @@ pub(crate) fn shape(
             .filter(|_| version >= Version::V32)
             .map(|a| {
                 a.iter()
-                    .map(|p| shape(root, p, version, out.name.as_deref(), depth + 1))
+                    .map(|p| shape_in(root, p, version, out.name.as_deref(), depth + 1, budget))
                     .collect()
             })
             .unwrap_or_default();
         Kind::Array {
             prefix,
-            items: Box::new(shape(root, items, version, out.name.as_deref(), depth + 1)),
+            items: Box::new(shape_in(
+                root,
+                items,
+                version,
+                out.name.as_deref(),
+                depth + 1,
+                budget,
+            )),
         }
     } else if !props.is_empty() || object {
         // An object, declared properties or not: its children are kept.
