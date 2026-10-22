@@ -70,6 +70,27 @@ fn api_key_in_query_header_and_cookie() {
     refused(get(&s, "", &[("Cookie", "sid=")]));
 }
 
+// The refusal says what each scheme needed.
+#[test]
+fn refusal_names_the_missing_credential() {
+    for (name, needs) in [
+        ("key_q", "key_q needs a non-empty query parameter api_key"),
+        ("key_h", "key_h needs a non-empty header X-Key"),
+        ("key_c", "key_c needs a non-empty cookie sid"),
+        (
+            "basic",
+            "basic needs an Authorization header with scheme basic",
+        ),
+        (
+            "oauth",
+            "oauth needs an Authorization header with a bearer token",
+        ),
+    ] {
+        let r = get(&spec(&format!(r#"[{{"{name}": []}}]"#), None), "", &[]);
+        assert!(r.problems()[0].message.contains(needs), "{r}");
+    }
+}
+
 // §4.8.30.1: AND within a requirement, OR across requirements.
 #[test]
 fn and_within_or_across() {
