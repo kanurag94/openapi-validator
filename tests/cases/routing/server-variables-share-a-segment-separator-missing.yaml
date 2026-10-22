@@ -1,0 +1,21 @@
+title: "Two server variables in one segment need the literal between them"
+ref: "OpenAPI 3.1.1 §4.8.6 (Server Variable Object)"
+options:
+  server_paths: "required"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  servers:
+    - url: /{tenant}-{region}
+      variables:
+        tenant: {default: acme}
+        region: {default: eu}
+  paths:
+    /pets: {get: {responses: {"200": {description: ok}}}}
+request:
+  method: "GET"
+  path: "/other/pets"
+expect:
+  valid: false
+  kind: "path_not_found"
+  location: "path"

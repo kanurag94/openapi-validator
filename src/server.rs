@@ -22,16 +22,28 @@ pub type BasePath = Vec<String>;
 /// path segment taken from a request.
 pub const ANY: char = '\u{1}';
 
-/// Whether a decoded request segment matches a base path segment.
+/// Whether a decoded request segment matches a base path segment. Each
+/// [`ANY`] takes at least one character; the literals between them are
+/// matched leftmost, which leaves the most text for the rest.
 pub fn segment_matches(base: &str, actual: &str) -> bool {
-    match base.split_once(ANY) {
-        None => base == actual,
-        Some((prefix, suffix)) => {
-            actual.len() > prefix.len() + suffix.len() - suffix.matches(ANY).count()
-                && actual.starts_with(prefix)
-                && actual.ends_with(suffix.trim_start_matches(ANY))
-        }
+    let mut lits: Vec<&str> = base.split(ANY).collect();
+    let last = lits.pop().unwrap_or_default();
+    let Some(first) = lits.first() else {
+        return base == actual;
+    };
+    let Some(mut rest) = actual.strip_prefix(first) else {
+        return false;
+    };
+    for lit in &lits[1..] {
+        let Some(skip) = rest.chars().next().map(char::len_utf8) else {
+            return false;
+        };
+        let Some(at) = rest[skip..].find(lit) else {
+            return false;
+        };
+        rest = &rest[skip + at + lit.len()..];
     }
+    rest.strip_suffix(last).is_some_and(|v| !v.is_empty())
 }
 
 /// Expands the base paths of a `servers` array. A missing or empty array is
@@ -204,6 +216,20 @@ mod tests {
         assert!(!segment_matches(&d[0][0], ""));
         assert!(segment_matches(&format!("v{ANY}"), "v2"));
         assert!(!segment_matches(&format!("v{ANY}"), "x2"));
+        assert!(!segment_matches(&format!("v{ANY}"), "v"));
+        assert!(segment_matches("v1", "v1") && !segment_matches("v1", "v12"));
+        // Several variables in one segment, each taking one character or more.
+        let two = format!("{ANY}-{ANY}");
+        assert!(segment_matches(&two, "acme-eu"));
+        assert!(segment_matches(&two, "a-b-c"));
+        assert!(!segment_matches(&two, "acme"));
+        assert!(!segment_matches(&two, "-eu"));
+        assert!(!segment_matches(&two, "acme-"));
+        let three = format!("r{ANY}.{ANY}{ANY}z");
+        assert!(segment_matches(&three, "r1.23z"));
+        assert!(!segment_matches(&three, "r1.2z"));
+        assert!(!segment_matches(&three, "r.23z"));
+        assert!(segment_matches(&format!("{ANY}é{ANY}"), "éé1"));
     }
 
     #[test]
