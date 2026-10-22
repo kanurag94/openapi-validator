@@ -290,6 +290,32 @@ impl<'i> Keyword<'i> for AlwaysValid {
     }
 }
 
+/// `multipleOf` with exact decimals (JSON Schema Validation 2020-12
+/// §6.2.1): `0.30000000000000004` is not a multiple of `0.1`.
+struct MultipleOf(Decimal);
+
+impl<'i> Keyword<'i> for MultipleOf {
+    fn validate(&self, instance: &'i Value) -> Result<(), ValidationError<'i>> {
+        if self.is_valid(instance) {
+            Ok(())
+        } else {
+            Err(ValidationError::custom(format!(
+                "must be a multiple of {}",
+                self.0.to_canonical()
+            )))
+        }
+    }
+
+    fn is_valid(&self, instance: &'i Value) -> bool {
+        match instance {
+            Value::Number(n) => {
+                Decimal::parse(&n.to_string()).is_some_and(|d| d.is_multiple_of(&self.0))
+            }
+            _ => true,
+        }
+    }
+}
+
 struct IntFormat(&'static str);
 
 impl<'i> Keyword<'i> for IntFormat {
@@ -529,6 +555,16 @@ impl SchemaStore {
                 };
                 Ok(k)
             })
+            .with_keyword(
+                "x-oav-multiple-of",
+                |_: &Map<String, Value>, v: &Value, _| {
+                    let d = v
+                        .as_number()
+                        .and_then(|n| Decimal::parse(&n.to_string()))
+                        .unwrap_or_else(|| Decimal::parse("1").expect("a decimal"));
+                    Ok(Box::new(MultipleOf(d)) as Box<dyn for<'i> Keyword<'i>>)
+                },
+            )
             .with_keyword(
                 "x-oav-int-format",
                 |_: &Map<String, Value>, v: &Value, _| {

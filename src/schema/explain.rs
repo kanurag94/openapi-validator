@@ -493,7 +493,8 @@ impl<'a> Explainer<'a> {
                         self.push(ipath, format!("must equal {}", short(kv)));
                     }
                 }
-                "minimum" | "maximum" | "exclusiveMinimum" | "exclusiveMaximum" | "multipleOf" => {
+                "minimum" | "maximum" | "exclusiveMinimum" | "exclusiveMaximum" | "multipleOf"
+                | "x-oav-multiple-of" => {
                     let (Some(x), Some(b)) = (dec(inst), dec(kv)) else {
                         continue;
                     };

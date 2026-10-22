@@ -714,13 +714,25 @@ impl Translator<'_> {
                         out.insert(k.clone(), val.clone());
                     }
                 }
-                "minimum" | "maximum" | "multipleOf" => {
+                "minimum" | "maximum" => {
                     if val.is_number() {
                         out.insert(k.clone(), val.clone());
                     } else {
                         self.warn(&kp, format!("{k} is not a number; ignored"));
                     }
                 }
+                // Checked with exact decimals (see `x-oav-multiple-of`), which
+                // is also faster than the engine's rational arithmetic.
+                "multipleOf" => match val
+                    .as_number()
+                    .and_then(|n| crate::number::Decimal::parse(&n.to_string()))
+                {
+                    Some(d) if !d.is_zero() && !d.is_negative() => {
+                        out.insert("x-oav-multiple-of".into(), val.clone());
+                    }
+                    Some(_) => self.warn(&kp, "multipleOf must be greater than 0; ignored"),
+                    None => self.warn(&kp, "multipleOf is not a number; ignored"),
+                },
                 "exclusiveMinimum" | "exclusiveMaximum" => match val {
                     Value::Number(_) => {
                         out.insert(k.clone(), val.clone());
