@@ -66,6 +66,8 @@ The defaults follow the specification text. `Options::gateway_profile()` switche
 - **Reserved characters in form values.** Unencoded reserved characters are accepted even when `allowReserved` is false, since the specification only says they SHOULD be encoded.
 - **Multipart parts.** Following §4.8.15.1, object properties default to JSON and arrays take their items' type. File parts are read as text, and line breaks without a carriage return are accepted.
 - **Empty optional bodies.** These are accepted whatever the `Content-Type` (§4.8.13).
+- **Bodies on GET, HEAD and DELETE.** In 3.0 a `requestBody` on these methods SHALL be ignored (3.0.4 §4.7.10.1), so it is not checked. 3.1 and later check it.
+- **Encoding styles in multipart.** In 3.1 and later, an Encoding Object that writes `style`, `explode` or `allowReserved` serializes its part in that style (§4.8.15.1), so an unexploded array or object part is one delimited value. 3.0 applies these fields to `application/x-www-form-urlencoded` only.
 - **Size.** Bodies larger than `max_body_bytes` (16 MiB by default) are reported and not parsed.
 
 ## Responses
@@ -100,6 +102,7 @@ The defaults follow the specification text. `Options::gateway_profile()` switche
 - **readOnly and writeOnly.** In 3.0, a required readOnly property is required in responses only and a writeOnly one in requests only (3.0.4 §4.7.24.1), including through `$ref` and `allOf`. In 3.1 they are annotations and `required` applies in both directions (§4.8.24.3.2); the option `read_write_required: RelaxAlways` applies the 3.0 rule (gateway profile). Sending them is never refused.
 - **Equality.** `enum`, `const` and `uniqueItems` compare numbers by value and ignore the key order of objects (JSON Schema 2020-12 §4.2.2).
 - **Fragment references in 3.1.** A `#` reference in a schema without `$id` resolves against the OpenAPI document root.
+- **Invalid 3.1 and 3.2 schemas.** A Schema Object that fails the JSON Schema 2020-12 meta-schema, such as `type: foo` or a boolean `exclusiveMaximum`, loads with a warning (`strict_document` refuses it). A boolean exclusive bound is read with its 3.0 meaning; a schema the engine cannot compile reports `schema_error` for the bodies it describes.
 - **Metaschema references.** References to the JSON Schema metaschemas are allowed, because they are built in and nothing is fetched.
 - **Dialects.** A `$schema` naming an OpenAPI dialect, such as `https://spec.openapis.org/oas/3.2/dialect/2025-09-17`, is read as JSON Schema 2020-12 with the OpenAPI keywords (3.2 §4.24.7).
 
