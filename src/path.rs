@@ -259,8 +259,6 @@ pub struct PathIndex {
 }
 
 impl PathIndex {
-    /// Adds a template; the returned id is its position. A template with the
-    /// same shape as an earlier one is refused with the earlier one's text.
     /// Adds a template. A template that differs from one already added only
     /// in its variable names is the same path (OpenAPI 3.1.1 §4.8.8.2):
     /// `Err` gives that template's id.
@@ -452,6 +450,14 @@ mod tests {
         assert!(best(&ix, "/pets/").is_none());
         assert!(best(&ix, "/pets").is_none());
         assert!(best(&ix, "/pets/1/2").is_none());
+        let ix = index(&["/f/{name}.json"]);
+        assert_eq!(
+            best(&ix, "/f/a.json").unwrap().1,
+            vec![("name".to_owned(), "a")]
+        );
+        assert!(best(&ix, "/f/.json").is_none());
+        assert!(best(&ix, "/f/a.jsox").is_none());
+        assert!(best(&ix, "/f/a.json.bak").is_none());
     }
 
     #[test]
@@ -465,8 +471,15 @@ mod tests {
             .unwrap_err();
         assert_eq!(e, first);
         assert_eq!(ix.template(e).text, "/pets/{petId}");
-        assert!(ix
+        let json = ix
             .insert(Template::parse("/pets/{id}.json").unwrap())
+            .unwrap();
+        let e = ix
+            .insert(Template::parse("/pets/{name}.json").unwrap())
+            .unwrap_err();
+        assert_eq!(e, json);
+        assert!(ix
+            .insert(Template::parse("/pets/{id}.xml").unwrap())
             .is_ok());
     }
 

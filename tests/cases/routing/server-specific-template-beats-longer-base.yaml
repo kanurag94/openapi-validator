@@ -1,0 +1,22 @@
+title: "The more specific template wins even when a longer server base matches"
+ref: "OpenAPI 3.1.1 §4.8.8 (concrete paths before templated ones), §4.8.5"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  servers:
+    - url: /api
+    - url: /
+  paths:
+    /users/{id}:
+      get:
+        parameters:
+          - {name: id, in: path, required: true, schema: {type: integer}}
+        responses: {"200": {description: ok}}
+    /api/users/me:
+      get:
+        responses: {"200": {description: ok}}
+request:
+  method: "GET"
+  path: "/api/users/me"
+expect:
+  valid: true
