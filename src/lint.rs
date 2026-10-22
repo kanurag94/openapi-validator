@@ -263,8 +263,9 @@ impl<'a> Lint<'a> {
     /// 3.1 and 3.2 Schema Objects are JSON Schema 2020-12 schemas (§4.8.24):
     /// each is checked against the 2020-12 meta-schema, unless its `$schema`
     /// names another dialect.
-    fn schemas_2020(&mut self) {
-        let meta = jsonschema::draft202012::meta::validator();
+    /// Every Schema Object position: component schemas, and each `schema`
+    /// and `itemSchema` value outside schemas.
+    fn schema_locations(&self) -> Vec<(&'a Value, String)> {
         let mut found: Vec<(&'a Value, String)> = Vec::new();
         for (name, s) in self
             .root
@@ -297,7 +298,12 @@ impl<'a> Lint<'a> {
                 }
             }
         }
-        for (s, ptr) in found {
+        found
+    }
+
+    fn schemas_2020(&mut self) {
+        let meta = jsonschema::draft202012::meta::validator();
+        for (s, ptr) in self.schema_locations() {
             let dialect = s.get("$schema").and_then(Value::as_str);
             if dialect.is_some_and(|d| {
                 !d.contains("json-schema.org/draft/2020-12")
@@ -692,6 +698,16 @@ impl<'a> Lint<'a> {
         if m.contains_key("$ref") {
             return;
         }
+        // 3.0.4 §4.7.24: the Schema Object takes these keywords and
+        // extensions; others are not applied.
+        for k in m.keys() {
+            if !k.starts_with("x-") && !crate::schema::OAS30_KEYWORDS.contains(&k.as_str()) {
+                self.warn(
+                    &doc::join(ptr, k),
+                    format!("{k:?} is not an OpenAPI 3.0 Schema Object keyword, so it is not applied (3.0.4 §4.7.24)"),
+                );
+            }
+        }
         match m.get("type") {
             Some(Value::String(t)) if t == "array" && !m.contains_key("items") => self.warn(
                 ptr,
@@ -834,13 +850,8 @@ pub(crate) fn check(root: &Value, version: Version) -> Vec<Warning> {
         }
     }
     if version == Version::V30 {
-        for (name, s) in root
-            .pointer("/components/schemas")
-            .and_then(Value::as_object)
-            .into_iter()
-            .flatten()
-        {
-            l.schema30(s, &doc::join("#/components/schemas", name), 0);
+        for (s, ptr) in l.schema_locations() {
+            l.schema30(s, &ptr, 0);
         }
     }
     l.out

@@ -45,7 +45,7 @@ pub enum Direction {
 }
 
 /// Keywords of the OpenAPI 3.0 Schema Object (3.0.4 §4.7.24.1).
-const OAS30_KEYWORDS: &[&str] = &[
+pub(crate) const OAS30_KEYWORDS: &[&str] = &[
     "title",
     "multipleOf",
     "maximum",

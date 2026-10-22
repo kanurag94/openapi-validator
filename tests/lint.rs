@@ -344,3 +344,21 @@ fn encoding_keys_in_32() {
     );
     warns(&d(HEAD), "MUST exist in the schema");
 }
+
+// OpenAPI 3.0.4 §4.7.24: keywords outside the 3.0 Schema Object are not
+// applied, so they are reported, inline schemas included.
+#[test]
+fn schema_keywords_outside_30() {
+    let d = |schema: &str| {
+        format!("openapi: 3.0.3\ninfo: {{title: t, version: '1'}}\npaths:\n  /p:\n    post:\n      requestBody: {{content: {{application/json: {{schema: {schema}}}}}}}\n      responses: {{'200': {{description: ok}}}}\n")
+    };
+    assert!(warnings(&d("{type: object, x-extra: 1}")).is_empty());
+    warns(
+        &d("{type: string, const: a}"),
+        "\"const\" is not an OpenAPI 3.0 Schema Object keyword",
+    );
+    warns(
+        &d("{type: object, properties: {a: {if: {}}}}"),
+        "\"if\" is not",
+    );
+}

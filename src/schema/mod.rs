@@ -18,6 +18,7 @@
 mod depth;
 pub(crate) mod explain;
 pub(crate) mod translate;
+pub(crate) use translate::OAS30_KEYWORDS;
 
 use std::collections::HashMap;
 use std::sync::{Arc, OnceLock, RwLock};
