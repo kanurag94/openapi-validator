@@ -276,28 +276,42 @@ impl<'a> Lint<'a> {
         {
             found.push((s, doc::join("#/components/schemas", name)));
         }
-        let mut stack: Vec<(&'a Value, String)> = vec![(self.root, "#".to_owned())];
-        while let Some((v, ptr)) = stack.pop() {
-            let Value::Object(m) = v else {
-                if let Value::Array(a) = v {
-                    for (i, c) in a.iter().enumerate() {
-                        stack.push((c, doc::join(&ptr, &i.to_string())));
+        // Pointers are built only for the schemas found.
+        fn walk<'v>(v: &'v Value, path: &mut Vec<String>, found: &mut Vec<(&'v Value, String)>) {
+            let at = |path: &[String], last: &str| {
+                let mut p = String::from("#");
+                for t in path.iter().map(String::as_str).chain(std::iter::once(last)) {
+                    p.push('/');
+                    p.push_str(&doc::escape_token(t));
+                }
+                p
+            };
+            match v {
+                Value::Object(m) => {
+                    for (k, c) in m {
+                        if matches!(k.as_str(), "schema" | "itemSchema") {
+                            found.push((c, at(path, k)));
+                        } else if !(k.starts_with("x-")
+                            || matches!(k.as_str(), "example" | "examples" | "default")
+                            || (path.len() == 1 && path[0] == "components" && k == "schemas"))
+                        {
+                            path.push(k.clone());
+                            walk(c, path, found);
+                            path.pop();
+                        }
                     }
                 }
-                continue;
-            };
-            for (k, c) in m {
-                let cptr = doc::join(&ptr, k);
-                if matches!(k.as_str(), "schema" | "itemSchema") {
-                    found.push((c, cptr));
-                } else if !(k.starts_with("x-")
-                    || matches!(k.as_str(), "example" | "examples" | "default")
-                    || cptr == "#/components/schemas")
-                {
-                    stack.push((c, cptr));
+                Value::Array(a) => {
+                    for (i, c) in a.iter().enumerate() {
+                        path.push(i.to_string());
+                        walk(c, path, found);
+                        path.pop();
+                    }
                 }
+                _ => {}
             }
         }
+        walk(self.root, &mut Vec::new(), &mut found);
         found
     }
 
@@ -309,6 +323,9 @@ impl<'a> Lint<'a> {
                 !d.contains("json-schema.org/draft/2020-12")
                     && !d.contains("spec.openapis.org/oas/")
             }) {
+                continue;
+            }
+            if meta.is_valid(s) {
                 continue;
             }
             if let Err(e) = meta.validate(s) {

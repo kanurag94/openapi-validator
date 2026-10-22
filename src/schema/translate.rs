@@ -1219,6 +1219,39 @@ fn collect_ids(root: &Value) -> (HashSet<String>, HashMap<String, String>) {
     (anchors, ids)
 }
 
+/// The innermost schema resource with its own `$id` on the way to `target`
+/// (a `#/...` pointer): its absolute URI and pointer. Only the path is
+/// walked, not the document.
+fn innermost_id(root: &Value, target: &str) -> Option<(String, String)> {
+    let mut cur = root;
+    let mut ptr = String::from("#");
+    let mut base = DOC_URI.to_owned();
+    let mut found = None;
+    let body = target.strip_prefix('#')?;
+    let tokens = body.split('/').skip(1);
+    for t in std::iter::once(None).chain(tokens.map(Some)) {
+        if let Some(t) = t {
+            let t = t.replace("~1", "/").replace("~0", "~");
+            cur = match cur {
+                Value::Object(m) => m.get(&t)?,
+                Value::Array(a) => a.get(t.parse::<usize>().ok()?)?,
+                _ => return found,
+            };
+            ptr = doc::join(&ptr, &t);
+        }
+        if let Some(id) = cur
+            .get("$id")
+            .and_then(Value::as_str)
+            .filter(|i| !i.starts_with('#'))
+        {
+            base = resolve(&base, id);
+            let uri = base.split('#').next().unwrap_or("").to_owned();
+            found = Some((uri, ptr.clone()));
+        }
+    }
+    found
+}
+
 /// Resolves a URI reference against a base (RFC 3986 §5.2); on failure the
 /// reference is returned as is.
 fn resolve(base: &str, reference: &str) -> String {
@@ -1263,13 +1296,7 @@ impl Translator<'_> {
         let Some(target) = target else {
             return r.to_owned();
         };
-        self.ensure_ids();
-        let innermost = self.ids.as_ref().and_then(|ids| {
-            ids.iter()
-                .filter(|(_, p)| target == **p || target.starts_with(&format!("{p}/")))
-                .max_by_key(|(_, p)| p.len())
-                .map(|(u, p)| (u.clone(), p.clone()))
-        });
+        let innermost = innermost_id(self.root, &target);
         match innermost {
             // Same resource as the reference: its fragment form is right.
             Some((_, p)) if p == ctx.resource_ptr => r.to_owned(),

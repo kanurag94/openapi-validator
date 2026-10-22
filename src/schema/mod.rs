@@ -64,8 +64,8 @@ pub(crate) struct SchemaStore {
     /// Longest in-place applicator chain in the document.
     in_place_depth: usize,
     /// `(pointer, absolute URI)` of every schema resource with its own `$id`,
-    /// innermost first when one holds another.
-    ids: Vec<(String, String)>,
+    /// innermost first when one holds another; built when first needed.
+    ids: OnceLock<Vec<(String, String)>>,
 }
 
 pub(crate) struct StoreOptions {
@@ -459,7 +459,6 @@ impl SchemaStore {
         // not schema keywords, so the registry would not find them while
         // indexing the document; each outermost one is added on its own.
         let embedded = outermost_ids(&t.resource);
-        let ids = id_index(&t.resource);
         let registry = Registry::new()
             .draft(Draft::Draft202012)
             .add(DOC_URI, t.resource)
@@ -477,7 +476,7 @@ impl SchemaStore {
                 patterns: RwLock::new(HashMap::new()),
                 backtracking: t.needs_backtracking,
                 in_place_depth: m.depth,
-                ids,
+                ids: OnceLock::new(),
             },
             t.warnings,
         ))
@@ -501,7 +500,7 @@ impl SchemaStore {
     /// The translated document.
     /// The innermost `$id` resource holding `ptr`: its pointer and URI.
     pub(crate) fn scope_of(&self, ptr: &str) -> Option<(&str, &str)> {
-        self.ids
+        self.id_list()
             .iter()
             .find(|(p, _)| {
                 ptr == p
@@ -514,10 +513,15 @@ impl SchemaStore {
 
     /// The pointer of the resource whose `$id` is `uri`.
     pub(crate) fn id_pointer(&self, uri: &str) -> Option<&str> {
-        self.ids
+        self.id_list()
             .iter()
             .find(|(_, u)| u == uri)
             .map(|(p, _)| p.as_str())
+    }
+
+    fn id_list(&self) -> &[(String, String)] {
+        self.ids
+            .get_or_init(|| self.resource().map(id_index).unwrap_or_default())
     }
 
     pub(crate) fn resource(&self) -> Option<&Value> {
