@@ -552,7 +552,12 @@ impl Translator<'_> {
                         });
                     };
                     self.check_ref(r, ptr, &ctx)?;
-                    out.insert(k.clone(), Value::String(r.to_owned()));
+                    let r = if v30 {
+                        r.to_owned()
+                    } else {
+                        self.scoped_ref(r, &ctx)
+                    };
+                    out.insert(k.clone(), Value::String(r));
                 }
                 "$id" | "$anchor" | "$dynamicAnchor" | "$schema" | "$vocabulary" => {
                     out.insert(k.clone(), val.clone());
@@ -1183,6 +1188,56 @@ impl Translator<'_> {
             let (a, i) = collect_ids(self.root);
             self.anchors = Some(a);
             self.ids = Some(i);
+        }
+    }
+
+    /// A pointer reference written as the engine resolves it. JSON Schema
+    /// 2020-12 §8.2.1: a schema with its own `$id` is a resource, and `#`
+    /// inside it means that resource. The engine only learns of resources
+    /// it reaches through schema keywords, so a pointer into one from
+    /// elsewhere is written against the resource's URI, and a pointer from
+    /// inside one to the rest of the document against the document's.
+    fn scoped_ref(&mut self, r: &str, ctx: &Ctx) -> String {
+        let target = if let Some(f) = r.strip_prefix(DOC_URI).and_then(|f| f.strip_prefix('#')) {
+            doc::canonical_pointer(&format!("#{f}"))
+        } else if let Some(f) = r.strip_prefix('#') {
+            if !(f.is_empty() || f.starts_with('/')) {
+                return r.to_owned();
+            }
+            doc::canonical_pointer(r).map(|t| {
+                if ctx.resource_ptr == "#" {
+                    t
+                } else {
+                    format!("{}{}", ctx.resource_ptr, &t[1..])
+                }
+            })
+        } else {
+            None
+        };
+        let Some(target) = target else {
+            return r.to_owned();
+        };
+        self.ensure_ids();
+        let innermost = self.ids.as_ref().and_then(|ids| {
+            ids.iter()
+                .filter(|(_, p)| target == **p || target.starts_with(&format!("{p}/")))
+                .max_by_key(|(_, p)| p.len())
+                .map(|(u, p)| (u.clone(), p.clone()))
+        });
+        match innermost {
+            // Same resource as the reference: its fragment form is right.
+            Some((_, p)) if p == ctx.resource_ptr => r.to_owned(),
+            Some((uri, p)) => {
+                let rest = &target[p.len()..];
+                if rest.is_empty() {
+                    uri
+                } else {
+                    format!("{uri}#{}", super::fragment(&format!("#{rest}")))
+                }
+            }
+            // In the document's own scope.
+            None if ctx.resource_ptr == "#" => r.to_owned(),
+            None => format!("{DOC_URI}#{}", super::fragment(&target)),
         }
     }
 

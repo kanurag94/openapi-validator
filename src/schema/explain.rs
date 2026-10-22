@@ -171,6 +171,168 @@ impl<'a> Explainer<'a> {
         self.out.len() + self.more
     }
 
+    /// The schema a `$ref` at `sptr` names, and its pointer. `#` references
+    /// resolve within the innermost `$id` resource (JSON Schema Core 2020-12
+    /// §8.2.1); others through the `$id` index. Anchors are not followed.
+    fn resolve_ref(&self, r: &str, sptr: &str) -> Option<(String, &'a Value)> {
+        let scope = self.store.scope_of(sptr);
+        let (base_ptr, fragment) = if let Some(f) = r.strip_prefix('#') {
+            (scope.map_or("#", |(p, _)| p).to_owned(), f.to_owned())
+        } else {
+            let base = scope.map_or(super::DOC_URI, |(_, u)| u);
+            let abs = super::resolve_uri(base, r)?;
+            let (uri, f) = abs.split_once('#').unwrap_or((abs.as_str(), ""));
+            let p = if uri == super::DOC_URI {
+                "#"
+            } else {
+                self.store.id_pointer(uri)?
+            };
+            (p.to_owned(), f.to_owned())
+        };
+        if !(fragment.is_empty() || fragment.starts_with('/')) {
+            return None;
+        }
+        let rel = doc::canonical_pointer(&format!("#{fragment}"))?;
+        let ptr = if base_ptr == "#" {
+            rel
+        } else {
+            format!("{base_ptr}{}", &rel[1..])
+        };
+        doc::lookup(self.resource, &ptr).map(|t| (ptr, t))
+    }
+
+    /// Properties a schema evaluates for an object (JSON Schema Core 2020-12
+    /// §11.3): its own `properties`, `patternProperties` and
+    /// `additionalProperties`, and those of applicators that apply.
+    fn evaluated_props(
+        &self,
+        s: &'a Value,
+        sptr: &str,
+        inst: &Value,
+        depth: usize,
+    ) -> HashSet<String> {
+        let mut out = HashSet::new();
+        let (Some(m), Some(o)) = (s.as_object(), inst.as_object()) else {
+            return out;
+        };
+        if depth > MAX_DEPTH {
+            return o.keys().cloned().collect();
+        }
+        // A nested `unevaluatedProperties` evaluates the rest; the schema
+        // being explained (depth 0) does not count its own.
+        if m.contains_key("additionalProperties")
+            || (depth > 0 && m.contains_key("unevaluatedProperties"))
+        {
+            return o.keys().cloned().collect();
+        }
+        if let Some(p) = m.get("properties").and_then(Value::as_object) {
+            out.extend(o.keys().filter(|k| p.contains_key(*k)).cloned());
+        }
+        for re in m
+            .get("patternProperties")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flat_map(|p| p.keys())
+        {
+            if let Some(rx) = self.store.regex(re) {
+                out.extend(o.keys().filter(|k| rx.is_match(k) == Some(true)).cloned());
+            }
+        }
+        for (sub, sp) in self.applied(m, sptr, inst) {
+            out.extend(self.evaluated_props(sub, &sp, inst, depth + 1));
+        }
+        out
+    }
+
+    /// Items a schema evaluates for an array (§11.2).
+    fn evaluated_items(
+        &self,
+        s: &'a Value,
+        sptr: &str,
+        inst: &Value,
+        depth: usize,
+    ) -> HashSet<usize> {
+        let mut out = HashSet::new();
+        let (Some(m), Some(a)) = (s.as_object(), inst.as_array()) else {
+            return out;
+        };
+        if depth > MAX_DEPTH
+            || m.contains_key("items")
+            || (depth > 0 && m.contains_key("unevaluatedItems"))
+        {
+            return (0..a.len()).collect();
+        }
+        let n = m
+            .get("prefixItems")
+            .and_then(Value::as_array)
+            .map_or(0, Vec::len);
+        out.extend(0..n.min(a.len()));
+        if m.contains_key("contains") {
+            let cp = doc::join(sptr, "contains");
+            out.extend((0..a.len()).filter(|&i| self.valid_at(&cp, &a[i]) == Some(true)));
+        }
+        for (sub, sp) in self.applied(m, sptr, inst) {
+            out.extend(self.evaluated_items(sub, &sp, inst, depth + 1));
+        }
+        out
+    }
+
+    /// Subschemas whose annotations reach this schema for this value: every
+    /// `allOf` member, `anyOf`/`oneOf` branches that pass, the `if`/`then`
+    /// or `else` that applies, `dependentSchemas` of present names, and the
+    /// `$ref` target.
+    fn applied(
+        &self,
+        m: &'a serde_json::Map<String, Value>,
+        sptr: &str,
+        inst: &Value,
+    ) -> Vec<(&'a Value, String)> {
+        let mut out = Vec::new();
+        for k in ["allOf", "anyOf", "oneOf"] {
+            for (i, sub) in m
+                .get(k)
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .enumerate()
+            {
+                let sp = doc::join(&doc::join(sptr, k), &i.to_string());
+                if k == "allOf" || self.valid_at(&sp, inst) == Some(true) {
+                    out.push((sub, sp));
+                }
+            }
+        }
+        if let Some(cond) = m.get("if") {
+            let ip = doc::join(sptr, "if");
+            if self.valid_at(&ip, inst) == Some(true) {
+                out.push((cond, ip));
+                if let Some(t) = m.get("then") {
+                    out.push((t, doc::join(sptr, "then")));
+                }
+            } else if let Some(e) = m.get("else") {
+                out.push((e, doc::join(sptr, "else")));
+            }
+        }
+        if let (Some(ds), Some(o)) = (
+            m.get("dependentSchemas").and_then(Value::as_object),
+            inst.as_object(),
+        ) {
+            for (k, sub) in ds {
+                if o.contains_key(k) {
+                    out.push((sub, doc::join(&doc::join(sptr, "dependentSchemas"), k)));
+                }
+            }
+        }
+        if let Some((p, t)) = m
+            .get("$ref")
+            .and_then(Value::as_str)
+            .and_then(|r| self.resolve_ref(r, sptr))
+        {
+            out.push((t, p));
+        }
+        out
+    }
+
     /// `jsonschema`'s verdict for the schema at `ptr`.
     fn valid_at(&self, ptr: &str, inst: &Value) -> Option<bool> {
         match &*self.store.sub_validator(self.dir, ptr) {
@@ -203,18 +365,46 @@ impl<'a> Explainer<'a> {
             self.steps += 1;
             let kp = doc::join(sptr, k);
             match k.as_str() {
-                "$ref" => match kv.as_str() {
-                    Some(r) if r.starts_with("#/") || r == "#" => {
-                        let target_ptr = doc::canonical_pointer(r).unwrap_or_default();
-                        match doc::lookup_ref(self.resource, r) {
-                            Some(t) => self.node(t, &target_ptr, inst, ipath, depth + 1),
-                            None => opaque = true,
+                "$ref" => match kv.as_str().and_then(|r| self.resolve_ref(r, sptr)) {
+                    Some((target_ptr, t)) => self.node(t, &target_ptr, inst, ipath, depth + 1),
+                    None => opaque = true,
+                },
+                "$dynamicRef" => opaque = true,
+                "unevaluatedProperties" => {
+                    let Some(o) = inst.as_object() else {
+                        continue;
+                    };
+                    let seen = self.evaluated_props(s, sptr, inst, 0);
+                    for (name, x) in o {
+                        if seen.contains(name.as_str()) {
+                            continue;
+                        }
+                        match kv {
+                            Value::Bool(false) => self.push(
+                                &child(ipath, name),
+                                "is not allowed (unevaluatedProperties)".into(),
+                            ),
+                            sch => self.node(sch, &kp, x, &child(ipath, name), depth + 1),
                         }
                     }
-                    _ => opaque = true,
-                },
-                "$dynamicRef" | "unevaluatedProperties" | "unevaluatedItems" | "$id" => {
-                    opaque = true
+                }
+                "unevaluatedItems" => {
+                    let Some(a) = inst.as_array() else {
+                        continue;
+                    };
+                    let seen = self.evaluated_items(s, sptr, inst, 0);
+                    for (i, x) in a.iter().enumerate() {
+                        if seen.contains(&i) {
+                            continue;
+                        }
+                        let at = child(ipath, &i.to_string());
+                        match kv {
+                            Value::Bool(false) => {
+                                self.push(&at, "is not allowed (unevaluatedItems)".into())
+                            }
+                            sch => self.node(sch, &kp, x, &at, depth + 1),
+                        }
+                    }
                 }
                 "type" => {
                     let types: Vec<&str> = match kv {

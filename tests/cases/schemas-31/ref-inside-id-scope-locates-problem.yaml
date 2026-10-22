@@ -1,0 +1,23 @@
+title: "A # reference inside an $id resource resolves within that resource"
+ref: "JSON Schema Core 2020-12 §8.2.1"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /p:
+      post:
+        requestBody:
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Scoped"}
+        responses:
+          "200": {description: ok}
+  components:
+    schemas:
+      Scoped:
+        $id: https://example.com/scoped
+        type: object
+        properties: {v: {$ref: "#/$defs/positive"}}
+        $defs: {positive: {type: integer, minimum: 1}}
+request: {method: POST, path: /p, headers: [["Content-Type", "application/json"]], body: '{"v": 0}'}
+expect: {valid: false, kind: schema_violation, location: body/v}

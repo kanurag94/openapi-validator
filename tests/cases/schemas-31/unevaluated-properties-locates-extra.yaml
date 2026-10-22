@@ -1,0 +1,19 @@
+title: "An extra property under unevaluatedProperties: false is reported where it is"
+ref: "JSON Schema Core 2020-12 §11.3"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /p:
+      post:
+        requestBody:
+          content:
+            application/json:
+              schema: {allOf: [{$ref: "#/components/schemas/Base"}], properties: {b: {type: string}}, unevaluatedProperties: false}
+        responses:
+          "200": {description: ok}
+  components:
+    schemas:
+      Base: {type: object, properties: {a: {type: string}}}
+request: {method: POST, path: /p, headers: [["Content-Type", "application/json"]], body: '{"a": "x", "b": "y", "c": 1}'}
+expect: {valid: false, kind: schema_violation, location: body/c}

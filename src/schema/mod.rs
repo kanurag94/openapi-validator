@@ -63,6 +63,9 @@ pub(crate) struct SchemaStore {
     backtracking: bool,
     /// Longest in-place applicator chain in the document.
     in_place_depth: usize,
+    /// `(pointer, absolute URI)` of every schema resource with its own `$id`,
+    /// innermost first when one holds another.
+    ids: Vec<(String, String)>,
 }
 
 pub(crate) struct StoreOptions {
@@ -72,6 +75,55 @@ pub(crate) struct StoreOptions {
     pub relax_required: bool,
     pub allow_backtracking: bool,
     pub forbid_read_write: bool,
+}
+
+/// Every `$id` in the translated document with its pointer, resolved against
+/// the enclosing base (JSON Schema Core 2020-12 §8.2.1); longest pointer
+/// first, so the innermost resource is found first.
+fn id_index(resource: &Value) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    let mut stack: Vec<(&Value, String, String)> = vec![(resource, "#".into(), DOC_URI.into())];
+    while let Some((v, ptr, base)) = stack.pop() {
+        match v {
+            Value::Object(m) => {
+                let mut base = base;
+                if let Some(id) = m
+                    .get("$id")
+                    .and_then(Value::as_str)
+                    .filter(|id| !id.starts_with('#'))
+                {
+                    if let Some(abs) = resolve_uri(&base, id) {
+                        base = abs.split('#').next().unwrap_or(&abs).to_owned();
+                        out.push((ptr.clone(), base.clone()));
+                    }
+                }
+                for (k, c) in m {
+                    if !matches!(
+                        k.as_str(),
+                        "enum" | "const" | "default" | "examples" | "example"
+                    ) {
+                        stack.push((c, crate::doc::join(&ptr, k), base.clone()));
+                    }
+                }
+            }
+            Value::Array(a) => {
+                for (i, c) in a.iter().enumerate() {
+                    stack.push((c, crate::doc::join(&ptr, &i.to_string()), base.clone()));
+                }
+            }
+            _ => {}
+        }
+    }
+    out.sort_by_key(|(p, _)| std::cmp::Reverse(p.len()));
+    out
+}
+
+/// `reference` resolved against `base` (RFC 3986 §5.2).
+pub(crate) fn resolve_uri(base: &str, reference: &str) -> Option<String> {
+    let b = jsonschema::uri::from_str(base).ok()?;
+    jsonschema::uri::resolve_against(&b.borrow(), reference)
+        .ok()
+        .map(|u| u.as_str().to_owned())
 }
 
 /// Percent-encodes a JSON Pointer for use as a URI fragment (RFC 6901 §6).
@@ -381,6 +433,7 @@ impl SchemaStore {
         // not schema keywords, so the registry would not find them while
         // indexing the document; each outermost one is added on its own.
         let embedded = outermost_ids(&t.resource);
+        let ids = id_index(&t.resource);
         let registry = Registry::new()
             .draft(Draft::Draft202012)
             .add(DOC_URI, t.resource)
@@ -398,6 +451,7 @@ impl SchemaStore {
                 patterns: RwLock::new(HashMap::new()),
                 backtracking: t.needs_backtracking,
                 in_place_depth: m.depth,
+                ids,
             },
             t.warnings,
         ))
@@ -419,6 +473,27 @@ impl SchemaStore {
     }
 
     /// The translated document.
+    /// The innermost `$id` resource holding `ptr`: its pointer and URI.
+    pub(crate) fn scope_of(&self, ptr: &str) -> Option<(&str, &str)> {
+        self.ids
+            .iter()
+            .find(|(p, _)| {
+                ptr == p
+                    || ptr
+                        .strip_prefix(p.as_str())
+                        .is_some_and(|r| r.starts_with('/'))
+            })
+            .map(|(p, u)| (p.as_str(), u.as_str()))
+    }
+
+    /// The pointer of the resource whose `$id` is `uri`.
+    pub(crate) fn id_pointer(&self, uri: &str) -> Option<&str> {
+        self.ids
+            .iter()
+            .find(|(_, u)| u == uri)
+            .map(|(p, _)| p.as_str())
+    }
+
     pub(crate) fn resource(&self) -> Option<&Value> {
         let base = jsonschema::uri::from_str(DOC_URI).ok()?;
         self.registry
