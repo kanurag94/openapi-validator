@@ -48,7 +48,7 @@ func TestLoadAndValidate(t *testing.T) {
 }
 
 func TestLoadError(t *testing.T) {
-	if _, err := Load([]byte("swagger: '2.0'")); err == nil {
+	if _, err := Load([]byte("swagger: '1.2'")); err == nil {
 		t.Fatal("expected a load error")
 	}
 }
