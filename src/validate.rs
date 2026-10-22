@@ -163,9 +163,13 @@ impl Spec {
             }
             return;
         }
+        // 3.2.1 §4.14.5.1: form-data whose schema is an array keeps part
+        // order, one {name: value} item per part.
+        let named = actual.is_multipart_form() && matches!(entry.shape, Shape::Array(_));
         if self.version >= Version::V32
             && actual.ty == "multipart"
             && (!actual.is_multipart_form()
+                || named
                 || !entry.prefix_encoding.is_empty()
                 || entry.item_encoding.is_some())
         {
@@ -177,6 +181,7 @@ impl Spec {
                 &entry.parts,
                 location,
                 0,
+                named,
                 report,
             ) {
                 Ok(items) => self.check_items(entry, items, location, report),
@@ -944,6 +949,7 @@ impl Spec {
         shapes: &crate::model::PartShapes,
         location: &str,
         nest: usize,
+        named: bool,
         report: &mut Report,
     ) -> Result<Vec<Value>, String> {
         let depth = self.store.depth_limit(self.options.max_body_depth);
@@ -958,7 +964,8 @@ impl Spec {
             // RFC 2046 §5.1: a part without Content-Type is text/plain; the
             // description's default comes first.
             let text_plain = MediaType::parse("text/plain").expect("a valid media type");
-            let shape = shapes.at(i);
+            // Named items describe the {name: value} pair, not the part.
+            let shape = shapes.at(i).filter(|_| !named);
             let ct = part
                 .content_type
                 .as_ref()
@@ -979,6 +986,7 @@ impl Spec {
                     shape.map_or(&empty, |s| &s.nested),
                     &at,
                     nest + 1,
+                    false,
                     report,
                 )?)
             } else if ct.is_xml() {
@@ -994,7 +1002,10 @@ impl Spec {
             } else {
                 Value::String(String::from_utf8_lossy(part.data).into_owned())
             };
-            out.push(value);
+            out.push(match (&part.name, named) {
+                (Some(n), true) => serde_json::json!({ n.as_str(): value }),
+                _ => value,
+            });
         }
         Ok(out)
     }
