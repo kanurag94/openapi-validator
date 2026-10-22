@@ -193,7 +193,16 @@ impl<'r> Ctx<'r> {
         reached: Reached,
     ) -> Result<usize, LoadError> {
         let (op, op_ptr) = (it.op, &it.ptr);
-        let body = b.request_body(op.get("requestBody"), &doc::join(op_ptr, "requestBody"))?;
+        // OpenAPI 3.0.4 §4.7.10.1: on GET, HEAD and DELETE, where HTTP gives a
+        // body no defined meaning, requestBody SHALL be ignored. 3.1 and
+        // later describe such bodies.
+        let ignored =
+            self.version == Version::V30 && matches!(it.key.as_str(), "get" | "head" | "delete");
+        let body = if ignored {
+            None
+        } else {
+            b.request_body(op.get("requestBody"), &doc::join(op_ptr, "requestBody"))?
+        };
         let mut params = b.params(item, item_ptr, op, op_ptr, self.version)?;
         if reached == Reached::Named {
             params.retain(|p| p.location != crate::params::In::Path);
