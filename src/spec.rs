@@ -10,7 +10,7 @@ use crate::http::{Request, Response};
 use crate::model::{Body, Builder, Responses};
 use crate::options::{
     DiscriminatorMode, FormatAssertion, IntegerSemantics, Options, PatternEngine,
-    ReadWriteRequired, ServerPaths,
+    ReadWritePresence, ReadWriteRequired, ServerPaths,
 };
 use crate::params::Param;
 use crate::path::{split_path, Match, PathIndex, RawSegment, Template, Vars};
@@ -490,6 +490,7 @@ impl Spec {
                 relax_required: version == Version::V30
                     || options.read_write_required == ReadWriteRequired::RelaxAlways,
                 allow_backtracking: options.patterns == PatternEngine::Bounded,
+                forbid_read_write: options.read_write_presence == ReadWritePresence::Refuse,
             },
         )?;
         warnings.append(&mut schema_warnings);

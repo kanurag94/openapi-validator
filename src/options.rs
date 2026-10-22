@@ -96,6 +96,20 @@ pub enum ReadWriteRequired {
     RelaxAlways,
 }
 
+/// Whether readOnly properties may be sent in requests, and writeOnly ones
+/// in responses. The specifications say they SHOULD NOT be (OpenAPI 3.0.4
+/// §4.7.24.1); 3.1 leaves it to the owning authority, which MAY treat them
+/// as errors (JSON Schema Validation 2020-12 §9.4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ReadWritePresence {
+    /// Sending them is never refused.
+    #[default]
+    Allow,
+    /// A readOnly property in a request, or a writeOnly one in a response,
+    /// is refused.
+    Refuse,
+}
+
 /// How patterns that need backtracking (lookaround, backreferences) run.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum PatternEngine {
@@ -151,6 +165,7 @@ pub struct Options {
     pub discriminator: DiscriminatorMode,
     pub integers: IntegerSemantics,
     pub read_write_required: ReadWriteRequired,
+    pub read_write_presence: ReadWritePresence,
     pub patterns: PatternEngine,
     /// Refuse a document that breaks a MUST of the specification (every
     /// load warning becomes a load error). Default false: such documents
@@ -186,6 +201,7 @@ impl Default for Options {
             discriminator: DiscriminatorMode::default(),
             integers: IntegerSemantics::default(),
             read_write_required: ReadWriteRequired::default(),
+            read_write_presence: ReadWritePresence::default(),
             patterns: PatternEngine::default(),
             strict_document: false,
             yaml_merge_keys: true,
@@ -198,15 +214,16 @@ impl Options {
     /// The defaults with the gateway-oriented choices of this library's
     /// original design switched on: every listed format asserted, the
     /// discriminator enforced, OpenAPI 3.0 integers read lexically, and
-    /// readOnly/writeOnly relaxing `required` in 3.1 as in 3.0, and patterns
-    /// that need backtracking refused at load. Each goes
-    /// beyond what the specifications require.
+    /// readOnly/writeOnly relaxing `required` in 3.1 as in 3.0 and refused
+    /// where they SHOULD NOT be sent, and patterns that need backtracking
+    /// refused at load. Each goes beyond what the specifications require.
     pub fn gateway_profile() -> Options {
         Options {
             formats: FormatAssertion::Always,
             discriminator: DiscriminatorMode::Enforce,
             integers: IntegerSemantics::LexicalIn30,
             read_write_required: ReadWriteRequired::RelaxAlways,
+            read_write_presence: ReadWritePresence::Refuse,
             patterns: PatternEngine::LinearOnly,
             ..Options::default()
         }
@@ -235,6 +252,7 @@ impl fmt::Debug for Options {
             .field("discriminator", &self.discriminator)
             .field("integers", &self.integers)
             .field("read_write_required", &self.read_write_required)
+            .field("read_write_presence", &self.read_write_presence)
             .field("patterns", &self.patterns)
             .field("strict_document", &self.strict_document)
             .field("yaml_merge_keys", &self.yaml_merge_keys)

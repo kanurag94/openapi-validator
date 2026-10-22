@@ -68,7 +68,8 @@ pub use doc::{LoadError, Version, Warning};
 pub use http::{Request, Response};
 pub use options::{
     Credential, CredentialLocation, DiscriminatorMode, FormatAssertion, IntegerSemantics, Options,
-    PatternEngine, ReadWriteRequired, SecurityHook, ServerPaths, DEFAULT_IGNORED_HEADERS,
+    PatternEngine, ReadWritePresence, ReadWriteRequired, SecurityHook, ServerPaths,
+    DEFAULT_IGNORED_HEADERS,
 };
 pub use report::{MatchedOperation, Problem, ProblemKind, Report};
 pub use spec::Spec;

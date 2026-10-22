@@ -259,7 +259,12 @@ fn read_only_is_not_required_in_requests() {
             load(v, r##"{"$ref": "#/components/schemas/Pet"}"##, comps)
         };
         ok(&s, r#"{"name": "rex"}"#);
-        ok(&s, r#"{"id": "1", "name": "rex"}"#);
+        // Sending it is allowed by default; the gateway profile refuses it.
+        if gw {
+            bad(&s, r#"{"id": "1", "name": "rex"}"#, "body/id");
+        } else {
+            ok(&s, r#"{"id": "1", "name": "rex"}"#);
+        }
         bad(&s, r#"{"id": "1"}"#, "body/name");
     }
     let s = load_gw(

@@ -1,0 +1,27 @@
+title: "With read_write_presence refuse, a readOnly property reached through allOf is refused in a request"
+ref: "OpenAPI 3.0.4 §4.7.24.1"
+options: {read_write_presence: refuse}
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /u:
+      post:
+        requestBody:
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Base"
+                  - type: object
+                    properties: {name: {type: string}}
+        responses:
+          "200": {description: ok}
+  components:
+    schemas:
+      Base:
+        type: object
+        properties:
+          id: {type: integer, readOnly: true}
+request: {method: POST, path: /u, headers: [["Content-Type", "application/json"]], body: '{"id": 1, "name": "a"}'}
+expect: {valid: false, kind: schema_violation, location: body/id}

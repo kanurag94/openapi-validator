@@ -106,6 +106,9 @@ pub struct Options {
     /// Run lookaround and backreferences on the bounded engine instead of
     /// refusing them.
     pub allow_backtracking: bool,
+    /// Refuse readOnly properties in requests and writeOnly ones in
+    /// responses.
+    pub forbid_read_write: bool,
 }
 
 /// The translated skeleton for one direction.
@@ -511,6 +514,30 @@ impl Translator<'_> {
         }
 
         let mut out = Map::new();
+        // `readOnly` properties SHOULD NOT be sent in requests, nor
+        // `writeOnly` ones in responses (3.0.4 §4.7.24.1); with the option,
+        // sending them is refused. Both directions share one translation,
+        // so the names go to the per-direction `x-oav-forbid`.
+        if self.opts.forbid_read_write {
+            if let Some(props) = m.get("properties").and_then(Value::as_object) {
+                let (mut request, mut response) = (Vec::new(), Vec::new());
+                for (name, p) in props {
+                    let (ro, wo) = self.access_flags(p, 0);
+                    if ro {
+                        request.push(Value::String(name.clone()));
+                    }
+                    if wo {
+                        response.push(Value::String(name.clone()));
+                    }
+                }
+                if !request.is_empty() || !response.is_empty() {
+                    out.insert(
+                        "x-oav-forbid".into(),
+                        json!({"request": request, "response": response}),
+                    );
+                }
+            }
+        }
         for (k, val) in m {
             if v30 && !OAS30_KEYWORDS.contains(&k.as_str()) {
                 continue;

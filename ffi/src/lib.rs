@@ -13,7 +13,8 @@ use std::sync::Arc;
 
 use openapi_validator::{
     Credential, CredentialLocation, DiscriminatorMode, FormatAssertion, IntegerSemantics, Options,
-    PatternEngine, ReadWriteRequired, Report, Request, Response, ServerPaths, Spec,
+    PatternEngine, ReadWritePresence, ReadWriteRequired, Report, Request, Response, ServerPaths,
+    Spec,
 };
 
 pub const OAV_OK: c_int = 0;
@@ -92,6 +93,9 @@ pub struct OavOptions {
     pub integers: c_int,
     /// 0 by version (default), 1 relax `required` in 3.1 too.
     pub read_write_required: c_int,
+    /// 0 allow readOnly in requests and writeOnly in responses (default),
+    /// 1 refuse them.
+    pub read_write_presence: c_int,
     /// 0 bounded backtracking (default), 1 refuse such patterns at load.
     pub patterns: c_int,
     /// Refuse documents that break a MUST of the specification.
@@ -190,6 +194,7 @@ pub unsafe extern "C" fn oav_options_default(opts: *mut OavOptions) -> c_int {
             discriminator: 0,
             integers: 0,
             read_write_required: 0,
+            read_write_presence: 0,
             patterns: 0,
             strict_document: d.strict_document,
             yaml_merge_keys: d.yaml_merge_keys,
@@ -234,6 +239,11 @@ fn to_options(o: &OavOptions) -> Result<Options, c_int> {
         read_write_required: match o.read_write_required {
             0 => ReadWriteRequired::ByVersion,
             1 => ReadWriteRequired::RelaxAlways,
+            _ => return Err(OAV_ERR_RANGE),
+        },
+        read_write_presence: match o.read_write_presence {
+            0 => ReadWritePresence::Allow,
+            1 => ReadWritePresence::Refuse,
             _ => return Err(OAV_ERR_RANGE),
         },
         strict_document: o.strict_document,

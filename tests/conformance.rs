@@ -31,7 +31,7 @@ use std::path::{Path, PathBuf};
 
 use openapi_validator::{
     DiscriminatorMode, FormatAssertion, IntegerSemantics, Options, PatternEngine,
-    ReadWriteRequired, Request, Response, ServerPaths, Spec,
+    ReadWritePresence, ReadWriteRequired, Request, Response, ServerPaths, Spec,
 };
 use serde_json::Value;
 
@@ -122,6 +122,13 @@ fn options(v: Option<&Value>) -> Result<Options, String> {
                     _ => {
                         return Err("read_write_required must be by-version or relax-always".into())
                     }
+                }
+            }
+            "read_write_presence" => {
+                o.read_write_presence = match x.as_str() {
+                    Some("allow") => ReadWritePresence::Allow,
+                    Some("refuse") => ReadWritePresence::Refuse,
+                    _ => return Err("read_write_presence must be allow or refuse".into()),
                 }
             }
             "query_plus_as_space" => o.query_plus_as_space = b()?,

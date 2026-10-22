@@ -431,6 +431,27 @@ impl<'a> Explainer<'a> {
                         }
                     }
                 }
+                "x-oav-forbid" => {
+                    let (key, what) = match self.dir.direction() {
+                        super::Direction::Request => {
+                            ("request", "is readOnly and must not be sent in a request")
+                        }
+                        super::Direction::Response => (
+                            "response",
+                            "is writeOnly and must not be sent in a response",
+                        ),
+                    };
+                    let (Some(o), Some(names)) =
+                        (inst.as_object(), kv.get(key).and_then(Value::as_array))
+                    else {
+                        continue;
+                    };
+                    for n in names.iter().filter_map(Value::as_str) {
+                        if o.contains_key(n) {
+                            self.push(&child(ipath, n), what.into());
+                        }
+                    }
+                }
                 "required" => {
                     let (Some(o), Some(names)) = (inst.as_object(), kv.as_array()) else {
                         continue;

@@ -1,0 +1,30 @@
+title: "With read_write_presence refuse, a writeOnly property in a response is refused"
+ref: "OpenAPI 3.1.1 §4.8.24.3.2; JSON Schema Validation 2020-12 §9.4"
+options: {read_write_presence: refuse}
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /u:
+      post:
+        requestBody:
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/User"}
+        responses:
+          "200":
+            description: ok
+            content:
+              application/json:
+                schema: {$ref: "#/components/schemas/User"}
+  components:
+    schemas:
+      User:
+        type: object
+        properties:
+          id: {type: integer, readOnly: true}
+          password: {type: string, writeOnly: true}
+          name: {type: string}
+request: {method: POST, path: /u, headers: [["Content-Type", "application/json"]], body: "{}"}
+response: {status: 200, headers: [["Content-Type", "application/json"]], body: "{\"password\": \"x\"}"}
+expect: {valid: false, kind: schema_violation, location: body/password}

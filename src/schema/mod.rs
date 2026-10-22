@@ -70,6 +70,7 @@ pub(crate) struct StoreOptions {
     pub lexical_integers: bool,
     pub relax_required: bool,
     pub allow_backtracking: bool,
+    pub forbid_read_write: bool,
 }
 
 /// Percent-encodes a JSON Pointer for use as a URI fragment (RFC 6901 §6).
@@ -150,6 +151,33 @@ impl DirRequired {
         self.0
             .iter()
             .find(|n| !o.contains_key(n.as_str()))
+            .map(String::as_str)
+    }
+}
+
+/// Property names that must not be present in one direction (readOnly in
+/// requests, writeOnly in responses, with `ReadWritePresence::Refuse`).
+struct DirForbid(Vec<String>);
+
+impl<'i> Keyword<'i> for DirForbid {
+    fn validate(&self, instance: &'i Value) -> Result<(), ValidationError<'i>> {
+        match self.present(instance) {
+            None => Ok(()),
+            Some(n) => Err(ValidationError::custom(format!("{n} must not be sent"))),
+        }
+    }
+
+    fn is_valid(&self, instance: &'i Value) -> bool {
+        self.present(instance).is_none()
+    }
+}
+
+impl DirForbid {
+    fn present(&self, instance: &Value) -> Option<&str> {
+        let o = instance.as_object()?;
+        self.0
+            .iter()
+            .find(|n| o.contains_key(n.as_str()))
             .map(String::as_str)
     }
 }
@@ -318,6 +346,7 @@ impl SchemaStore {
             lexical_integers: opts.lexical_integers,
             relax_required: opts.relax_required,
             allow_backtracking: opts.allow_backtracking,
+            forbid_read_write: opts.forbid_read_write,
         };
         let mut roots = request_roots.clone();
         roots.extend(response_roots.iter().cloned());
@@ -450,6 +479,22 @@ impl SchemaStore {
                         })
                         .unwrap_or_default();
                     Ok(Box::new(DirRequired(names)) as Box<dyn for<'i> Keyword<'i>>)
+                },
+            )
+            .with_keyword(
+                "x-oav-forbid",
+                move |_: &Map<String, Value>, v: &Value, _| {
+                    let names = v
+                        .get(key)
+                        .and_then(Value::as_array)
+                        .map(|a| {
+                            a.iter()
+                                .filter_map(Value::as_str)
+                                .map(str::to_owned)
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    Ok(Box::new(DirForbid(names)) as Box<dyn for<'i> Keyword<'i>>)
                 },
             );
         // Linear-time matching unless the document has patterns that need
