@@ -11,6 +11,11 @@
 //! - generate one valid request per operation, which must be allowed;
 //! - for each required query, header or cookie parameter, send that request
 //!   without it, which must be refused with a missing-parameter problem.
+//!
+//! With `OAS_CORPUS_DUMP` set to a file outside the repository, every request
+//! sent is also written there, one JSON object per line with the document's
+//! file path and the expected verdict, so other validators can be run on the
+//! same requests.
 
 mod common;
 
@@ -92,6 +97,31 @@ fn scrub(s: &str) -> String {
 
 /// A location with names replaced: `query.<name>/...` keeps its part and
 /// its depth only.
+/// One request for `OAS_CORPUS_DUMP`, as it goes on the wire.
+fn write_dump(
+    w: &mut impl std::io::Write,
+    file: &Path,
+    fi: usize,
+    op: usize,
+    valid: bool,
+    req: &common::OwnedRequest,
+) {
+    let line = req.with(|r| {
+        serde_json::json!({
+            "doc": file.to_string_lossy(),
+            "file": fi,
+            "op": op,
+            "valid": valid,
+            "method": r.method,
+            "path": r.path,
+            "query": r.query,
+            "headers": r.headers,
+            "body": String::from_utf8_lossy(r.body),
+        })
+    });
+    let _ = writeln!(w, "{line}");
+}
+
 fn anon_location(loc: &str) -> String {
     let (head, rest) = loc.split_once(['.', '/']).unwrap_or((loc, ""));
     let depth = rest.matches('/').count() + usize::from(!rest.is_empty());
@@ -113,6 +143,9 @@ fn corpus() {
             home.join("oas-corpus-report").join("report.txt")
         });
     let mut report = String::new();
+    let mut dump = std::env::var_os("OAS_CORPUS_DUMP").map(|p| {
+        std::io::BufWriter::new(std::fs::File::create(p).expect("OAS_CORPUS_DUMP is writable"))
+    });
     let (mut loaded, mut refused) = (0usize, 0usize);
     let (mut valid_total, mut valid_ok, mut valid_skipped) = (0usize, 0usize, 0usize);
     let (mut missing_total, mut missing_ok) = (0usize, 0usize);
@@ -173,6 +206,9 @@ fn corpus() {
                         continue;
                     }
                 };
+                if let Some(w) = dump.as_mut() {
+                    write_dump(w, path, fi, op, true, &g.request);
+                }
                 let r = g.request.with(|req| spec.validate_request(req));
                 if r.is_valid() {
                     valid_ok += 1;
@@ -212,6 +248,9 @@ fn corpus() {
                             .headers
                             .retain(|(n, _)| !n.eq_ignore_ascii_case(&o.name)),
                         _ => req.cookies.retain(|(n, _)| *n != o.name),
+                    }
+                    if let Some(w) = dump.as_mut() {
+                        write_dump(w, path, fi, op, false, &req);
                     }
                     let r = req.with(|q| spec.validate_request(q));
                     if r.problems()
