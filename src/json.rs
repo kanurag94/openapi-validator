@@ -427,6 +427,11 @@ mod tests {
             p(r#""\u00e9\ud83d\ude00\n""#).unwrap(),
             Value::String("é😀\n".into())
         );
+        // RFC 8259 §7: every two-character escape, and hex digits in either case.
+        assert_eq!(
+            p(r#""\"\\\/\b\f\n\r\t\u00C9\u00e9\uABCD\uabcd""#).unwrap(),
+            Value::String("\"\\/\u{8}\u{c}\n\r\tÉé\u{abcd}\u{abcd}".into())
+        );
     }
 
     #[test]
@@ -489,8 +494,41 @@ mod tests {
         ] {
             assert!(p(bad).is_err(), "{bad:?}");
         }
-        assert_eq!(p("1e99999"), Err(JsonErrorKind::NumberOutOfRange));
-        assert_eq!(p("1.2.3"), Err(JsonErrorKind::InvalidNumber));
+        // A name and its value need the colon between them.
+        for bad in [r#"{"a" 11}"#, r#"{"a"x1}"#, r#"{"a",1}"#] {
+            assert_eq!(p(bad), Err(JsonErrorKind::UnexpectedChar), "{bad:?}");
+        }
+        // Well-formed but too large is a different error from malformed.
+        for big in ["1e99999", "0.5e99999", "-1.5e99999", "10.25E+99999"] {
+            assert_eq!(p(big), Err(JsonErrorKind::NumberOutOfRange), "{big:?}");
+        }
+        for bad in ["1.2.3", "01e99999", "1.e99999", "-e99999", "1.5e+"] {
+            assert_eq!(p(bad), Err(JsonErrorKind::InvalidNumber), "{bad:?}");
+        }
+    }
+
+    // Errors give the byte offset where the problem starts: the backslash
+    // of a bad escape.
+    #[test]
+    fn errors_name_their_offset() {
+        let err = |s: &str| parse(s.as_bytes(), Limits::default()).unwrap_err();
+        let e = err(r#"["ab\x"]"#);
+        assert_eq!(
+            (e.kind.clone(), e.offset),
+            (JsonErrorKind::InvalidEscape, 4)
+        );
+        assert_eq!(e.to_string(), "invalid escape sequence at byte 4");
+        let e = err(r#"["ab\ud800"]"#);
+        assert_eq!(
+            (e.kind.clone(), e.offset),
+            (JsonErrorKind::LoneSurrogate, 4)
+        );
+        assert_eq!(e.to_string(), "lone UTF-16 surrogate escape at byte 4");
+        assert_eq!(err("[1,").to_string(), "unexpected end of JSON at byte 3");
+        assert_eq!(
+            err("[1]x").to_string(),
+            "trailing data after JSON value at byte 3"
+        );
     }
 
     #[test]
