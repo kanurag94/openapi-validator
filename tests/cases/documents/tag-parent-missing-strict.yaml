@@ -1,0 +1,12 @@
+title: "A tag parent that does not exist is refused under strict_document"
+ref: "OpenAPI 3.2.0 §4.22.1"
+options: {strict_document: true}
+document: |
+  openapi: 3.2.0
+  info: {title: t, version: "1"}
+  paths:
+    /p:
+      get: {responses: {'200': {description: ok}}}
+  tags: [{name: a, parent: b}]
+request: {method: GET, path: /p}
+expect: {load_error: true}

@@ -1,0 +1,13 @@
+title: "A template expression used twice in one path is refused under strict_document"
+ref: "OpenAPI 3.2.0 §4.8.2"
+options: {strict_document: true}
+document: |
+  openapi: 3.2.0
+  info: {title: t, version: "1"}
+  paths:
+    /p/{a}/{a}:
+      get:
+        parameters: [{name: a, in: path, required: true, schema: {type: string}}]
+        responses: {'200': {description: ok}}
+request: {method: GET, path: /p/x/x}
+expect: {load_error: true}

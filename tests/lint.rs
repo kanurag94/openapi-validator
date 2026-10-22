@@ -265,3 +265,59 @@ fn oauth_flows() {
         "REQUIRES `tokenUrl`",
     );
 }
+
+// §4.8.1 unique tag names; 3.2.0 §4.22.1 tag parents.
+#[test]
+fn tags() {
+    let d = |tags: &str| format!("{HEAD32}paths: {{}}\ntags: {tags}\n");
+    assert!(warnings(&d("[{name: a}, {name: b, parent: a}]")).is_empty());
+    warns(&d("[{name: a}, {name: a}]"), "MUST be unique");
+    warns(&d("[{name: a, parent: z}]"), "MUST exist");
+    warns(&d("[{name: a, parent: b}, {name: b, parent: a}]"), "cycle");
+}
+
+// 3.2.0 §4.8.2: a template expression appears once per path.
+#[test]
+fn template_expression_once() {
+    let d = format!("{HEAD32}paths:\n  /p/{{a}}/{{a}}:\n    get:\n      parameters: [{{name: a, in: path, required: true, schema: {{type: string}}}}]\n      responses: {{'200': {{description: ok}}}}\n");
+    warns(&d, "more than once");
+}
+
+// 3.2.0 §4.21: Header Objects may carry allowReserved.
+#[test]
+fn header_allow_reserved_in_32() {
+    let d = |head: &str| {
+        format!("{head}paths:\n  /p:\n    get:\n      responses:\n        '200':\n          description: ok\n          headers:\n            X-A: {{allowReserved: true, schema: {{type: string}}}}\n")
+    };
+    assert!(warnings(&d(HEAD32)).is_empty());
+    warns(&d(HEAD), "MUST NOT be used in a Header Object");
+}
+
+// OpenAPI 3.1.1 §4.8.24: Schema Objects are JSON Schema 2020-12 schemas.
+#[test]
+fn schemas_meet_the_2020_12_meta_schema() {
+    let d = |head: &str, schema: &str| {
+        format!("{head}paths:\n  /p:\n    post:\n      requestBody: {{content: {{application/json: {{schema: {schema}}}}}}}\n      responses: {{'200': {{description: ok}}}}\ncomponents:\n  schemas:\n    S: {{type: object, properties: {{schema: {{type: string}}}}}}\n")
+    };
+    assert!(
+        warnings(&d(HEAD, "{type: object}")).is_empty(),
+        "{:?}",
+        warnings(&d(HEAD, "{type: object}"))
+    );
+    warns(
+        &d(HEAD, "{type: foo}"),
+        "not a valid JSON Schema 2020-12 schema",
+    );
+    warns(
+        &d(HEAD, "{type: number, exclusiveMaximum: true}"),
+        "not a valid JSON Schema 2020-12 schema",
+    );
+    // A schema naming another dialect is left to that dialect.
+    assert!(warnings(&d(HEAD, "{$schema: 'https://example.com/d', type: foo}")).is_empty());
+    // 3.0 schemas follow their own rules.
+    let v30 = d(
+        "openapi: 3.0.3\ninfo: {title: t, version: '1'}\n",
+        "{type: number, exclusiveMaximum: true}",
+    );
+    assert!(warnings(&v30).is_empty(), "{:?}", warnings(&v30));
+}

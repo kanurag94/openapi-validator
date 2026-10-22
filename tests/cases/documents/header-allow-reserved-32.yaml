@@ -1,0 +1,16 @@
+title: "3.2 Header Objects may carry allowReserved"
+ref: "OpenAPI 3.2.0 §4.21"
+options: {strict_document: true}
+document: |
+  openapi: 3.2.0
+  info: {title: t, version: "1"}
+  paths:
+    /p:
+      get:
+        responses:
+          '200':
+            description: ok
+            headers:
+              X-A: {allowReserved: true, schema: {type: string}}
+request: {method: GET, path: /p}
+expect: {valid: true}

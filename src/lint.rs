@@ -56,8 +56,14 @@ impl<'a> Lint<'a> {
                     );
                 }
             }
-            for k in ["allowEmptyValue", "allowReserved"] {
-                if p.get(k).is_some() {
+            // 3.2 (§4.21) keeps only the allowEmptyValue ban.
+            let banned: &[&str] = if self.version >= Version::V32 {
+                &["allowEmptyValue"]
+            } else {
+                &["allowEmptyValue", "allowReserved"]
+            };
+            for k in banned {
+                if p.get(*k).is_some() {
                     self.warn(
                         &ptr,
                         format!("`{k}` MUST NOT be used in a Header Object (§4.8.21)"),
@@ -262,6 +268,119 @@ impl<'a> Lint<'a> {
                 }
             }
             _ => {}
+        }
+    }
+
+    /// 3.1 and 3.2 Schema Objects are JSON Schema 2020-12 schemas (§4.8.24):
+    /// each is checked against the 2020-12 meta-schema, unless its `$schema`
+    /// names another dialect.
+    fn schemas_2020(&mut self) {
+        let meta = jsonschema::draft202012::meta::validator();
+        let mut found: Vec<(&'a Value, String)> = Vec::new();
+        for (name, s) in self
+            .root
+            .pointer("/components/schemas")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+        {
+            found.push((s, doc::join("#/components/schemas", name)));
+        }
+        let mut stack: Vec<(&'a Value, String)> = vec![(self.root, "#".to_owned())];
+        while let Some((v, ptr)) = stack.pop() {
+            let Value::Object(m) = v else {
+                if let Value::Array(a) = v {
+                    for (i, c) in a.iter().enumerate() {
+                        stack.push((c, doc::join(&ptr, &i.to_string())));
+                    }
+                }
+                continue;
+            };
+            for (k, c) in m {
+                let cptr = doc::join(&ptr, k);
+                if matches!(k.as_str(), "schema" | "itemSchema") {
+                    found.push((c, cptr));
+                } else if !(k.starts_with("x-")
+                    || matches!(k.as_str(), "example" | "examples" | "default")
+                    || cptr == "#/components/schemas")
+                {
+                    stack.push((c, cptr));
+                }
+            }
+        }
+        for (s, ptr) in found {
+            let dialect = s.get("$schema").and_then(Value::as_str);
+            if dialect.is_some_and(|d| {
+                !d.contains("json-schema.org/draft/2020-12")
+                    && !d.contains("spec.openapis.org/oas/")
+            }) {
+                continue;
+            }
+            if let Err(e) = meta.validate(s) {
+                let at = e.instance_path().to_string();
+                self.warn(
+                    &format!("{ptr}{at}"),
+                    format!("not a valid JSON Schema 2020-12 schema: {} (§4.8.24)", e),
+                );
+            }
+        }
+    }
+
+    /// Tag names are unique (§4.8.1); in 3.2 a `parent` names an existing
+    /// tag and parents form no cycle (3.2 §4.22.1).
+    fn tags(&mut self, tags: Option<&Value>) {
+        let Some(tags) = tags.and_then(Value::as_array) else {
+            return;
+        };
+        let names: Vec<Option<&str>> = tags
+            .iter()
+            .map(|t| t.get("name").and_then(Value::as_str))
+            .collect();
+        for (i, n) in names.iter().enumerate() {
+            if n.is_some() && names[..i].contains(n) {
+                self.warn(
+                    &format!("#/tags/{i}"),
+                    format!(
+                        "tag {:?} is listed twice; tag names MUST be unique (§4.8.1)",
+                        n.unwrap_or("")
+                    ),
+                );
+            }
+        }
+        if self.version < Version::V32 {
+            return;
+        }
+        let parent_of = |n: &str| {
+            tags.iter()
+                .find(|t| t.get("name").and_then(Value::as_str) == Some(n))
+                .and_then(|t| t.get("parent"))
+                .and_then(Value::as_str)
+        };
+        for (i, t) in tags.iter().enumerate() {
+            let Some(parent) = t.get("parent").and_then(Value::as_str) else {
+                continue;
+            };
+            let ptr = format!("#/tags/{i}/parent");
+            if !names.contains(&Some(parent)) {
+                self.warn(
+                    &ptr,
+                    format!("parent tag {parent:?} MUST exist (3.2 §4.22.1)"),
+                );
+                continue;
+            }
+            // Follow parents; returning to this tag is a cycle.
+            let own = names[i];
+            let mut cur = Some(parent);
+            for _ in 0..=tags.len() {
+                match cur {
+                    Some(c) if Some(c) == own => {
+                        self.warn(&ptr, "parent tags MUST NOT form a cycle (3.2 §4.22.1)");
+                        break;
+                    }
+                    Some(c) => cur = parent_of(c),
+                    None => break,
+                }
+            }
         }
     }
 
@@ -650,6 +769,10 @@ pub(crate) fn check(root: &Value, version: Version) -> Vec<Warning> {
     if let Some(sec) = root.get("security") {
         l.security(sec, "#/security");
     }
+    l.tags(root.get("tags"));
+    if version >= Version::V31 {
+        l.schemas_2020();
+    }
     let mut ids = HashMap::new();
     for (key, item) in root
         .get("paths")
@@ -661,6 +784,20 @@ pub(crate) fn check(root: &Value, version: Version) -> Vec<Warning> {
             continue;
         }
         let iptr = doc::join("#/paths", key);
+        let mut seen: Vec<&str> = Vec::new();
+        for name in key
+            .split('{')
+            .skip(1)
+            .filter_map(|s| s.split_once('}').map(|(n, _)| n))
+        {
+            if seen.contains(&name) {
+                l.warn(
+                    &iptr,
+                    format!("template expression {{{name}}} MUST NOT appear more than once in a path (3.2 §4.8.2)"),
+                );
+            }
+            seen.push(name);
+        }
         let Some((item, iptr)) = l.deref(item, &iptr) else {
             continue;
         };
