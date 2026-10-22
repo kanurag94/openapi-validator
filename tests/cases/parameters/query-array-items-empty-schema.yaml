@@ -1,0 +1,12 @@
+title: "An array whose items schema is {} accepts any item"
+ref: "JSON Schema Core 2020-12 §4.3.2, §10.3.1.2"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /p:
+      get:
+        parameters: [{name: a, in: query, schema: {type: array, items: {}}}]
+        responses: {'200': {description: ok}}
+request: {method: GET, path: /p, query: "a=x,1,true"}
+expect: {valid: true}

@@ -1,0 +1,17 @@
+title: "When enforcing, a value the oneOf mapping names is accepted even if the allOf base also has a discriminator"
+ref: "OpenAPI 3.1.1 §4.8.25.2"
+options: {discriminator: enforce}
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /p:
+      post:
+        requestBody: {content: {application/json: {schema: {oneOf: [{$ref: '#/components/schemas/Cat'}], discriminator: {propertyName: kind, mapping: {c: '#/components/schemas/Cat'}}}}}}
+        responses: {'200': {description: ok}}
+  components:
+    schemas:
+      Pet: {type: object, required: [kind], properties: {kind: {type: string}}, discriminator: {propertyName: kind}}
+      Cat: {allOf: [{$ref: '#/components/schemas/Pet'}, {type: object}]}
+request: {method: POST, path: /p, headers: [["Content-Type","application/json"]], body: "{\"kind\": \"c\"}"}
+expect: {valid: true}

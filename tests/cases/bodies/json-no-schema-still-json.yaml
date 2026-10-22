@@ -1,0 +1,12 @@
+title: "A JSON body must be JSON even when its media type declares no schema"
+ref: "OpenAPI 3.1.1 §4.8.14; RFC 8259 §2"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /p:
+      post:
+        requestBody: {content: {application/json: {}}}
+        responses: {'200': {description: ok}}
+request: {method: POST, path: /p, headers: [["Content-Type","application/json"]], body: "{nope"}
+expect: {valid: false}

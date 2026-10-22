@@ -1,0 +1,12 @@
+title: "A request body declared on GET is checked like any other"
+ref: "OpenAPI 3.1.1 §4.8.13; RFC 9110 §9.3.1"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /p:
+      get:
+        requestBody: {content: {application/json: {schema: {type: object, required: [a]}}}}
+        responses: {'200': {description: ok}}
+request: {method: GET, path: /p, headers: [["Content-Type","application/json"]], body: "{}"}
+expect: {valid: false}

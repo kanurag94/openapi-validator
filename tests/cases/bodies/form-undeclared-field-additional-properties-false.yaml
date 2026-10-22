@@ -1,0 +1,12 @@
+title: "An undeclared form field is kept, so additionalProperties: false refuses it"
+ref: "OpenAPI 3.1.1 §4.8.15.4; JSON Schema Core 2020-12 §10.3.2.3"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /p:
+      post:
+        requestBody: {content: {application/x-www-form-urlencoded: {schema: {type: object, properties: {a: {type: string}}, additionalProperties: false}}}}
+        responses: {'200': {description: ok}}
+request: {method: POST, path: /p, headers: [["Content-Type","application/x-www-form-urlencoded"]], body: "a=1&b=2"}
+expect: {valid: false}

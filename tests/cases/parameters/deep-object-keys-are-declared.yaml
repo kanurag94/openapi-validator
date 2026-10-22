@@ -1,0 +1,13 @@
+title: "deepObject keys name[prop] belong to their parameter, not to unknown parameters"
+ref: "OpenAPI 3.1.1 §4.8.12.4"
+options: {allow_unknown_query: false}
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /p:
+      get:
+        parameters: [{name: f, in: query, style: deepObject, explode: true, schema: {type: object, properties: {a: {type: string}}}}]
+        responses: {'200': {description: ok}}
+request: {method: GET, path: /p, query: "f%5Ba%5D=1&f[b]=2"}
+expect: {valid: true}

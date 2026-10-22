@@ -1,0 +1,12 @@
+title: "A non-exploded query array is split on its commas before percent-decoding"
+ref: "OpenAPI 3.1.1 §4.8.12.4; RFC 6570 §3.2.8"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /p:
+      get:
+        parameters: [{name: a, in: query, explode: false, schema: {type: array, maxItems: 2, items: {type: string, pattern: '^[a-z,]+$'}}}]
+        responses: {'200': {description: ok}}
+request: {method: GET, path: /p, query: "a=x%2Cy,z"}
+expect: {valid: true}

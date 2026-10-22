@@ -1,0 +1,15 @@
+title: "A recursive schema that finite instances satisfy loads and validates"
+ref: "JSON Schema Core 2020-12 §8.2.3.1"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /p:
+      post:
+        requestBody: {content: {application/json: {schema: {$ref: '#/components/schemas/T'}}}}
+        responses: {'200': {description: ok}}
+  components:
+    schemas:
+      T: {type: object, properties: {kids: {type: array, items: {$ref: '#/components/schemas/T'}}}}
+request: {method: POST, path: /p, headers: [["Content-Type","application/json"]], body: "{\"kids\": [{\"kids\": []}]}"}
+expect: {valid: true}
