@@ -87,7 +87,7 @@ The defaults follow the specification text. `Options::gateway_profile()` switche
 - **Servers.** `host`, `basePath` and `schemes` give the server URLs; without `host`, the base path alone (Swagger 2.0 §5.2).
 - **Media types.** Request bodies take `consumes` and responses `produces`, from the operation or the document. Without either, `*/*` is used, so any body is accepted and parsed by its own type.
 - **Form parameters.** `formData` parameters become one body: `multipart/form-data` when a parameter is a `file` or `consumes` names it, `application/x-www-form-urlencoded` otherwise.
-- **collectionFormat.** `csv` is a non-exploded form (query) or simple (path, header) value, `multi` an exploded form, `ssv` and `pipes` space- and pipe-delimited. `tsv` has no 3.0 style and is read as `csv`, with a warning.
+- **collectionFormat.** `csv` is a non-exploded form (query) or simple (path, header) value, `multi` an exploded form, `ssv` and `pipes` space- and pipe-delimited. Formats no 3.0 style splits (`tsv`, and `ssv`, `pipes` or `multi` outside query) are read as one string rather than split wrongly. `formData` arrays are split by their `collectionFormat` in multipart bodies too.
 - **Schemas.** A `discriminator` property name becomes a Discriminator Object, `type: file` a binary string, and the common `x-nullable` extension `nullable`.
 - **YAML.** Documents are read as YAML 1.2, which the Swagger 2.0 text assumes when it calls YAML a superset of JSON.
 

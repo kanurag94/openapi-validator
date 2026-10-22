@@ -199,7 +199,7 @@ impl Spec {
                 Err(_) => Err("the body is not valid UTF-8".into()),
             }
         } else if actual.is_multipart_form() {
-            let styled = self.version >= Version::V31;
+            let styled = self.multipart_styles;
             body::multipart(bytes, actual, &entry.props, &entry.encodings, depth, styled).map(
                 |(v, parts)| {
                     self.check_parts(&entry.encodings, &parts, location, report);

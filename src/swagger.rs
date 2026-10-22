@@ -22,12 +22,32 @@
 
 use serde_json::{json, Map, Value};
 
-use crate::doc::{escape_token, LoadError, Warning};
+use crate::doc::{LoadError, Warning};
 
 const METHODS: [&str; 7] = ["get", "put", "post", "delete", "options", "head", "patch"];
 
-/// Keys holding data, whose `$ref` members are not references.
+/// Keyword keys holding data, whose `$ref` members are not references.
 const DATA_KEYS: &[&str] = &["example", "examples", "enum", "default", "x-example"];
+
+/// Keys whose objects are maps of names (a `default` response, a property
+/// called `enum`), not of keywords.
+const NAME_MAPS: &[&str] = &[
+    "paths",
+    "schemas",
+    "definitions",
+    "parameters",
+    "responses",
+    "properties",
+    "patternProperties",
+    "securitySchemes",
+    "securityDefinitions",
+    "headers",
+    "content",
+    "encoding",
+    "callbacks",
+    "links",
+    "scopes",
+];
 
 /// Converts a Swagger 2.0 document. Other `swagger` versions are refused.
 pub(crate) fn convert(root: Value) -> Result<(Value, Vec<Warning>), LoadError> {
@@ -69,13 +89,6 @@ fn is_form(media: &str) -> bool {
 }
 
 impl<'a> Converter<'a> {
-    fn warn(&mut self, location: String, message: impl Into<String>) {
-        self.warnings.push(Warning {
-            location,
-            message: message.into(),
-        });
-    }
-
     fn document(&mut self) -> Value {
         let r = self.root;
         let mut out = Map::new();
@@ -104,11 +117,10 @@ impl<'a> Converter<'a> {
                 paths.insert(p.clone(), item.clone());
                 continue;
             }
-            let ptr = format!("#/paths/{}", escape_token(p));
             let item = self.deref(item);
             paths.insert(
                 p.clone(),
-                self.path_item(item, &ptr, consumes.as_deref(), produces.as_deref()),
+                self.path_item(item, consumes.as_deref(), produces.as_deref()),
             );
         }
         out.insert("paths".into(), Value::Object(paths));
@@ -162,7 +174,6 @@ impl<'a> Converter<'a> {
     fn path_item(
         &mut self,
         item: &Value,
-        ptr: &str,
         consumes: Option<&[String]>,
         produces: Option<&[String]>,
     ) -> Value {
@@ -183,10 +194,7 @@ impl<'a> Converter<'a> {
             .filter(|p| !matches!(self.location(p).as_deref(), Some("body" | "formData")))
             .cloned()
             .collect();
-        let plain: Vec<Value> = kept
-            .iter()
-            .map(|p| self.parameter(p, &format!("{ptr}/parameters")))
-            .collect();
+        let plain: Vec<Value> = kept.iter().map(|p| self.parameter(p)).collect();
         if !plain.is_empty() {
             out.insert("parameters".into(), Value::Array(plain));
         }
@@ -194,11 +202,7 @@ impl<'a> Converter<'a> {
             let Some(op) = item.get(m).filter(|o| o.is_object()) else {
                 continue;
             };
-            let optr = format!("{ptr}/{m}");
-            out.insert(
-                m.into(),
-                self.operation(op, &shared, &optr, consumes, produces),
-            );
+            out.insert(m.into(), self.operation(op, &shared, consumes, produces));
         }
         Value::Object(out)
     }
@@ -215,7 +219,6 @@ impl<'a> Converter<'a> {
         &mut self,
         op: &Value,
         shared: &[Value],
-        ptr: &str,
         consumes: Option<&[String]>,
         produces: Option<&[String]>,
     ) -> Value {
@@ -278,10 +281,7 @@ impl<'a> Converter<'a> {
             .filter(|p| !matches!(self.location(p).as_deref(), Some("body" | "formData")))
             .cloned()
             .collect();
-        let plain: Vec<Value> = kept
-            .iter()
-            .map(|p| self.parameter(p, &format!("{ptr}/parameters")))
-            .collect();
+        let plain: Vec<Value> = kept.iter().map(|p| self.parameter(p)).collect();
         if !plain.is_empty() {
             out.insert("parameters".into(), Value::Array(plain));
         }
@@ -318,6 +318,15 @@ impl<'a> Converter<'a> {
             .into_iter()
             .flatten()
         {
+            // Swagger 2.0 §5.2.4: an operation's `produces` overrides the
+            // document's for all its responses, shared ones included.
+            let r = match (op.get("produces"), r.get("$ref").and_then(Value::as_str)) {
+                (Some(_), Some(rf)) => rf
+                    .strip_prefix('#')
+                    .and_then(|p| self.root.pointer(p))
+                    .unwrap_or(r),
+                _ => r,
+            };
             responses.insert(code.clone(), self.response(r, produces.as_deref()));
         }
         out.insert("responses".into(), Value::Object(responses));
@@ -350,7 +359,12 @@ impl<'a> Converter<'a> {
                     "multi" => ("form", true),
                     "ssv" => ("spaceDelimited", false),
                     "pipes" => ("pipeDelimited", false),
-                    _ => ("form", false),
+                    "csv" => ("form", false),
+                    // tsv: no style splits it; read the value as a string.
+                    _ => {
+                        props.insert(name.to_owned(), json!({"type": "string"}));
+                        continue;
+                    }
                 };
                 encoding.insert(name.to_owned(), json!({"style": style, "explode": explode}));
             }
@@ -381,7 +395,7 @@ impl<'a> Converter<'a> {
     }
 
     /// A non-body, non-form parameter, or a reference to one.
-    fn parameter(&mut self, p: &Value, ptr: &str) -> Value {
+    fn parameter(&mut self, p: &Value) -> Value {
         if p.get("$ref").is_some() {
             return p.clone();
         }
@@ -409,12 +423,17 @@ impl<'a> Converter<'a> {
                 ("query", "pipes") => ("pipeDelimited", false),
                 ("query", "csv") => ("form", false),
                 (_, "csv") => ("simple", false),
-                (l, f) => {
-                    self.warn(
-                        ptr.to_owned(),
-                        format!("collectionFormat {f} has no OpenAPI 3.0 style for {l} parameters; read as csv"),
+                // No 3.0 style splits these (tsv anywhere; ssv, pipes and
+                // multi outside query), so the value is read as one string
+                // rather than split wrongly.
+                (l, _) => {
+                    out.insert("schema".into(), json!({"type": "string"}));
+                    out.insert(
+                        "style".into(),
+                        json!(if l == "query" { "form" } else { "simple" }),
                     );
-                    (if l == "query" { "form" } else { "simple" }, false)
+                    out.insert("explode".into(), json!(false));
+                    return Value::Object(out);
                 }
             };
             out.insert("style".into(), json!(style));
@@ -484,8 +503,7 @@ impl<'a> Converter<'a> {
                 ) {
                     continue;
                 }
-                let ptr = format!("#/parameters/{}", escape_token(k));
-                params.insert(k.clone(), self.parameter(p, &ptr));
+                params.insert(k.clone(), self.parameter(p));
             }
             out.insert("parameters".into(), Value::Object(params));
         }
@@ -624,8 +642,9 @@ fn security_scheme(s: &Value) -> Value {
 /// `#/definitions/`, `#/parameters/` and `#/responses/` references follow
 /// their objects under `components`.
 fn rewrite_refs(v: &mut Value) {
-    let mut stack = vec![v];
-    while let Some(v) = stack.pop() {
+    // (value, whether its keys are names rather than keywords)
+    let mut stack = vec![(v, false)];
+    while let Some((v, names)) = stack.pop() {
         match v {
             Value::Object(m) => {
                 if let Some(Value::String(r)) = m.get_mut("$ref") {
@@ -641,12 +660,15 @@ fn rewrite_refs(v: &mut Value) {
                     }
                 }
                 for (k, c) in m.iter_mut() {
-                    if !DATA_KEYS.contains(&k.as_str()) {
-                        stack.push(c);
+                    if names {
+                        stack.push((c, false));
+                    } else if !DATA_KEYS.contains(&k.as_str()) {
+                        let child_names = NAME_MAPS.contains(&k.as_str()) && c.is_object();
+                        stack.push((c, child_names));
                     }
                 }
             }
-            Value::Array(a) => stack.extend(a.iter_mut()),
+            Value::Array(a) => stack.extend(a.iter_mut().map(|c| (c, false))),
             _ => {}
         }
     }

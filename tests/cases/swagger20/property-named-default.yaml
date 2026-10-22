@@ -1,0 +1,31 @@
+title: "A property named default may hold a reference"
+ref: "Swagger 2.0 §5.2.11"
+document: |
+  swagger: "2.0"
+  info: {title: t, version: "1"}
+  produces: [application/json]
+  paths:
+    /things:
+      get:
+        responses:
+          "200": {description: ok, schema: {$ref: "#/definitions/Thing"}}
+          default: {$ref: "#/responses/Error"}
+      post:
+        produces: [application/xml]
+        parameters:
+          - {name: tags, in: query, type: array, items: {type: integer}, collectionFormat: tsv}
+        responses:
+          "201": {description: created}
+          "404": {$ref: "#/responses/NotFound"}
+  responses:
+    Error: {description: error, schema: {$ref: "#/definitions/Error"}}
+    NotFound: {description: not found, schema: {type: string}}
+  definitions:
+    Thing:
+      type: object
+      properties:
+        default: {$ref: "#/definitions/Error"}
+    Error: {type: object, required: [code], properties: {code: {type: integer}}}
+request: {method: GET, path: /things}
+response: {status: 200, headers: [["Content-Type", "application/json"]], body: "{\"default\": {}}"}
+expect: {valid: false, kind: schema_violation, location: body/default/code}

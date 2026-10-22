@@ -127,6 +127,9 @@ pub struct Spec {
     /// `(operationId, callback name)` to its expressions, each with
     /// `(method key, operation index)` (§4.8.18).
     pub(crate) callbacks: HashMap<(String, String), Vec<MethodOps>>,
+    /// Encoding styles apply to multipart parts: OpenAPI 3.1 and later
+    /// (§4.8.15.1), and Swagger 2.0 `collectionFormat` on `formData`.
+    pub(crate) multipart_styles: bool,
     warnings: Vec<Warning>,
 }
 
@@ -346,7 +349,8 @@ impl Spec {
 
     fn load_value(root: Value, options: Options) -> Result<Spec, LoadError> {
         // Swagger 2.0 is read as the OpenAPI 3.0 it converts to.
-        let (root, mut warnings) = if root.get("swagger").is_some() {
+        let from_swagger = root.get("swagger").is_some();
+        let (root, mut warnings) = if from_swagger {
             crate::swagger::convert(root)?
         } else {
             (root, Vec::new())
@@ -519,6 +523,7 @@ impl Spec {
             schemes,
             webhooks,
             callbacks,
+            multipart_styles: from_swagger || version >= Version::V31,
             warnings,
         })
     }
