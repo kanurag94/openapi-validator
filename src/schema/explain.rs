@@ -796,11 +796,23 @@ impl<'a> Explainer<'a> {
                             ),
                         );
                     } else if valid.is_empty() {
-                        // Descend into the one branch whose type fits, if any,
+                        // Descend into the branch the discriminator names,
+                        // or else the one branch whose type fits, if any,
                         // for a precise location.
-                        let fitting: Vec<usize> = (0..branches.len())
-                            .filter(|&i| self.type_fits(&branches[i], inst))
-                            .collect();
+                        let named = m
+                            .get("x-oav-discriminator")
+                            .and_then(|h| {
+                                let v = inst.get(h.get("property")?.as_str()?)?.as_str()?;
+                                h.get("branches")?.get(v)?.as_u64()
+                            })
+                            .map(|i| i as usize)
+                            .filter(|i| *i < branches.len());
+                        let fitting: Vec<usize> = match named {
+                            Some(i) => vec![i],
+                            None => (0..branches.len())
+                                .filter(|&i| self.type_fits(&branches[i], inst))
+                                .collect(),
+                        };
                         let n = self.found();
                         if let [only] = fitting.as_slice() {
                             self.node(

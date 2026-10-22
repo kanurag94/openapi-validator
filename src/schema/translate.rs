@@ -800,6 +800,10 @@ impl Translator<'_> {
             if let Some(d) = m.get("discriminator").filter(|d| d.is_object()) {
                 self.discriminator(d, m, ptr, &ctx, &mut out)?;
             }
+        } else if let Some(hint) = discriminator_hint(m) {
+            // As an annotation the discriminator changes no verdict, but it
+            // tells problem reports which branch the payload meant.
+            out.insert("x-oav-discriminator".into(), hint);
         }
         Ok(Value::Object(out))
     }
@@ -1110,6 +1114,36 @@ impl Translator<'_> {
         }
         Ok(())
     }
+}
+
+/// For a `oneOf`/`anyOf` with a discriminator: the property, and the
+/// branch index each value names (a referenced component's name, or an
+/// explicit `mapping` key whose target is that branch).
+fn discriminator_hint(m: &Map<String, Value>) -> Option<Value> {
+    let d = m.get("discriminator")?;
+    let prop = d.get("propertyName")?.as_str()?;
+    let branches = ["oneOf", "anyOf"]
+        .iter()
+        .find_map(|k| m.get(*k).and_then(Value::as_array))?;
+    let mapping = mapping_entries(d);
+    let mut names = Map::new();
+    for (i, b) in branches.iter().enumerate() {
+        let Some(r) = b.get("$ref").and_then(Value::as_str) else {
+            continue;
+        };
+        let target = doc::canonical_pointer(r).unwrap_or_else(|| r.to_owned());
+        if let Some(n) = target.strip_prefix("#/components/schemas/") {
+            if !n.contains('/') {
+                names.insert(n.replace("~1", "/").replace("~0", "~"), json!(i));
+            }
+        }
+        for (value, t) in &mapping {
+            if *t == target {
+                names.insert(value.clone(), json!(i));
+            }
+        }
+    }
+    (!names.is_empty()).then(|| json!({"property": prop, "branches": names}))
 }
 
 /// `(value, target pointer)` pairs of an explicit `mapping`. A mapping value

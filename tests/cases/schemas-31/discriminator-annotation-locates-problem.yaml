@@ -1,0 +1,32 @@
+title: "As an annotation, the discriminator still points a oneOf problem at the branch the payload names"
+ref: "OpenAPI 3.1.1 §4.8.25"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /pets:
+      post:
+        requestBody:
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/Cat"
+                  - $ref: "#/components/schemas/Dog"
+                discriminator:
+                  propertyName: petType
+                  mapping: {dog: "#/components/schemas/Dog"}
+        responses:
+          "201": {description: ok}
+  components:
+    schemas:
+      Cat:
+        type: object
+        required: [petType, lives]
+        properties: {petType: {type: string}, lives: {type: integer}}
+      Dog:
+        type: object
+        required: [petType, bark]
+        properties: {petType: {type: string}, bark: {type: string}}
+request: {method: POST, path: /pets, headers: [["Content-Type", "application/json"]], body: '{"petType": "dog", "bark": 5}'}
+expect: {valid: false, kind: schema_violation, location: body/bark}
