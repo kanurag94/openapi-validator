@@ -1,0 +1,12 @@
+title: "A query parameter typed [array, null] is read as an array"
+ref: "OpenAPI 3.1.1 §4.8.12.4"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /p:
+      get:
+        parameters: [{name: a, in: query, schema: {type: [array, 'null'], items: {type: integer}}}]
+        responses: {'200': {description: ok}}
+request: {method: GET, path: /p, query: "a=1&a=2"}
+expect: {valid: true}

@@ -1,0 +1,12 @@
+title: "A schema naming an unknown dialect is read as JSON Schema 2020-12"
+ref: "JSON Schema Core 2020-12 §8.1.1; OpenAPI 3.1.1 §4.8.24.5"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /p:
+      post:
+        requestBody: {content: {application/json: {schema: {$schema: 'https://example.com/my-dialect', type: object, required: [a]}}}}
+        responses: {'200': {description: ok}}
+request: {method: POST, path: /p, headers: [["Content-Type","application/json"]], body: "{}"}
+expect: {valid: false}

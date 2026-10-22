@@ -1,0 +1,6 @@
+title: "A surrogate pair escape in a JSON document is one character"
+ref: "RFC 8259 §7"
+document: |
+  {"openapi": "3.1.0", "info": {"title": "t", "version": "1"}, "paths": {"/p": {"post": {"requestBody": {"content": {"application/json": {"schema": {"const": "\ud83d\ude00"}}}}, "responses": {"200": {"description": "ok"}}}}}}
+request: {method: POST, path: /p, headers: [["Content-Type","application/json"]], body: '"\ud83d\ude00"'}
+expect: {valid: true}

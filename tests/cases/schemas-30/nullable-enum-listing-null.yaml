@@ -1,0 +1,12 @@
+title: "nullable with an enum that lists null accepts null"
+ref: "OpenAPI 3.0.4 §4.7.24.1"
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /p:
+      post:
+        requestBody: {content: {application/json: {schema: {type: string, nullable: true, enum: [a, null]}}}}
+        responses: {'200': {description: ok}}
+request: {method: POST, path: /p, headers: [["Content-Type","application/json"]], body: "null"}
+expect: {valid: true}

@@ -1,0 +1,12 @@
+title: "A query parameter whose anyOf is an array or null is read as an array"
+ref: "OpenAPI 3.1.1 §4.8.12.4"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /p:
+      get:
+        parameters: [{name: a, in: query, schema: {anyOf: [{type: array, items: {type: integer}}, {type: 'null'}]}}]
+        responses: {'200': {description: ok}}
+request: {method: GET, path: /p, query: "a=1&a=2"}
+expect: {valid: true}

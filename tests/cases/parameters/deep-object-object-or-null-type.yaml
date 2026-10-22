@@ -1,0 +1,12 @@
+title: "A deepObject parameter typed [object, null] reads its keys"
+ref: "OpenAPI 3.1.1 §4.8.12.4"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /p:
+      get:
+        parameters: [{name: f, in: query, style: deepObject, schema: {type: [object, 'null'], properties: {n: {type: integer}}}}]
+        responses: {'200': {description: ok}}
+request: {method: GET, path: /p, query: "f[n]=1"}
+expect: {valid: true}
