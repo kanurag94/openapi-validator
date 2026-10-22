@@ -284,6 +284,9 @@ impl<'a> Builder<'a> {
             headers,
             style,
             explode,
+            rfc6570: ["style", "explode", "allowReserved"]
+                .iter()
+                .any(|k| e.get(*k).is_some()),
             prefix,
             item,
         }

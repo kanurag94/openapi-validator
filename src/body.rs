@@ -28,6 +28,9 @@ pub(crate) struct Encoding {
     pub headers: Vec<crate::params::Param>,
     pub style: Style,
     pub explode: bool,
+    /// `style`, `explode` or `allowReserved` is written, so the value is
+    /// serialized RFC 6570-style rather than by `contentType` (§4.8.15.1).
+    pub rfc6570: bool,
     /// Nested positional encodings for a multipart part (OpenAPI 3.2).
     pub prefix: Vec<Encoding>,
     pub item: Option<Box<Encoding>>,
@@ -348,6 +351,7 @@ pub(crate) fn multipart(
     props: &FormProps,
     encodings: &[Encoding],
     depth: usize,
+    styled: bool,
 ) -> Result<(Value, Vec<PartInfo>), String> {
     let Some(boundary) = media
         .param("boundary")
@@ -380,7 +384,47 @@ pub(crate) fn multipart(
             .content_type
             .as_ref()
             .map_or(declared_json || (object && !part.file), MediaType::is_json);
-        let value = if is_json {
+        // OpenAPI 3.1 §4.8.15.1: a part whose Encoding Object writes style,
+        // explode or allowReserved is serialized as that style, and an
+        // unexploded array or object is one delimited part.
+        let enc = encodings.iter().find(|e| e.name == part.name);
+        let delimited = styled
+            && !is_json
+            && enc.is_some_and(|e| e.rfc6570 && !e.explode)
+            && matches!(shape, Some(Shape::Array(_) | Shape::Object(_)));
+        let value = if delimited {
+            let text = String::from_utf8_lossy(part.data).into_owned();
+            let delim = match enc.map(|e| e.style) {
+                Some(Style::SpaceDelimited) => ' ',
+                Some(Style::PipeDelimited) => '|',
+                _ => ',',
+            };
+            let pieces: Vec<&str> = if text.is_empty() {
+                Vec::new()
+            } else {
+                text.split(delim).collect()
+            };
+            match shape {
+                Some(Shape::Array(t)) => {
+                    Value::Array(pieces.iter().map(|x| coerce(x, *t)).collect())
+                }
+                Some(Shape::Object(nested)) => {
+                    let mut o = Map::new();
+                    for kv in pieces.chunks(2) {
+                        let t = nested
+                            .iter()
+                            .find(|(n, _)| n == kv[0])
+                            .map_or(Types::ANY, |(_, t)| *t);
+                        o.insert(
+                            kv[0].to_owned(),
+                            coerce(kv.get(1).copied().unwrap_or(""), t),
+                        );
+                    }
+                    Value::Object(o)
+                }
+                _ => Value::String(text),
+            }
+        } else if is_json {
             json::parse(part.data, json::Limits { max_depth: depth })
                 .map_err(|e| format!("part {:?} is not valid JSON: {e}", part.name))?
         } else {
@@ -391,7 +435,7 @@ pub(crate) fn multipart(
                 _ => Value::String(text),
             }
         };
-        let repeated_array = matches!(shape, Some(Shape::Array(_))) && !is_json;
+        let repeated_array = matches!(shape, Some(Shape::Array(_))) && !is_json && !delimited;
         if repeated_array {
             match m.get_mut(&part.name) {
                 Some(Value::Array(a)) => a.push(value),

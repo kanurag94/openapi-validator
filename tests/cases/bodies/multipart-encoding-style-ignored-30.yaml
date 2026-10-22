@@ -1,0 +1,16 @@
+title: "In 3.0 an Encoding Object's style does not apply to multipart parts, so the part is one item"
+ref: "OpenAPI 3.0.4 §4.7.15.1"
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /p:
+      post:
+        requestBody:
+          content:
+            multipart/form-data:
+              schema: {type: object, properties: {tags: {type: array, maxItems: 2, items: {type: string}}}}
+              encoding: {tags: {style: form, explode: false}}
+        responses: {'200': {description: ok}}
+request: {method: POST, path: /p, headers: [["Content-Type","multipart/form-data; boundary=b"]], body: "--b\r\nContent-Disposition: form-data; name=\"tags\"\r\n\r\nx,y,z\r\n--b--\r\n"}
+expect: {valid: true}
