@@ -455,14 +455,16 @@ mod tests {
     }
 
     #[test]
-    fn oas311_s4_8_8_2_same_shape_is_refused() {
+    fn oas311_s4_8_8_2_same_shape_is_the_same_path() {
         let mut ix = PathIndex::default();
-        ix.insert(Template::parse("/pets/{petId}").unwrap())
+        let first = ix
+            .insert(Template::parse("/pets/{petId}").unwrap())
             .unwrap();
         let e = ix
             .insert(Template::parse("/pets/{name}").unwrap())
             .unwrap_err();
-        assert_eq!(e, "/pets/{petId}");
+        assert_eq!(e, first);
+        assert_eq!(ix.template(e).text, "/pets/{petId}");
         assert!(ix
             .insert(Template::parse("/pets/{id}.json").unwrap())
             .is_ok());
