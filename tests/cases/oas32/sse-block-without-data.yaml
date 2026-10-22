@@ -1,5 +1,5 @@
-title: "An event without data fails a schema that requires it"
-ref: "OpenAPI 3.2.0 §4.14.4, §4.14.6.3"
+title: "A block without data dispatches no event, so it is not an item"
+ref: "OpenAPI 3.2.0 §4.14.4; HTML §9.2.6"
 document: |
   openapi: 3.2.0
   info: {title: t, version: "1"}
@@ -32,4 +32,4 @@ document: |
           id: {type: string}
           retry: {type: integer, minimum: 0}
 request: {method: POST, path: /events, headers: [["Content-Type", "text/event-stream"]], body: "event: addString\nid: 7\n"}
-expect: {valid: false, kind: schema_violation, location: body/0/data}
+expect: {valid: true}

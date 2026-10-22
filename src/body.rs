@@ -507,19 +507,20 @@ pub(crate) fn sequence(
 /// (HTML §9.2.6), one object per event: comments and unknown fields are
 /// dropped, `data` lines are joined with LF, `retry` is an integer when it
 /// is all digits (and ignored otherwise), and an `id` with NUL is ignored
-/// (OpenAPI 3.2 §4.14.4). A final event without a blank line is kept.
+/// (OpenAPI 3.2 §4.14.4). A block without `data` is no event. A final
+/// event without a blank line is kept.
 pub(crate) fn events(t: &str) -> Vec<Value> {
     let t = t.strip_prefix('\u{feff}').unwrap_or(t);
     let mut out = Vec::new();
     let mut cur = Map::new();
     let mut data: Option<String> = None;
-    let mut flush = |cur: &mut Map<String, Value>, data: &mut Option<String>| {
-        if let Some(d) = data.take() {
+    // HTML §9.2.6: a block with no `data` line dispatches no event.
+    let mut flush = |cur: &mut Map<String, Value>, data: &mut Option<String>| match data.take() {
+        Some(d) => {
             cur.insert("data".into(), Value::String(d));
-        }
-        if !cur.is_empty() {
             out.push(Value::Object(std::mem::take(cur)));
         }
+        None => cur.clear(),
     };
     // Lines end with CRLF, LF or CR.
     let mut rest = t;
@@ -747,7 +748,7 @@ mod sequence_tests {
 
     #[test]
     fn event_stream_line_endings_and_ignored_values() {
-        let t = "\u{feff}data\r\nretry: 1x\rid: a\0b\r\n\r\n:only a comment\n\n";
+        let t = "\u{feff}data\r\nretry: 1x\rid: a\0b\r\n\r\n:only a comment\n\nretry: 5\nid: 7\n\n";
         assert_eq!(events(t), vec![json!({"data": ""})]);
     }
 
