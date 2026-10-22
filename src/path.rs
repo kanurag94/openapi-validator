@@ -458,6 +458,15 @@ mod tests {
         assert!(best(&ix, "/f/.json").is_none());
         assert!(best(&ix, "/f/a.jsox").is_none());
         assert!(best(&ix, "/f/a.json.bak").is_none());
+        assert_eq!(
+            best(&ix, "/f/a.json.json").unwrap().1,
+            vec![("name".to_owned(), "a.json")],
+            "a final literal is the segment's end, not its first occurrence"
+        );
+        assert!(
+            best(&ix, "/f/a%C3%A9json").is_none(),
+            "é straddles the literal's start"
+        );
     }
 
     #[test]
