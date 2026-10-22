@@ -87,17 +87,19 @@ Where the specifications leave a choice open, the library picks the behaviour th
 
 ## Performance
 
-Measured with `cargo bench` at v0.1.0 on an Apple M-series machine, using the synthetic document in `benches/support/synthetic.rs`.
+Measured with `cargo bench` on an Apple M-series machine, using the synthetic document in `benches/support/synthetic.rs`.
 
 | Measure | Target | Result |
 |---|---|---|
-| Build, 1.6 MiB, 1,200 paths | < 200 ms, < 50 MB | 61 ms, 26 MiB |
-| Build, 2.4 MiB, 2,000 paths | | 97 ms, 39 MiB |
-| GET with three parameters | | 1.6 µs |
-| POST with a valid 4-level JSON body | | 6.6 µs |
-| POST with an invalid 4-level JSON body | | 26 µs |
-| 16-level recursive `anyOf`, invalid | < 1 ms | 8.9 µs |
-| Pattern `^(a+)+$` on 50,000 characters | linear | 47 µs |
+| Build, 1.6 MiB, 1,200 paths | < 200 ms, < 50 MB | 73 ms |
+| Build, 2.4 MiB, 2,000 paths | | 115 ms, 43 MiB |
+| GET with three parameters | | 1.7 µs |
+| POST with a valid 4-level JSON body | | 5.0 µs |
+| POST with an invalid 4-level JSON body | | 15 µs |
+| 16-level recursive `anyOf`, invalid | < 1 ms | 9.2 µs |
+| Pattern `^(a+)+$` on 50,000 characters | linear | 67 µs |
+
+A valid body is checked faster than parsing it with `serde_json` and checking it with `jsonschema` alone (5.6 µs for the same body), because `multipleOf` uses the library's exact decimals instead of the engine's rational arithmetic.
 
 Where correctness and speed conflict, correctness wins. For example, `enum`, `const` and `uniqueItems` use JSON Schema equality instead of the engine's faster built-ins, and every repeated header line and query value is checked.
 
