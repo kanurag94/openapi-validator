@@ -81,6 +81,16 @@ The defaults follow the specification text. `Options::gateway_profile()` switche
 - **Content-Type headers.** A declared `Content-Type` response header is ignored (§4.8.17.1).
 - **Set-Cookie.** Its lines are never split on commas (RFC 9110 §5.3). An object schema takes one property per line (`name=rest`), an array one item per line, and `content` sees the lines joined with LF (3.2 §4.21.3). This applies in every version.
 
+## Swagger 2.0
+
+- **Conversion.** A Swagger 2.0 document is read as the OpenAPI 3.0 document that says the same thing, and then follows the 3.0 decisions here.
+- **Servers.** `host`, `basePath` and `schemes` give the server URLs; without `host`, the base path alone (Swagger 2.0 §5.2).
+- **Media types.** Request bodies take `consumes` and responses `produces`, from the operation or the document. Without either, `*/*` is used, so any body is accepted and parsed by its own type.
+- **Form parameters.** `formData` parameters become one body: `multipart/form-data` when a parameter is a `file` or `consumes` names it, `application/x-www-form-urlencoded` otherwise.
+- **collectionFormat.** `csv` is a non-exploded form (query) or simple (path, header) value, `multi` an exploded form, `ssv` and `pipes` space- and pipe-delimited. `tsv` has no 3.0 style and is read as `csv`, with a warning.
+- **Schemas.** A `discriminator` property name becomes a Discriminator Object, `type: file` a binary string, and the common `x-nullable` extension `nullable`.
+- **YAML.** Documents are read as YAML 1.2, which the Swagger 2.0 text assumes when it calls YAML a superset of JSON.
+
 ## Webhooks and callbacks
 
 - **Selection.** The caller names the webhook, or the operation's `operationId` and the callback. The method selects the operation, and HEAD falls back to GET.

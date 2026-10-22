@@ -301,8 +301,8 @@ impl<'r> Ctx<'r> {
 }
 
 impl Spec {
-    /// Parses and indexes an OpenAPI 3.0.x, 3.1.x or 3.2.x document (JSON
-    /// or YAML).
+    /// Parses and indexes an OpenAPI 3.0.x, 3.1.x or 3.2.x document, or a
+    /// Swagger 2.0 one, in JSON or YAML.
     pub fn load(bytes: &[u8], options: Options) -> Result<Spec, LoadError> {
         guard_load(|| {
             let root = doc::parse(bytes, options.yaml_merge_keys)?;
@@ -345,8 +345,13 @@ impl Spec {
     }
 
     fn load_value(root: Value, options: Options) -> Result<Spec, LoadError> {
+        // Swagger 2.0 is read as the OpenAPI 3.0 it converts to.
+        let (root, mut warnings) = if root.get("swagger").is_some() {
+            crate::swagger::convert(root)?
+        } else {
+            (root, Vec::new())
+        };
         let version = doc::version(&root)?;
-        let mut warnings = Vec::new();
         let doc_bases = base_paths(root.get("servers"), "#/servers", &mut warnings);
         let mut b = Builder::new(&root, version);
         let schemes = b.schemes()?;
@@ -1117,9 +1122,14 @@ paths:
             .iter()
             .any(|w| w.message.contains("only in parameter names")));
         assert!(matches!(
-            Spec::load(b"swagger: '2.0'", Options::default()),
+            Spec::load(b"swagger: '1.2'", Options::default()),
             Err(LoadError::UnsupportedVersion(_))
         ));
+        assert!(Spec::load(
+            b"swagger: '2.0'\ninfo: {title: t, version: '1'}\npaths: {}\n",
+            Options::default()
+        )
+        .is_ok());
         assert!(matches!(
             Spec::load(b"{", Options::default()),
             Err(LoadError::Parse(_))

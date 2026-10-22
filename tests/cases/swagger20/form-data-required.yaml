@@ -1,0 +1,23 @@
+title: "A required formData parameter is required in the form body"
+ref: "Swagger 2.0 §5.2.11"
+document: |
+  swagger: "2.0"
+  info: {title: up, version: "1"}
+  paths:
+    /form:
+      post:
+        consumes: [application/x-www-form-urlencoded]
+        parameters:
+          - {name: name, in: formData, type: string, required: true}
+          - {name: tags, in: formData, type: array, items: {type: string}, collectionFormat: csv, maxItems: 2}
+        responses:
+          "204": {description: ok}
+    /upload:
+      post:
+        parameters:
+          - {name: file, in: formData, type: file, required: true}
+          - {name: note, in: formData, type: string, maxLength: 3}
+        responses:
+          "204": {description: ok}
+request: {method: POST, path: /form, headers: [["Content-Type", "application/x-www-form-urlencoded"]], body: "tags=x"}
+expect: {valid: false, kind: schema_violation, location: body/name}

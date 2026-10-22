@@ -1,0 +1,23 @@
+title: "A file formData parameter makes a multipart body"
+ref: "Swagger 2.0 §5.2.11"
+document: |
+  swagger: "2.0"
+  info: {title: up, version: "1"}
+  paths:
+    /form:
+      post:
+        consumes: [application/x-www-form-urlencoded]
+        parameters:
+          - {name: name, in: formData, type: string, required: true}
+          - {name: tags, in: formData, type: array, items: {type: string}, collectionFormat: csv, maxItems: 2}
+        responses:
+          "204": {description: ok}
+    /upload:
+      post:
+        parameters:
+          - {name: file, in: formData, type: file, required: true}
+          - {name: note, in: formData, type: string, maxLength: 3}
+        responses:
+          "204": {description: ok}
+request: {method: POST, path: /upload, headers: [["Content-Type", "multipart/form-data; boundary=b"]], body: "--b\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a.png\"\r\nContent-Type: image/png\r\n\r\nPNG\r\n--b\r\nContent-Disposition: form-data; name=\"note\"\r\n\r\ntoo long\r\n--b--\r\n"}
+expect: {valid: false, kind: schema_violation, location: body/note}

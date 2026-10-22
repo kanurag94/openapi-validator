@@ -60,6 +60,7 @@ mod schema;
 mod security;
 mod server;
 mod spec;
+mod swagger;
 mod validate;
 mod xml;
 pub mod yaml;

@@ -1,0 +1,51 @@
+title: "A converted Swagger 2.0 document passes strict_document"
+ref: "Swagger 2.0 §5.2"
+options: {strict_document: true}
+document: |
+  swagger: "2.0"
+  info: {title: pets, version: "1"}
+  host: api.example.com
+  basePath: /v1
+  schemes: [https]
+  consumes: [application/json]
+  produces: [application/json]
+  securityDefinitions:
+    key: {type: apiKey, in: header, name: X-Key}
+  security: [{key: []}]
+  parameters:
+    PetBody: {name: pet, in: body, required: true, schema: {$ref: "#/definitions/Pet"}}
+    Limit: {name: limit, in: query, type: integer, maximum: 50}
+  paths:
+    /pets:
+      get:
+        parameters:
+          - $ref: "#/parameters/Limit"
+          - {name: tags, in: query, type: array, items: {type: string}, collectionFormat: multi, maxItems: 2}
+          - {name: ids, in: query, type: array, items: {type: integer}, collectionFormat: pipes}
+        responses:
+          "200":
+            description: ok
+            schema: {type: array, items: {$ref: "#/definitions/Pet"}}
+            headers:
+              X-Total: {type: integer}
+      post:
+        parameters:
+          - $ref: "#/parameters/PetBody"
+        responses:
+          "201": {description: created}
+    /pets/{id}:
+      parameters:
+        - {name: id, in: path, required: true, type: integer, minimum: 1}
+      get:
+        responses:
+          "200": {description: ok, schema: {$ref: "#/definitions/Pet"}}
+  definitions:
+    Pet:
+      type: object
+      required: [name]
+      properties:
+        name: {type: string}
+        tag: {type: string, x-nullable: true}
+        status: {type: string, enum: ["yes", "no"]}
+request: {method: GET, path: /v1/pets, query: "limit=10&tags=a&tags=b&ids=1|2", headers: [["X-Key", "k"]]}
+expect: {valid: true}

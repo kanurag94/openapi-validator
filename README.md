@@ -2,11 +2,11 @@
 
 [![CI](https://github.com/kanurag94/openapi-validator/actions/workflows/ci.yml/badge.svg)](https://github.com/kanurag94/openapi-validator/actions/workflows/ci.yml)
 
-A Rust library that validates HTTP requests and responses against an OpenAPI 3.0, 3.1 or 3.2 document at run time. It is built to run inside an API gateway on every call: it never panics, its time and memory are bounded for any input, and one loaded document can be shared by all threads.
+A Rust library that validates HTTP requests and responses against an OpenAPI 3.0, 3.1 or 3.2 document, or a Swagger 2.0 one, at run time. It is built to run inside an API gateway on every call: it never panics, its time and memory are bounded for any input, and one loaded document can be shared by all threads.
 
 ## Features
 
-- Supports OpenAPI 3.0.x, 3.1.x and 3.2.x documents in JSON or YAML 1.2, in one document or several.
+- Supports OpenAPI 3.0.x, 3.1.x and 3.2.x documents (through 3.1.2 and 3.2.1) and Swagger 2.0 documents, in JSON or YAML 1.2, in one document or several.
 - Routes requests by server path, path template and method, including 3.2's `query` and `additionalOperations`.
 - Checks path, query, header and cookie parameters in every style and explode combination, and 3.2 `querystring` parameters.
 - Checks security requirements for credential presence, with a hook for your own verification.
@@ -79,7 +79,6 @@ Where the specifications leave a choice open, the library picks the behaviour th
 
 ## Not supported
 
-- Swagger 2.0 documents.
 - Fetching external documents; supply them to `Spec::load_documents`.
 - Credential verification beyond presence; use `security_hook`.
 - Links, and evaluating callback runtime expressions; the caller names the callback.
