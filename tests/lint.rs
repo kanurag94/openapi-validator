@@ -191,7 +191,7 @@ fn cookie_style() {
     warns(&d.replace("3.2.0", "3.1.0"), "not defined for cookie");
 }
 
-// OpenAPI 3.2.0 §4.14.1, §4.14.5.2: positional encodings.
+// OpenAPI 3.2.1 §4.14.1, §4.14.5.2: positional encodings.
 #[test]
 fn positional_encodings() {
     let d = |media: &str| {
@@ -208,10 +208,10 @@ fn positional_encodings() {
         &d("application/json: {itemSchema: {}, itemEncoding: {}}"),
         "SHALL only apply to multipart",
     );
-    warns(
-        &d("multipart/mixed: {schema: {type: object}, itemEncoding: {}}"),
-        "need itemSchema or an array schema",
-    );
+    // 3.2.1 §4.14.5.2 ignores entries without an item instead of requiring
+    // an array schema.
+    let no_items = d("multipart/mixed: {schema: {type: object}, itemEncoding: {}}");
+    assert!(warnings(&no_items).is_empty(), "{:?}", warnings(&no_items));
 }
 
 // OpenAPI 3.2.0 §4.25.1: an optional discriminating property needs a
@@ -320,4 +320,27 @@ fn schemas_meet_the_2020_12_meta_schema() {
         "{type: number, exclusiveMaximum: true}",
     );
     assert!(warnings(&v30).is_empty(), "{:?}", warnings(&v30));
+}
+
+// 3.1.2 §4.8.5.1: a server URL has no query or fragment.
+#[test]
+fn server_url_without_query() {
+    warns(
+        &format!("{HEAD}servers: [{{url: 'https://a.example/v1?x=1'}}]\npaths: {{}}\n"),
+        "MUST NOT have a query or fragment",
+    );
+}
+
+// 3.2.1 §4.14.5.1: encoding keys must exist in the data, not the schema.
+#[test]
+fn encoding_keys_in_32() {
+    let d = |head: &str| {
+        format!("{head}paths:\n  /p:\n    post:\n      requestBody:\n        content:\n          multipart/form-data:\n            schema: {{type: object, properties: {{a: {{type: string}}}}}}\n            encoding: {{b: {{contentType: text/plain}}}}\n      responses: {{'200': {{description: ok}}}}\n")
+    };
+    assert!(
+        warnings(&d(HEAD32)).is_empty(),
+        "{:?}",
+        warnings(&d(HEAD32))
+    );
+    warns(&d(HEAD), "MUST exist in the schema");
 }

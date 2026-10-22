@@ -150,7 +150,10 @@ impl<'a> Lint<'a> {
                 .get("schema")
                 .map(|s| self.property_names(s, 0))
                 .unwrap_or_default();
-            for name in enc.keys() {
+            // 3.2.1 §4.14.5.1 asks only that the key exist in the data, and
+            // ignores entries without a property.
+            let check_keys = self.version < Version::V32;
+            for name in enc.keys().filter(|_| check_keys) {
                 if !props.is_empty() && !props.contains(name) {
                     self.warn(
                         &doc::join(&doc::join(&mptr, "encoding"), name),
@@ -190,22 +193,8 @@ impl<'a> Lint<'a> {
                 "prefixEncoding and itemEncoding SHALL only apply to multipart media types (§4.14.1)",
             );
         }
-        let array_schema = m.get("schema").is_some_and(|s| {
-            let s = s
-                .get("$ref")
-                .and_then(Value::as_str)
-                .and_then(|r| doc::lookup_ref(self.root, r))
-                .unwrap_or(s);
-            s.get("type").and_then(Value::as_str) == Some("array")
-                || s.get("prefixItems").is_some()
-                || s.get("items").is_some()
-        });
-        if m.get("itemSchema").is_none() && !array_schema {
-            self.warn(
-                ptr,
-                "prefixEncoding and itemEncoding need itemSchema or an array schema (§4.14.5.2)",
-            );
-        }
+        // 3.2.0 required itemSchema or an array schema here; 3.2.1
+        // (§4.14.5.2) ignores entries without an item instead.
     }
 
     /// Whether `prop` is required by `s`: by `required` here or in an
@@ -658,6 +647,15 @@ impl<'a> Lint<'a> {
             .flatten()
             .enumerate()
         {
+            if s.get("url")
+                .and_then(Value::as_str)
+                .is_some_and(|u| u.contains(['?', '#']))
+            {
+                self.warn(
+                    &doc::join(&doc::join(ptr, &i.to_string()), "url"),
+                    "a server URL MUST NOT have a query or fragment (3.1.2 §4.8.5.1)",
+                );
+            }
             for (name, var) in s
                 .get("variables")
                 .and_then(Value::as_object)
