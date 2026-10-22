@@ -1,0 +1,20 @@
+title: "A callback that cannot be built is skipped, and the operations served are still checked"
+ref: "OpenAPI 3.0.4 §4.7.18"
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /subs:
+      post:
+        responses:
+          "201": {description: ok}
+        callbacks:
+          ev: {$ref: "cbs.yaml#/ev"}
+          bad:
+            "{$request.body#/u}":
+              post:
+                security: [{nope: []}]
+                responses:
+                  "200": {description: ok}
+request: {method: POST, path: /subs}
+expect: {valid: true}

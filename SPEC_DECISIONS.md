@@ -98,6 +98,7 @@ The defaults follow the specification text. `Options::gateway_profile()` switche
 - **Several callback expressions.** A request is valid if the operation under any expression accepts it.
 - **Webhooks in 3.0.** `webhooks` is a 3.1 field, so a 3.0 document's `webhooks` key is ignored.
 - **Callbacks without an `operationId`.** They cannot be named, so they are not indexed.
+- **Callbacks and webhooks that cannot be built.** An unresolvable reference or an undefined security scheme inside one skips that callback or webhook with a load warning; the operations the API serves are still checked. `strict_document` refuses the document.
 
 ## Schemas
 

@@ -269,14 +269,32 @@ impl<'r> Ctx<'r> {
         let root = self.root;
         let mut out: HashMap<(String, String), Vec<MethodOps>> = HashMap::new();
         let mut seen: HashSet<String> = HashSet::new();
+        // A callback that cannot be built is skipped with a warning: the
+        // operations the API serves are checked all the same.
+        let skip = |b: &mut Builder<'r>, e: LoadError, at: &str| {
+            b.warn(at, format!("callback skipped: {e}"));
+        };
         while let Some((owner, cbs, ptr)) = self.pending.pop() {
-            let (cbs, ptr) = doc::deref(root, cbs, &ptr)?;
+            let (cbs, ptr) = match doc::deref(root, cbs, &ptr) {
+                Ok(x) => x,
+                Err(e) => {
+                    skip(b, e, &ptr);
+                    continue;
+                }
+            };
             let Some(cbs) = cbs.as_object() else { continue };
             for (name, cb) in cbs {
                 if name.starts_with("x-") {
                     continue;
                 }
-                let (cb, cb_ptr) = doc::deref(root, cb, &doc::join(&ptr, name))?;
+                let at = doc::join(&ptr, name);
+                let (cb, cb_ptr) = match doc::deref(root, cb, &at) {
+                    Ok(x) => x,
+                    Err(e) => {
+                        skip(b, e, &at);
+                        continue;
+                    }
+                };
                 let key = (owner.clone(), name.clone());
                 if out.contains_key(&key) || self.ops.len() > MAX_CALLBACK_OPS {
                     continue;
@@ -286,12 +304,22 @@ impl<'r> Ctx<'r> {
                     if expr.starts_with("x-") {
                         continue;
                     }
-                    let (item, item_ptr) = doc::deref(root, item, &doc::join(&cb_ptr, expr))?;
+                    let at = doc::join(&cb_ptr, expr);
+                    let (item, item_ptr) = match doc::deref(root, item, &at) {
+                        Ok(x) => x,
+                        Err(e) => {
+                            skip(b, e, &at);
+                            continue;
+                        }
+                    };
                     // A Path Item shared by several callbacks is built each
                     // time, but its own callbacks are followed once.
                     let first = seen.insert(item_ptr.clone());
                     let before = self.pending.len();
-                    exprs.push(self.named_item(b, expr, item, &item_ptr)?);
+                    match self.named_item(b, expr, item, &item_ptr) {
+                        Ok(ops) => exprs.push(ops),
+                        Err(e) => skip(b, e, &item_ptr),
+                    }
                     if !first {
                         self.pending.truncate(before);
                     }
@@ -475,9 +503,16 @@ impl Spec {
                 if name.starts_with("x-") {
                     continue;
                 }
-                let (item, item_ptr) = doc::deref(&root, item, &doc::join("#/webhooks", name))?;
-                let ops = cx.named_item(&mut b, name, item, &item_ptr)?;
-                webhooks.insert(name.clone(), ops);
+                // A webhook that cannot be built is skipped with a warning.
+                let at = doc::join("#/webhooks", name);
+                let built = doc::deref(&root, item, &at)
+                    .and_then(|(item, item_ptr)| cx.named_item(&mut b, name, item, &item_ptr));
+                match built {
+                    Ok(ops) => {
+                        webhooks.insert(name.clone(), ops);
+                    }
+                    Err(e) => b.warn(&at, format!("webhook skipped: {e}")),
+                }
             }
         }
         let callbacks = cx.callbacks(&mut b)?;
