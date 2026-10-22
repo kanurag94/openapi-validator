@@ -1,0 +1,19 @@
+title: "An exploded map's values meet additionalProperties"
+ref: "OpenAPI 3.1.1 §4.8.12.4; RFC 6570 §3.2.8"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /p:
+      get:
+        parameters:
+          - name: filter
+            in: query
+            required: true
+            schema: {type: object, additionalProperties: {type: integer}}
+          - {name: page, in: query, schema: {type: integer}}
+          - {name: sort, in: query, style: deepObject, schema: {type: object, properties: {by: {type: string}}}}
+        responses:
+          "200": {description: ok}
+request: {method: GET, path: /p, query: "a=1&b=two"}
+expect: {valid: false, kind: invalid_parameter}

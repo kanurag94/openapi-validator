@@ -47,7 +47,7 @@ fn props_shape<'a>(props: &'a FormProps, name: &str) -> Option<&'a Shape> {
     props.iter().find(|(n, _)| n == name).map(|(_, s)| s)
 }
 
-fn insert_repeated(m: &mut Map<String, Value>, k: String, v: Value) {
+pub(crate) fn insert_repeated(m: &mut Map<String, Value>, k: String, v: Value) {
     match m.get_mut(&k) {
         Some(Value::Array(a)) => a.push(v),
         Some(existing) => {

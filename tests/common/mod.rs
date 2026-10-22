@@ -696,8 +696,10 @@ pub fn request(root: &Value, path: &str, method: &str, salt: u64) -> Result<Gene
             }
             "query" => {
                 // An empty array is sent as `name=`; an empty exploded object
-                // would be indistinguishable from absence, so it gets one
-                // declared property.
+                // would be indistinguishable from absence (RFC 6570 §2.3), so
+                // it gets one declared property, or one extra pair where the
+                // schema allows them. With neither, a required one cannot be
+                // sent at all.
                 let value = match (&value, p.get("schema")) {
                     (Value::Object(o), Some(s)) if o.is_empty() && explode => {
                         let mut flat = Map::new();
@@ -706,11 +708,26 @@ pub fn request(root: &Value, path: &str, method: &str, salt: u64) -> Result<Gene
                             .get("properties")
                             .and_then(Value::as_object)
                             .and_then(|pr| pr.iter().next());
-                        match first {
-                            Some((k, ps)) => {
+                        match (first, flat.get("additionalProperties")) {
+                            (Some((k, ps)), _) => {
                                 json!({ k.clone(): g.value(ps, 1).unwrap_or(json!("x")) })
                             }
-                            None => value.clone(),
+                            (None, Some(Value::Bool(false))) => {
+                                if p.get("required") == Some(&Value::Bool(true)) {
+                                    return Err(
+                                        "a required exploded object that admits only {} cannot be sent"
+                                            .into(),
+                                    );
+                                }
+                                value.clone()
+                            }
+                            (None, extra) => {
+                                let v = extra
+                                    .filter(|e| e.is_object())
+                                    .and_then(|e| g.value(e, 1))
+                                    .unwrap_or(json!("x"));
+                                json!({ "k": v })
+                            }
                         }
                     }
                     _ => value.clone(),

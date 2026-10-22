@@ -663,13 +663,15 @@ pub(crate) enum Found {
     Malformed(String),
 }
 
-/// Query (or cookie) parameter value(s) from decoded-name pairs.
+/// Query (or cookie) parameter value(s) from decoded-name pairs. `others`
+/// are the names other parameters in the same place declare.
 pub(crate) fn query_value(
     p: &Param,
     pairs: &[Pair<'_>],
     shape: &Shape,
     plus: bool,
     consumed: &mut Vec<String>,
+    others: &[&str],
 ) -> Found {
     let mine: Vec<&Pair<'_>> = pairs.iter().filter(|q| q.name == p.name).collect();
     let malformed = || Found::Malformed("has an invalid percent-escape".into());
@@ -701,6 +703,29 @@ pub(crate) fn query_value(
                 Found::Values(vec![Value::Object(root)])
             } else {
                 Found::Absent
+            }
+        }
+        // An exploded map (an object that declares no properties) is every
+        // pair no other parameter names (RFC 6570 §3.2.8, `{?keys*}`).
+        (Style::Form | Style::Cookie, Shape::Object(props)) if p.explode && props.is_empty() => {
+            let mut m = Map::new();
+            // Not another parameter's pair, nor its deepObject `name[key]`.
+            let claimed = |n: &str| {
+                others.iter().any(|o| {
+                    n == *o || n.strip_prefix(*o).is_some_and(|rest| rest.starts_with('['))
+                })
+            };
+            for q in pairs.iter().filter(|q| !claimed(&q.name)) {
+                let Ok(v) = decode(q.raw, plus) else {
+                    return malformed();
+                };
+                consumed.push(q.name.clone());
+                crate::body::insert_repeated(&mut m, q.name.clone(), coerce(&v, Types::ANY));
+            }
+            if m.is_empty() {
+                Found::Absent
+            } else {
+                Found::Values(vec![Value::Object(m)])
             }
         }
         (_, Shape::Object(props)) if p.explode => {

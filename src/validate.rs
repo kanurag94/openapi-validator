@@ -581,7 +581,35 @@ impl Spec {
                     } else {
                         (&cookie_pairs, &mut used_cookies, false)
                     };
-                    match query_value(p, src, shape, plus, used) {
+                    // Names declared elsewhere in this place, which an
+                    // exploded map does not take.
+                    let declared: Vec<&str> = params
+                        .iter()
+                        .filter(|o| o.location == loc && !std::ptr::eq(*o, p))
+                        .flat_map(|o| {
+                            // An exploded object's pairs are its property names.
+                            let props: Vec<&str> = match &o.value {
+                                ParamValue::Schema {
+                                    shape: Shape::Object(ps),
+                                    ..
+                                } if o.explode && o.style != Style::DeepObject => {
+                                    ps.iter().map(|(n, _)| n.as_str()).collect()
+                                }
+                                _ => Vec::new(),
+                            };
+                            std::iter::once(o.name.as_str()).chain(props)
+                        })
+                        .chain(
+                            if loc == In::Query {
+                                &extra.query
+                            } else {
+                                &extra.cookies
+                            }
+                            .iter()
+                            .map(String::as_str),
+                        )
+                        .collect();
+                    match query_value(p, src, shape, plus, used, &declared) {
                         Found::Absent => {
                             if p.required {
                                 report.push(

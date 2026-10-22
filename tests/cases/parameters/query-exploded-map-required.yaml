@@ -1,0 +1,19 @@
+title: "A required exploded map with no pairs is missing"
+ref: "OpenAPI 3.1.1 §4.8.12.4; RFC 6570 §3.2.8"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /p:
+      get:
+        parameters:
+          - name: filter
+            in: query
+            required: true
+            schema: {type: object, additionalProperties: {type: integer}}
+          - {name: page, in: query, schema: {type: integer}}
+          - {name: sort, in: query, style: deepObject, schema: {type: object, properties: {by: {type: string}}}}
+        responses:
+          "200": {description: ok}
+request: {method: GET, path: /p, query: "page=3"}
+expect: {valid: false, kind: missing_parameter, location: query.filter}
