@@ -37,7 +37,7 @@ pub(crate) struct XmlShape {
     pub namespace: Option<String>,
     pub node: Node,
     /// `null` is allowed: read from `xsi:nil`, or a missing attribute
-    /// (OpenAPI 3.2 §4.26.5).
+    /// (OpenAPI 3.1.2 §4.8.26, 3.2 §4.26.5).
     pub nullable: bool,
     pub kind: Kind,
 }
@@ -134,7 +134,8 @@ pub(crate) fn shape(
         crate::params::Shape::Object(_) => (None, true),
         crate::params::Shape::Array(_) => (None, false),
     };
-    let nullable = version >= Version::V32 && allows_null(target);
+    // 3.1.2 and 3.2 (§4.8.26 / §4.26.5) say how null is read.
+    let nullable = version >= Version::V31 && allows_null(target);
     let mut out = XmlShape {
         name: text("name")
             .or_else(|| name.map(str::to_owned))

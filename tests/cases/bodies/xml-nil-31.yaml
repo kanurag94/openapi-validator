@@ -1,0 +1,21 @@
+title: "In 3.1, xsi:nil reads as null where the schema allows null"
+ref: "OpenAPI 3.1.2 §4.8.26"
+document: |
+  openapi: 3.1.2
+  info: {title: t, version: "1"}
+  paths:
+    /x:
+      post:
+        requestBody:
+          content:
+            application/xml:
+              schema:
+                type: object
+                xml: {name: thing}
+                required: [note]
+                properties:
+                  note: {type: ["string", "null"], maxLength: 0}
+        responses:
+          "204": {description: ok}
+request: {method: POST, path: /x, headers: [["Content-Type", "application/xml"]], body: '<thing xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><note xsi:nil="true">x</note></thing>'}
+expect: {valid: true}
