@@ -37,7 +37,7 @@ pub(crate) fn explain(
         more: 0,
         max: max.max(1),
         steps: 0,
-        visited: HashSet::new(),
+        visited: HashSet::with_hasher(PairHash),
     };
     if let Some(s) = doc::lookup(resource, root_ptr) {
         e.node(s, root_ptr, instance, "", 0);
@@ -57,7 +57,35 @@ struct Explainer<'a> {
     more: usize,
     max: usize,
     steps: usize,
-    visited: HashSet<(usize, usize)>,
+    visited: HashSet<(usize, usize), PairHash>,
+}
+
+/// Hashes the explainer's `(schema, value)` address pairs. The keys are
+/// addresses, not input, so a fast multiplicative hash is enough.
+#[derive(Default, Clone, Copy)]
+struct PairHash;
+
+impl std::hash::BuildHasher for PairHash {
+    type Hasher = PairHasher;
+    fn build_hasher(&self) -> PairHasher {
+        PairHasher(0)
+    }
+}
+
+struct PairHasher(u64);
+
+impl std::hash::Hasher for PairHasher {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+    fn write(&mut self, bytes: &[u8]) {
+        for &b in bytes {
+            self.0 = (self.0.rotate_left(5) ^ u64::from(b)).wrapping_mul(0x51_7c_c1_b7_27_22_0a_95);
+        }
+    }
+    fn write_usize(&mut self, n: usize) {
+        self.0 = (self.0.rotate_left(5) ^ n as u64).wrapping_mul(0x51_7c_c1_b7_27_22_0a_95);
+    }
 }
 
 fn child(path: &str, token: &str) -> String {
@@ -363,7 +391,8 @@ impl<'a> Explainer<'a> {
         let mut opaque = false;
         for (k, kv) in m {
             self.steps += 1;
-            let kp = doc::join(sptr, k);
+            // Built only when a keyword needs its pointer.
+            let kp = std::cell::LazyCell::new(|| doc::join(sptr, k));
             match k.as_str() {
                 "$ref" => match kv.as_str().and_then(|r| self.resolve_ref(r, sptr)) {
                     Some((target_ptr, t)) => self.node(t, &target_ptr, inst, ipath, depth + 1),

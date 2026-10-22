@@ -160,6 +160,9 @@ fn text(v: &Value) -> String {
 
 /// Escapes one JSON Pointer reference token (RFC 6901 §3).
 pub fn escape_token(t: &str) -> String {
+    if !t.contains(['~', '/']) {
+        return t.to_owned();
+    }
     t.replace('~', "~0").replace('/', "~1")
 }
 

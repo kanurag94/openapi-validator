@@ -173,22 +173,27 @@ impl Decimal {
         // self = a·10^ea, divisor = b·10^eb, a and b without factors of ten
         // at the end. a·10^(ea-eb) / b must be an integer.
         let k = self.exp - divisor.exp;
+        if k < 0 {
+            // a has no trailing zero, so a·10^k with k < 0 is an integer only
+            // if 10^-k divides a, which cannot happen.
+            return false;
+        }
+        // Fast path: b below 2^64 keeps every product below 2^128.
+        if divisor.digits.len() <= 19 && self.digits.len() <= 38 {
+            if let (Ok(a), Ok(b)) = (self.digits.parse::<u128>(), divisor.digits.parse::<u128>()) {
+                return (a % b * pow10_mod(k as u128, b)).is_multiple_of(b);
+            }
+        }
         let (Some(a), Some(b)) = (digits_to_big(&self.digits), digits_to_big(&divisor.digits))
         else {
             return false;
         };
-        if k >= 0 {
-            let Ok(k) = u32::try_from(k) else {
-                return false;
-            };
-            let ten = BigUint::from(10u32);
-            let r = (&a % &b) * ten.modpow(&BigUint::from(k), &b) % &b;
-            r.is_zero()
-        } else {
-            // a has no trailing zero, so a·10^k with k < 0 is an integer only
-            // if 10^-k divides a, which cannot happen.
-            false
-        }
+        let Ok(k) = u32::try_from(k) else {
+            return false;
+        };
+        let ten = BigUint::from(10u32);
+        let r = (&a % &b) * ten.modpow(&BigUint::from(k), &b) % &b;
+        r.is_zero()
     }
 
     /// The value as `i128` when it is an integer that fits.
@@ -225,6 +230,19 @@ impl Decimal {
     pub fn as_f64_lossy(&self) -> f64 {
         self.to_canonical().parse().unwrap_or(f64::NAN)
     }
+}
+
+/// 10^k mod m for m < 2^64, by squaring (products stay below 2^128).
+fn pow10_mod(mut k: u128, m: u128) -> u128 {
+    let (mut base, mut out) = (10 % m, 1 % m);
+    while k > 0 {
+        if k & 1 == 1 {
+            out = out * base % m;
+        }
+        base = base * base % m;
+        k >>= 1;
+    }
+    out
 }
 
 fn digits_to_big(d: &str) -> Option<BigUint> {
@@ -336,6 +354,12 @@ mod tests {
 
     #[test]
     fn multiple_of_is_exact() {
+        // Both the 128-bit path and the big-integer path.
+        assert!(d("12345678901234567890123456789012345678").is_multiple_of(&d("2")));
+        assert!(!d("12345678901234567890123456789012345679").is_multiple_of(&d("2")));
+        assert!(d("1e50").is_multiple_of(&d("12500000000000000000000")));
+        assert!(d("0.0000000000000000000000000000000000000004").is_multiple_of(&d("4e-40")));
+        assert!(!d("9.999").is_multiple_of(&d("0.01")));
         assert!(d("19.99").is_multiple_of(&d("0.01")));
         assert!(d("0.9").is_multiple_of(&d("0.3")));
         assert!(!d("0.91").is_multiple_of(&d("0.3")));
