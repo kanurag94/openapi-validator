@@ -53,6 +53,18 @@ pub struct Template {
 }
 
 impl Template {
+    /// The variable names, in order.
+    pub fn var_names(&self) -> Vec<String> {
+        self.segments
+            .iter()
+            .flat_map(|s| s.parts.iter())
+            .filter_map(|p| match p {
+                Part::Var(n) => Some(n.clone()),
+                Part::Lit(_) => None,
+            })
+            .collect()
+    }
+
     /// Parses a template such as `/users/{id}/files/{name}.json`.
     pub fn parse(text: &str) -> Result<Template, String> {
         let body = text.strip_prefix('/').ok_or("a path must start with /")?;
@@ -249,7 +261,10 @@ pub struct PathIndex {
 impl PathIndex {
     /// Adds a template; the returned id is its position. A template with the
     /// same shape as an earlier one is refused with the earlier one's text.
-    pub fn insert(&mut self, t: Template) -> Result<usize, String> {
+    /// Adds a template. A template that differs from one already added only
+    /// in its variable names is the same path (OpenAPI 3.1.1 §4.8.8.2):
+    /// `Err` gives that template's id.
+    pub fn insert(&mut self, t: Template) -> Result<usize, usize> {
         if self.nodes.is_empty() {
             self.nodes.push(Node::default());
         }
@@ -282,7 +297,7 @@ impl PathIndex {
             };
         }
         if let Some(other) = self.nodes[node].terminal {
-            return Err(self.templates[other].text.clone());
+            return Err(other);
         }
         let id = self.templates.len();
         self.nodes[node].terminal = Some(id);

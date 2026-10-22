@@ -95,6 +95,9 @@ pub(crate) struct Operation {
     pub path: String,
     /// The field the operation is under, such as `get`.
     pub method: String,
+    /// The variable names of the operation's own template, when another
+    /// template that differs only in names was read first.
+    pub rename: Option<Vec<String>>,
     pub operation_id: Option<String>,
     /// Server base paths that serve this operation (OpenAPI 3.1.1
     /// §4.8.10.1: operation `servers` replace the path item's).
@@ -217,6 +220,7 @@ impl<'r> Ctx<'r> {
         self.ops.push(Operation {
             path: path.to_owned(),
             method: it.key.clone(),
+            rename: None,
             operation_id,
             bases,
             body,
@@ -368,12 +372,24 @@ impl Spec {
                     message,
                 })?;
                 let (item, item_ptr) = doc::deref(&root, item, &loc)?;
-                let tid = paths
-                    .insert(template)
-                    .map_err(|first| LoadError::DuplicateTemplate {
-                        first,
-                        second: key.clone(),
-                    })?;
+                let names = template.var_names();
+                // §4.8.8.2: templates that differ only in variable names
+                // MUST NOT exist. They are one path: the second's operations
+                // join the first's, each reading its own variable names.
+                let (tid, rename) = match paths.insert(template) {
+                    Ok(t) => (t, None),
+                    Err(first) => {
+                        warnings.push(Warning {
+                            location: loc.clone(),
+                            message: format!(
+                                "path template {:?} differs from {:?} only in parameter names, which MUST NOT happen (§4.8.8.2); read as one path",
+                                key,
+                                paths.template(first).text
+                            ),
+                        });
+                        (first, Some(names))
+                    }
+                };
                 let item_bases = match item.get("servers") {
                     Some(s) => base_paths(Some(s), &format!("{item_ptr}/servers"), &mut warnings),
                     None => doc_bases.clone(),
@@ -383,6 +399,17 @@ impl Spec {
                     bases: Vec::new(),
                 };
                 for it in item_operations(item, &item_ptr, version) {
+                    if rename.is_some() && items[tid].ops.iter().any(|(w, _)| *w == it.wire) {
+                        warnings.push(Warning {
+                            location: it.ptr.clone(),
+                            message: format!(
+                                "{} is already described for {:?}; ignored",
+                                it.wire,
+                                paths.template(tid).text
+                            ),
+                        });
+                        continue;
+                    }
                     let op_bases = match it.op.get("servers") {
                         Some(s) => {
                             base_paths(Some(s), &format!("{}/servers", it.ptr), &mut warnings)
@@ -396,6 +423,7 @@ impl Spec {
                     }
                     let o =
                         cx.operation(&mut b, key, item, &item_ptr, &it, op_bases, Reached::Path)?;
+                    cx.ops[o].rename = rename.clone();
                     pi.ops.push((it.wire, o));
                 }
                 if pi.bases.is_empty() {
@@ -406,8 +434,18 @@ impl Spec {
                         all_bases.push(base.clone());
                     }
                 }
-                debug_assert_eq!(tid, items.len());
-                items.push(pi);
+                if rename.is_some() {
+                    let first = &mut items[tid];
+                    first.ops.append(&mut pi.ops);
+                    for base in pi.bases {
+                        if !first.bases.contains(&base) {
+                            first.bases.push(base);
+                        }
+                    }
+                } else {
+                    debug_assert_eq!(tid, items.len());
+                    items.push(pi);
+                }
             }
         }
         all_bases.sort_by_key(|b| std::cmp::Reverse(b.len()));
@@ -581,7 +619,15 @@ impl Spec {
         match hit {
             Some((op, head_as_get)) if served(op) => Route::Found {
                 op,
-                vars: m.vars,
+                vars: match &self.ops[op].rename {
+                    Some(names) => m
+                        .vars
+                        .into_iter()
+                        .zip(names)
+                        .map(|((_, raw), n)| (n.clone(), raw))
+                        .collect(),
+                    None => m.vars,
+                },
                 head_as_get,
             },
             Some(_) => Route::PathNotFound,
@@ -1050,10 +1096,16 @@ paths:
     fn load_errors() {
         let dup =
             "openapi: 3.1.0\ninfo: {title: t, version: '1'}\npaths:\n  /a/{x}: {}\n  /a/{y}: {}\n";
-        assert!(matches!(
-            Spec::load(dup.as_bytes(), Options::default()),
-            Err(LoadError::DuplicateTemplate { .. })
-        ));
+        let strict = Options {
+            strict_document: true,
+            ..Options::default()
+        };
+        assert!(Spec::load(dup.as_bytes(), strict).is_err());
+        let s = Spec::load(dup.as_bytes(), Options::default()).unwrap();
+        assert!(s
+            .warnings()
+            .iter()
+            .any(|w| w.message.contains("only in parameter names")));
         assert!(matches!(
             Spec::load(b"swagger: '2.0'", Options::default()),
             Err(LoadError::UnsupportedVersion(_))

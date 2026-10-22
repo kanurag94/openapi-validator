@@ -1,0 +1,12 @@
+title: "The first of two same-shape templates keeps its own parameter names"
+ref: "OpenAPI 3.1.1 §4.8.8.2"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /p/{a}:
+      get: {parameters: [{name: a, in: path, required: true, schema: {type: string}}], responses: {'200': {description: ok}}}
+    /p/{b}:
+      post: {parameters: [{name: b, in: path, required: true, schema: {type: integer}}], responses: {'200': {description: ok}}}
+request: {method: GET, path: /p/x}
+expect: {valid: true}

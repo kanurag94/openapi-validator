@@ -1,5 +1,6 @@
-title: "Two-variable templates differing only in variable names are identical and refused"
+title: "Two-variable templates differing only in variable names are refused under strict_document"
 ref: "OpenAPI 3.1.1 §4.8.8.2 (Path Templating Matching)"
+options: {strict_document: true}
 document: |
   openapi: 3.1.0
   info: {title: t, version: "1"}

@@ -12,6 +12,7 @@ The defaults follow the specification text. `Options::gateway_profile()` switche
 - **Path variables.** A variable matches one or more characters within a single segment. Segments are percent-decoded one at a time, so `%2F` never creates a new segment (RFC 3986 §2.2).
 - **Several variables in one segment.** Each variable takes the shortest run that lets the next literal follow, and a final literal must end the segment.
 - **Ties between templates.** §4.8.8.2 only says concrete paths beat templated ones. Among templates, the one with the most literal characters wins, then the one whose first differing segment is literal.
+- **Templates that differ only in parameter names.** §4.8.8.2 says they MUST NOT exist, as they are identical. They load as one path with a warning: each operation reads its own template's parameter names, and a method both describe keeps the first. `strict_document` refuses the document instead.
 - **Server paths.** The option `server_paths` decides whether the request path may (`either`, the default), must (`required`) or must not (`ignored`) start with a server path. Server paths are stripped as whole segments only.
 - **Operation servers.** Following §4.8.10.1, the server path used must serve the matched operation itself, not just a sibling operation on the same path item.
 - **Server variables without `enum`.** The value is open, so any segment matches; `default` is only the value used when none is supplied (§4.8.6.1). A missing `default` is a load warning.

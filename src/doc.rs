@@ -38,6 +38,8 @@ pub enum LoadError {
     },
     /// Two path templates differ only in parameter names
     /// (OpenAPI 3.1.1 §4.8.8.2).
+    /// Not returned since templates that differ only in parameter names
+    /// load as one path, with a warning; kept for compatibility.
     DuplicateTemplate { first: String, second: String },
     /// A security requirement names a scheme not in
     /// `components.securitySchemes` (OpenAPI 3.1.1 §4.8.30.1).
