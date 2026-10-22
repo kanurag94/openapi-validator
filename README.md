@@ -25,7 +25,7 @@ The crate is not yet published on crates.io. Add it as a Git dependency:
 
 ```toml
 [dependencies]
-openapi-validator = { git = "https://github.com/kanurag94/openapi-validator", tag = "v0.1.0" }
+openapi-validator = { git = "https://github.com/kanurag94/openapi-validator", tag = "v0.2.0" }
 ```
 
 ## Usage

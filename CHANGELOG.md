@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-22
+
 ### Added
 
 - OpenAPI 3.2 documents: the `query` method, `additionalOperations`, `$self`, `components.mediaTypes`, `in: querystring` and `style: cookie` parameters, sequential media types with `itemSchema`, positional multipart with `prefixEncoding` and `itemEncoding`, discriminator `defaultMapping`, and XML `nodeType`.
@@ -57,5 +59,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A C ABI crate, `openapi-validator-ffi`, and a Go wrapper.
 - A conformance suite of 949 cases, a JSON-Schema-Test-Suite runner, property tests, fuzz targets and benchmarks.
 
-[Unreleased]: https://github.com/kanurag94/openapi-validator/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/kanurag94/openapi-validator/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/kanurag94/openapi-validator/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/kanurag94/openapi-validator/releases/tag/v0.1.0
