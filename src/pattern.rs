@@ -17,6 +17,14 @@
 //! Features that need backtracking (lookahead, lookbehind, backreferences)
 //! cannot run in linear time and are refused with an error that names the
 //! pattern.
+//!
+//! Two dialects are read. JSON Schema 2020-12 (OpenAPI 3.1 and 3.2) uses
+//! the `u` flag's grammar, so an unknown escape is an error. OpenAPI 3.0's
+//! JSON Schema (Wright draft 00) names ECMA-262 without flags, where Annex
+//! B applies: `\A` is the letter A, `\c` without a letter is a backslash
+//! and `c`, `\x`, `\u` and `\p` without their digits are letters, `\0` and
+//! `\1`–`\9` past the group count are octal escapes (or the digits 8 and 9),
+//! and `\k` is the letter k when the pattern has no named groups.
 
 use std::fmt;
 
@@ -127,18 +135,37 @@ pub fn build(translated: &str) -> Result<Regex, String> {
 
 /// Rewrites an ECMA-262 pattern into equivalent `regex` crate syntax.
 pub fn translate(pattern: &str) -> Result<String, PatternError> {
-    Translator::new(pattern, false).run()
+    translate_in(pattern, Dialect::Unicode)
+}
+
+/// Which ECMA-262 grammar a pattern is read with.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Dialect {
+    /// With the `u` flag (JSON Schema 2020-12).
+    Unicode,
+    /// Without flags, Annex B included (JSON Schema Wright draft 00).
+    Legacy,
+}
+
+/// [`translate`] in a given dialect.
+pub fn translate_in(pattern: &str, dialect: Dialect) -> Result<String, PatternError> {
+    Translator::new(pattern, false, dialect).run()
 }
 
 /// Translates a pattern for the `regex` crate when it can run in linear
 /// time, or else (lookaround, backreferences) for `fancy-regex`. The flag
 /// says which engine the result is for.
 pub fn translate_any(pattern: &str) -> Result<(String, bool), PatternError> {
-    match translate(pattern) {
+    translate_any_in(pattern, Dialect::Unicode)
+}
+
+/// [`translate_any`] in a given dialect.
+pub fn translate_any_in(pattern: &str, dialect: Dialect) -> Result<(String, bool), PatternError> {
+    match translate_in(pattern, dialect) {
         Ok(t) => Ok((t, false)),
-        Err(e) if e.reason.contains("backtracking") => {
-            Translator::new(pattern, true).run().map(|t| (t, true))
-        }
+        Err(e) if e.reason.contains("backtracking") => Translator::new(pattern, true, dialect)
+            .run()
+            .map(|t| (t, true)),
         Err(e) => Err(e),
     }
 }
@@ -184,19 +211,68 @@ struct Translator<'a> {
     pattern: &'a str,
     /// Emit `fancy-regex` syntax: lookaround and backreferences are kept.
     fancy: bool,
+    /// Annex B reading (no `u` flag).
+    legacy: bool,
+    /// Capturing groups in the pattern, and whether any is named.
+    groups: usize,
+    named: bool,
+}
+
+/// Counts capturing groups, skipping escapes and classes.
+fn count_groups(src: &[char]) -> (usize, bool) {
+    let (mut n, mut named, mut i, mut in_class) = (0, false, 0, false);
+    while i < src.len() {
+        match src[i] {
+            '\\' => i += 1,
+            '[' if !in_class => in_class = true,
+            ']' if in_class => in_class = false,
+            '(' if !in_class => match (src.get(i + 1), src.get(i + 2)) {
+                (Some('?'), Some('<')) if !matches!(src.get(i + 3), Some('=' | '!')) => {
+                    n += 1;
+                    named = true;
+                }
+                (Some('?'), _) => {}
+                _ => n += 1,
+            },
+            _ => {}
+        }
+        i += 1;
+    }
+    (n, named)
 }
 
 const ASCII_WORD: &str = "[A-Za-z0-9_]";
 
 impl<'a> Translator<'a> {
-    fn new(pattern: &'a str, fancy: bool) -> Translator<'a> {
+    fn new(pattern: &'a str, fancy: bool, dialect: Dialect) -> Translator<'a> {
+        let src: Vec<char> = pattern.chars().collect();
+        let (groups, named) = count_groups(&src);
         Translator {
-            src: pattern.chars().collect(),
+            src,
             i: 0,
             out: String::with_capacity(pattern.len() + 8),
             pattern,
             fancy,
+            legacy: dialect == Dialect::Legacy,
+            groups,
+            named,
         }
+    }
+
+    /// Annex B B.1.2 LegacyOctalEscapeSequence: up to three octal digits,
+    /// the first already read, at most 0o377.
+    fn octal(&mut self, first: char) -> ClassAtom {
+        let mut v = first.to_digit(8).unwrap_or(0);
+        for _ in 0..2 {
+            match self.peek().and_then(|d| d.to_digit(8)) {
+                Some(d) if v * 8 + d <= 0o377 => {
+                    self.i += 1;
+                    v = v * 8 + d;
+                }
+                _ => break,
+            }
+        }
+        ClassAtom::Char(char::from_u32(v).unwrap_or('\0'))
     }
 }
 
@@ -389,6 +465,10 @@ impl Translator<'_> {
             'f' => ClassAtom::Char('\u{C}'),
             'r' => ClassAtom::Char('\r'),
             '0' if !self.peek().is_some_and(|d| d.is_ascii_digit()) => ClassAtom::Char('\0'),
+            '0'..='7' if self.legacy && (c == '0' || in_class || self.backref_beyond(c)) => {
+                self.octal(c)
+            }
+            '8' | '9' if self.legacy && (in_class || self.backref_beyond(c)) => ClassAtom::Char(c),
             '1'..='9' if !in_class => {
                 if !self.fancy {
                     return self.fail("backreferences need backtracking");
@@ -400,6 +480,7 @@ impl Translator<'_> {
                 }
                 ClassAtom::Set(format!("\\{n}"))
             }
+            'k' if self.legacy && !self.named => ClassAtom::Char('k'),
             'k' if self.peek() == Some('<') => {
                 if !self.fancy {
                     return self.fail("named backreferences need backtracking");
@@ -419,8 +500,21 @@ impl Translator<'_> {
                     self.i += 1;
                     ClassAtom::Char(char::from((l as u8) % 32))
                 }
+                // Annex B ClassControlLetter.
+                Some(l) if self.legacy && in_class && (l.is_ascii_digit() || l == '_') => {
+                    self.i += 1;
+                    ClassAtom::Char(char::from((l as u8) % 32))
+                }
+                // Annex B: a backslash, and `c` read again as itself.
+                _ if self.legacy => {
+                    self.i -= 1;
+                    ClassAtom::Char('\\')
+                }
                 _ => return self.fail(r"\c must be followed by an ASCII letter"),
             },
+            'x' if self.legacy && self.peek_hex(2).is_none() => ClassAtom::Char('x'),
+            'u' if self.legacy && self.peek_hex(4).is_none() => ClassAtom::Char('u'),
+            'p' | 'P' if self.legacy => ClassAtom::Char(c),
             'x' => {
                 let h = self
                     .hex_digits(2)
@@ -486,11 +580,34 @@ impl Translator<'_> {
                 }
                 return self.fail(r"unterminated \p{...}");
             }
+            // Annex B IdentityEscape: any other character is itself.
+            c if self.legacy => ClassAtom::Char(c),
             c if c.is_ascii_alphanumeric() => {
                 return self.fail(format!("unknown escape \\{c}"));
             }
             c => ClassAtom::Char(c),
         })
+    }
+
+    /// `\N` names more groups than the pattern has (it starts at `first`,
+    /// already read).
+    fn backref_beyond(&self, first: char) -> bool {
+        let mut n = first.to_digit(10).unwrap_or(0) as usize;
+        let mut j = self.i;
+        while let Some(d) = self.src.get(j).and_then(|d| d.to_digit(10)) {
+            n = n.saturating_mul(10).saturating_add(d as usize);
+            j += 1;
+        }
+        n > self.groups
+    }
+
+    /// The next `n` characters, when all are hex digits.
+    fn peek_hex(&self, n: usize) -> Option<u32> {
+        let mut v = 0u32;
+        for k in 0..n {
+            v = v * 16 + self.src.get(self.i + k)?.to_digit(16)?;
+        }
+        Some(v)
     }
 
     fn err(&self, reason: &str) -> PatternError {
@@ -678,6 +795,34 @@ mod tests {
         assert!(m("^]$", "]"));
         assert!(m("(?<year>[0-9]{4})", "2024"));
         assert!(m(r"^\p{Lu}$", "Á"));
+    }
+
+    // ECMA-262 Annex B (B.1.2): without the `u` flag, as OpenAPI 3.0 reads
+    // patterns.
+    #[test]
+    fn ecma262_annex_b_in_the_legacy_dialect() {
+        let m = |p: &str, s: &str| {
+            build(&translate_in(p, Dialect::Legacy).unwrap_or_else(|e| panic!("{p}: {e}")))
+                .unwrap()
+                .is_match(s)
+        };
+        assert!(m(r"^\A$", "A"), "identity escape");
+        assert!(
+            m(r"^\c$", "\\c"),
+            "\\c without a letter is a backslash and c"
+        );
+        assert!(m(r"^[\c1]$", "\u{11}"), "class control letter");
+        assert!(m(r"^\x4$", "x4"), "\\x without two hex digits");
+        assert!(m(r"^\u{2}$", "uu"), "\\u{{2}} is u twice");
+        assert!(m(r"^\p{L}$", "p{L}"), "\\p is p");
+        assert!(m(r"^\101$", "A"), "octal escape past the group count");
+        assert!(m(r"^\8$", "8"));
+        assert!(m(r"^\k$", "k"), "\\k without named groups");
+        assert!(m(r"^\0101$", "\u{8}1"), "\\010 is octal, then 1");
+        // The Unicode dialect keeps refusing them.
+        for p in [r"\A", r"\c", r"\x4", r"\8", r"\k"] {
+            assert!(translate_in(p, Dialect::Unicode).is_err(), "{p}");
+        }
     }
 
     #[test]

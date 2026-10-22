@@ -802,10 +802,17 @@ impl Translator<'_> {
             location: location.to_owned(),
             error,
         };
-        let (translated, backtracking) = if self.opts.allow_backtracking {
-            pattern::translate_any(p).map_err(to_err)?
+        // 3.0's JSON Schema reads patterns without the `u` flag (Annex B);
+        // 2020-12 reads them with it.
+        let dialect = if self.version == Version::V30 {
+            pattern::Dialect::Legacy
         } else {
-            (pattern::translate(p).map_err(to_err)?, false)
+            pattern::Dialect::Unicode
+        };
+        let (translated, backtracking) = if self.opts.allow_backtracking {
+            pattern::translate_any_in(p, dialect).map_err(to_err)?
+        } else {
+            (pattern::translate_in(p, dialect).map_err(to_err)?, false)
         };
         self.needs_backtracking |= backtracking;
         pattern::build_any(&translated, backtracking).map_err(|reason| LoadError::Pattern {

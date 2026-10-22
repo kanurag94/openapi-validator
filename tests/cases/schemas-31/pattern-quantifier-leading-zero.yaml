@@ -1,0 +1,12 @@
+title: "A quantifier count may have a leading zero"
+ref: "ECMA-262 §22.2.1 DecimalDigits"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /p:
+      get:
+        parameters: [{name: a, in: query, schema: {type: string, pattern: '^a{01}$'}}]
+        responses: {'200': {description: ok}}
+request: {method: GET, path: /p, query: "a=a"}
+expect: {valid: true}
