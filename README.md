@@ -101,7 +101,7 @@ Measured with `cargo bench` on an Apple M-series machine, using the synthetic do
 
 A valid body is checked faster than parsing it with `serde_json` and checking it with `jsonschema` alone (5.6 µs for the same body), because `multipleOf` uses the library's exact decimals instead of the engine's rational arithmetic.
 
-Where correctness and speed conflict, correctness wins. For example, `enum`, `const` and `uniqueItems` use JSON Schema equality instead of the engine's faster built-ins, and every repeated header line and query value is checked.
+Where correctness and speed conflict, correctness wins. For example, `enum`, `const` and `uniqueItems` use JSON Schema equality instead of the engine's faster built-ins, and every repeated query value is checked, with repeated header lines joined into one value.
 
 ## Testing
 
