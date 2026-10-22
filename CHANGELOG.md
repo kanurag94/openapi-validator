@@ -18,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Every JSON Schema 2020-12 format, and OpenAPI's byte, float and double.
 - Lint warnings for documents that break a MUST, listed by `Spec::warnings()`, and `Options::strict_document` to refuse them.
 - `Options::gateway_profile()`, which switches on the stricter choices the defaults no longer make.
+- Swagger 2.0 documents, read as the OpenAPI 3.0 they convert to.
+- OpenAPI 3.2.1 and 3.1.2: form-data read as ordered named parts when its schema is an array, XML nulls in 3.1, and their document rules.
+- `ReadWritePresence`, to refuse readOnly properties in requests and writeOnly ones in responses (in the gateway profile).
+- Exploded map query parameters, which take every pair no other parameter names.
+- Lint for 3.1 and 3.2 schemas against the JSON Schema 2020-12 meta-schema, unique tag names, 3.2 tag parents, repeated template expressions and server URLs with a query.
 - Reports for repeated `Authorization` and `Content-Type` lines, and for content in responses to HEAD and in 204 and 304 responses.
 
 ### Changed
@@ -27,6 +32,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - YAML `<<` keys merge mappings by default; `Options::yaml_merge_keys` turns this off.
 - A server variable without `enum` matches any value.
 - `Set-Cookie` response headers are read one value per line, and never split on commas.
+- A header sent on several lines is one comma-joined value (RFC 9110 §5.3), so a scalar sent twice is refused.
+- Templates that differ only in parameter names load as one path with a warning instead of refusing the document.
+- OpenAPI 3.0 patterns follow ECMA-262 Annex B (no `u` flag), so `\A` is the letter A; 3.1 and 3.2 keep the `u` flag.
+- OpenAPI 3.0 request bodies on GET, HEAD and DELETE are ignored, as 3.0.4 says.
+- In 3.1 and later, an Encoding Object's `style` and `explode` apply to multipart parts.
 - `Version` has a `V32` variant and is `#[non_exhaustive]`.
 - `MatchedOperation::method` is an `additionalOperations` key, as written, for those operations.
 
