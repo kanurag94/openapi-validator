@@ -71,9 +71,6 @@ impl Decimal {
             let s = i;
             while let Some(c) = b.get(i).filter(|c| c.is_ascii_digit()) {
                 exp = exp.saturating_mul(10).saturating_add(i64::from(c - b'0'));
-                if exp > MAX_EXPONENT * 2 {
-                    return None;
-                }
                 i += 1;
             }
             if i == s {
@@ -139,7 +136,7 @@ impl Decimal {
 
     fn cmp_abs(&self, other: &Decimal) -> Ordering {
         match (self.is_zero(), other.is_zero()) {
-            (true, true) => return Ordering::Equal,
+            // Two zeros fall through: equal magnitude and no digits.
             (true, false) => return Ordering::Less,
             (false, true) => return Ordering::Greater,
             _ => {}
@@ -178,8 +175,9 @@ impl Decimal {
             // if 10^-k divides a, which cannot happen.
             return false;
         }
-        // Fast path: b below 2^64 keeps every product below 2^128.
-        if divisor.digits.len() <= 19 && self.digits.len() <= 38 {
+        // Fast path: b below 2^64 keeps every product below 2^128; an a that
+        // does not fit u128 takes the big-integer path.
+        if divisor.digits.len() <= 19 {
             if let (Ok(a), Ok(b)) = (self.digits.parse::<u128>(), divisor.digits.parse::<u128>()) {
                 return (a % b * pow10_mod(k as u128, b)).is_multiple_of(b);
             }
@@ -204,12 +202,8 @@ impl Decimal {
         if self.is_zero() {
             return Some(0);
         }
-        if self.magnitude() > 39 {
-            return None;
-        }
-        let mut s = self.digits.clone();
-        s.extend(std::iter::repeat_n('0', usize::try_from(self.exp).ok()?));
-        let v: i128 = s.parse().ok()?;
+        let v: i128 = self.digits.parse().ok()?;
+        let v = v.checked_mul(10i128.checked_pow(u32::try_from(self.exp).ok()?)?)?;
         Some(if self.negative { -v } else { v })
     }
 
@@ -325,6 +319,11 @@ mod tests {
         assert!(Decimal::parse("1e1000000000").is_none());
         assert!(Decimal::parse("1e-99999999999999999999").is_none());
         assert!(Decimal::parse("0e8000").is_some_and(|z| z.is_zero()));
+        let digits = |n: usize| "1".repeat(n);
+        assert!(Decimal::parse(&digits(MAX_DIGITS)).is_some());
+        assert!(Decimal::parse(&digits(MAX_DIGITS + 1)).is_none());
+        assert!(Decimal::parse(&format!("1.{}", digits(MAX_DIGITS - 1))).is_some());
+        assert!(Decimal::parse(&format!("1.{}", digits(MAX_DIGITS))).is_none());
     }
 
     #[test]
@@ -336,6 +335,8 @@ mod tests {
         assert!(d("0.1") > d("0.09999999999999999999999"));
         assert!(d("1e-400") > d("0"));
         assert!(d("-1e-400") < d("0"));
+        assert!(d("0") < d("1e-400"));
+        assert!(d("0") < d("5"));
         assert!(d("1e309") > d("1.7976931348623157e308"));
     }
 
@@ -369,12 +370,84 @@ mod tests {
         assert!(!d("1.5").is_multiple_of(&d("1")));
         assert!(d("0").is_multiple_of(&d("3.3")));
         assert!(!d("3").is_multiple_of(&d("0")));
+        assert!(!d("4").is_multiple_of(&d("-2")));
+        // A divisor past 2^64 must not take the 128-bit path.
+        assert!(!d("1e40").is_multiple_of(&d("10000000000000000000000000001")));
+        assert!(d("1e40").is_multiple_of(&d("8000000000000000000000")));
         assert!(d("9007199254740993").is_multiple_of(&d("3")));
         assert!(!d("9007199254740994").is_multiple_of(&d("3")));
     }
 
+    // Every case against plain big-integer division: a·10^k mod b.
+    #[test]
+    fn multiple_of_matches_big_integer_division() {
+        let mut seed = 0x9e37_79b9_7f4a_7c15_u64;
+        let mut next = |n: usize| {
+            let mut s = String::new();
+            for _ in 0..n {
+                seed ^= seed << 13;
+                seed ^= seed >> 7;
+                seed ^= seed << 17;
+                s.push(char::from(b'0' + (seed % 10) as u8));
+            }
+            s.trim_start_matches('0').trim_end_matches('0').to_owned()
+        };
+        let mut checked = 0;
+        for (na, nb) in [(3, 2), (12, 5), (30, 19), (45, 19), (25, 21), (60, 30)] {
+            for k in [0u32, 1, 7, 40] {
+                let (a, b) = (next(na), next(nb));
+                if a.is_empty() || b.is_empty() {
+                    continue;
+                }
+                let big = |x: &str| BigUint::parse_bytes(x.as_bytes(), 10).unwrap();
+                let want = (big(&a) * BigUint::from(10u32).pow(k) % big(&b)).is_zero();
+                let got = d(&format!("{a}e{k}")).is_multiple_of(&d(&b));
+                assert_eq!(got, want, "{a}e{k} / {b}");
+                // b·a·10^k is always a multiple of b.
+                let prod = format!("{}e{k}", big(&a) * big(&b));
+                assert!(d(&prod).is_multiple_of(&d(&b)), "{prod} / {b}");
+                checked += 1;
+            }
+        }
+        assert!(checked > 20);
+        // Divisors made of twos and fives divide a·10^k only for large
+        // enough k, so every bit of k matters.
+        for (i, j) in [(20u32, 0u32), (0, 13), (7, 11), (45, 2), (70, 3)] {
+            let b = BigUint::from(2u32).pow(i) * BigUint::from(5u32).pow(j);
+            for k in 0..80u32 {
+                let want = k >= i.max(j);
+                let got = d(&format!("3e{k}")).is_multiple_of(&d(&b.to_string()));
+                assert_eq!(got, want, "3e{k} / 2^{i}·5^{j}");
+            }
+        }
+    }
+
+    #[test]
+    fn canonical_text() {
+        assert_eq!(d("-0").to_canonical(), "0");
+        assert_eq!(d("1e2").to_canonical(), "100");
+        assert_eq!(d("-12.50").to_canonical(), "-125e-1");
+        assert_eq!(d("1e32").to_canonical(), format!("1{}", "0".repeat(32)));
+        assert_eq!(d("1e33").to_canonical(), "1e33");
+        assert_eq!(d("1.5").as_f64_lossy(), 1.5);
+        assert_eq!(d("-2e400").as_f64_lossy(), f64::NEG_INFINITY);
+        assert!(d("-2").is_negative() && !d("-0").is_negative() && !d("2").is_negative());
+    }
+
     #[test]
     fn i128_and_counts() {
+        assert_eq!(
+            d("170141183460469231731687303715884105727").to_i128(),
+            Some(i128::MAX)
+        );
+        assert_eq!(d("170141183460469231731687303715884105728").to_i128(), None);
+        assert_eq!(
+            d("17014118346046923173168730371588410572.7e1").to_i128(),
+            Some(i128::MAX)
+        );
+        assert_eq!(d("2e38").to_i128(), None);
+        assert_eq!(d("1e4096").to_i128(), None);
+        assert_eq!(d("1.5").to_i128(), None);
         assert_eq!(d("9223372036854775807").to_i128(), Some(i64::MAX as i128));
         assert_eq!(
             d("-9.2233720368547758080e18").to_i128(),
