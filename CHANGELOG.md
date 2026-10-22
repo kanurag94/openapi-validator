@@ -38,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - OpenAPI 3.0 request bodies on GET, HEAD and DELETE are ignored, as 3.0.4 says.
 - In 3.1 and later, an Encoding Object's `style` and `explode` apply to multipart parts.
 - `Version` has a `V32` variant and is `#[non_exhaustive]`.
+- C ABI: `oav_options` has a new last field, `read_write_presence`; earlier fields keep their offsets. Callers that build `oav_options` themselves rather than through `oav_options_default` must set it.
 - `MatchedOperation::method` is an `additionalOperations` key, as written, for those operations.
 
 ## [0.1.0] - 2026-10-21

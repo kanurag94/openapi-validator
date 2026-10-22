@@ -93,9 +93,6 @@ pub struct OavOptions {
     pub integers: c_int,
     /// 0 by version (default), 1 relax `required` in 3.1 too.
     pub read_write_required: c_int,
-    /// 0 allow readOnly in requests and writeOnly in responses (default),
-    /// 1 refuse them.
-    pub read_write_presence: c_int,
     /// 0 bounded backtracking (default), 1 refuse such patterns at load.
     pub patterns: c_int,
     /// Refuse documents that break a MUST of the specification.
@@ -110,6 +107,9 @@ pub struct OavOptions {
     pub max_body_depth: usize,
     pub security_hook: OavSecurityHook,
     pub security_hook_data: *mut c_void,
+    /// 0 allow readOnly in requests and writeOnly in responses (default),
+    /// 1 refuse them. Added after v0.1.0, so it comes last.
+    pub read_write_presence: c_int,
 }
 
 #[repr(C)]
