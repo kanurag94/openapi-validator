@@ -10,6 +10,7 @@ The defaults follow the specification text. Where the text leaves a reading open
 
 - **Trailing slashes.** The specification is silent. A path ending in `/` that matches no template is retried without the slash.
 - **Path variables.** A variable matches one or more characters within a single segment. Segments are percent-decoded one at a time, so `%2F` never creates a new segment (RFC 3986 §2.2).
+- **Repeated template names.** 3.2 §4.8.2 says a name MUST NOT appear twice in a template; 3.0 and 3.1 are silent. Such a template loads with a warning, and the parameter is checked at each place it appears.
 - **Several variables in one segment.** Each variable takes the shortest run that lets the next literal follow, and a final literal must end the segment.
 - **Ties between templates.** §4.8.8.2 only says concrete paths beat templated ones. Among templates, the one with the most literal characters wins, then the one whose first differing segment is literal.
 - **Templates that differ only in parameter names.** §4.8.8.2 says they MUST NOT exist, as they are identical. They load as one path with a warning: each operation reads its own template's parameter names, and a method both describe keeps the first. `strict_document` refuses the document instead.

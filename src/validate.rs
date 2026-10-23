@@ -548,13 +548,13 @@ impl Spec {
                         report.push(ProblemKind::MissingParameter, label.as_str(), "is required");
                     }
                 }
+                // A name the template repeats takes a value at each place.
                 (ParamValue::Schema { shape, .. }, In::Path) => {
-                    let Some((_, raw)) = vars.iter().find(|(n, _)| *n == p.name) else {
-                        continue;
-                    };
-                    match path_value(p, raw, shape) {
-                        Ok(v) => self.check_param_value(p, v, &label, report),
-                        Err(m) => report.push(ProblemKind::InvalidParameter, label.as_str(), m),
+                    for (_, raw) in vars.iter().filter(|(n, _)| *n == p.name) {
+                        match path_value(p, raw, shape) {
+                            Ok(v) => self.check_param_value(p, v, &label, report),
+                            Err(m) => report.push(ProblemKind::InvalidParameter, label.as_str(), m),
+                        }
                     }
                 }
                 (ParamValue::Schema { shape, .. }, In::Header) => {
