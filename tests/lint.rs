@@ -382,3 +382,19 @@ fn example_and_examples_are_exclusive() {
         assert!(warnings(&one).is_empty(), "{:?}", warnings(&one));
     }
 }
+
+// JSON Schema 2020-12 §6.4: a 3.1 pattern SHOULD be valid ECMA-262, read
+// with the `u` flag, where `\-` outside a class is not an escape. 3.0 reads
+// patterns without the flag, where it is.
+#[test]
+fn loose_unicode_escapes_in_patterns() {
+    let doc = |v: &str| {
+        format!("openapi: {v}\ninfo: {{title: t, version: '1'}}\npaths:\n  /x:\n    get:\n      parameters: [{{name: a, in: query, schema: {{type: string, pattern: '^a\\-b$'}}}}]\n      responses: {{'200': {{description: ok}}}}\n")
+    };
+    warns(&doc("3.1.0"), "Unicode mode");
+    assert!(
+        warnings(&doc("3.0.4")).is_empty(),
+        "{:?}",
+        warnings(&doc("3.0.4"))
+    );
+}

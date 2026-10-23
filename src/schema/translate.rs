@@ -32,6 +32,7 @@ use std::collections::{HashMap, HashSet};
 
 use serde_json::{json, Map, Value};
 
+use super::PATTERN_UTF16;
 use crate::doc::{self, LoadError, Version, Warning};
 use crate::format;
 use crate::number;
@@ -644,7 +645,14 @@ impl Translator<'_> {
                             // Kept for messages only.
                             out.insert("x-oav-pattern-src".into(), Value::String(p.to_owned()));
                         }
-                        out.insert(k.clone(), Value::String(translated));
+                        // 3.0 patterns match UTF-16 code units, which the
+                        // engine's own `pattern` cannot do.
+                        let key = if self.version == Version::V30 {
+                            PATTERN_UTF16.to_owned()
+                        } else {
+                            k.clone()
+                        };
+                        out.insert(key, Value::String(translated));
                     }
                 }
                 "type" => {
@@ -862,6 +870,15 @@ impl Translator<'_> {
         } else {
             (pattern::translate_in(p, dialect).map_err(to_err)?, false)
         };
+        // JSON Schema 2020-12 §6.4: patterns SHOULD be valid ECMA-262, read
+        // here with the `u` flag; escapes only the legacy grammar allows are
+        // read as their character, and flagged.
+        if dialect == pattern::Dialect::Unicode && !pattern::is_strict_unicode(p) {
+            self.warn(
+                location,
+                format!("pattern {p:?} uses an escape ECMA-262's Unicode mode does not allow"),
+            );
+        }
         self.needs_backtracking |= backtracking;
         pattern::build_any(&translated, backtracking).map_err(|reason| LoadError::Pattern {
             location: location.to_owned(),

@@ -1,0 +1,16 @@
+title: "Without the u flag surrogate escapes match the code units of an astral character"
+ref: "OpenAPI 3.0.4 §4.7.24.1; ECMA-262 §22.2.2 (no u flag)"
+document: |
+  openapi: 3.0.4
+  info: {title: t, version: "1"}
+  paths:
+    /x:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {type: object, properties: {s: {type: string, pattern: '^\uD83D[\uDC00-\uDFFF]$'}}}
+        responses: {"200": {description: ok}}
+request: {method: POST, path: /x, headers: [["Content-Type", "application/json"]], body: '{"s": "😀"}'}
+expect: {valid: true}

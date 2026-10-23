@@ -162,6 +162,30 @@ pub(crate) fn fragment(ptr: &str) -> String {
     out
 }
 
+/// The keyword a translated OpenAPI 3.0 `pattern` is checked under: its
+/// input is read as UTF-16 code units (see [`crate::pattern::utf16_view`]).
+pub(crate) const PATTERN_UTF16: &str = "x-oav-pattern16";
+
+struct PatternUtf16(Option<crate::pattern::Matcher>);
+
+impl<'i> Keyword<'i> for PatternUtf16 {
+    fn validate(&self, instance: &'i Value) -> Result<(), ValidationError<'i>> {
+        if self.is_valid(instance) {
+            Ok(())
+        } else {
+            Err(ValidationError::custom("must match the pattern"))
+        }
+    }
+
+    /// A match that hits the step limit is invalid, never accepted.
+    fn is_valid(&self, instance: &'i Value) -> bool {
+        match (instance, &self.0) {
+            (Value::String(s), Some(m)) => m.is_match(&crate::pattern::utf16_view(s)) == Some(true),
+            _ => true,
+        }
+    }
+}
+
 struct LexicalInteger;
 
 impl<'i> Keyword<'i> for LexicalInteger {
@@ -541,6 +565,14 @@ impl SchemaStore {
             .offline()
             .should_validate_formats(dir.assert_formats)
             .should_ignore_unknown_formats(true)
+            .with_keyword(PATTERN_UTF16, |_: &Map<String, Value>, v: &Value, _| {
+                let m = v.as_str().and_then(|t| {
+                    crate::pattern::build_any(t, false)
+                        .or_else(|_| crate::pattern::build_any(t, true))
+                        .ok()
+                });
+                Ok(Box::new(PatternUtf16(m)) as Box<dyn for<'i> Keyword<'i>>)
+            })
             .with_keyword("x-oav-int", |_: &Map<String, Value>, _: &Value, _| {
                 Ok(Box::new(LexicalInteger) as Box<dyn for<'i> Keyword<'i>>)
             })

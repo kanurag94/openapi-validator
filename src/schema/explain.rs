@@ -11,7 +11,7 @@ use std::collections::{HashMap, HashSet};
 
 use serde_json::Value;
 
-use super::{DirStore, SchemaStore};
+use super::{DirStore, SchemaStore, PATTERN_UTF16};
 use crate::doc;
 use crate::format;
 use crate::number::{self, Decimal};
@@ -527,10 +527,16 @@ impl<'a> Explainer<'a> {
                         self.push(ipath, format!("must be at most {n} characters long"));
                     }
                 }
-                "pattern" => {
+                "pattern" | PATTERN_UTF16 => {
                     let (Some(s), Some(p)) = (inst.as_str(), kv.as_str()) else {
                         continue;
                     };
+                    let s = if k == PATTERN_UTF16 {
+                        crate::pattern::utf16_view(s)
+                    } else {
+                        std::borrow::Cow::Borrowed(s)
+                    };
+                    let s = s.as_ref();
                     if let Some(re) = self.store.regex(p) {
                         if re.is_match(s).is_none() {
                             self.push(

@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `Options::strict_mode`, also in the C ABI, to refuse messages on readings the specifications leave open. The gateway profile turns it on.
 - A lint warning for `example` and `examples` together on a parameter, media type or header, which the specifications make mutually exclusive.
+- A lint warning for a 3.1 or 3.2 pattern with an escape, such as `\-` outside a class, that ECMA-262's Unicode mode does not allow.
 
 ### Changed
 
@@ -24,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A path parameter whose name the template repeats is checked at every place, not only the first.
 - `date-time` refuses a leap second that does not end a month in UTC (RFC 3339 §5.7).
 - `email` reads address literals by RFC 5321 §4.1.3: at most six IPv6 groups beside `::`, and IPv4 numbers with leading zeros.
+- OpenAPI 3.0 patterns match UTF-16 code units, as ECMA-262 does without the `u` flag, so `^.$` no longer matches a character outside the Basic Multilingual Plane.
 
 ## [0.2.0] - 2026-10-22
 

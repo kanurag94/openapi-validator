@@ -25,6 +25,12 @@
 //! and `c`, `\x`, `\u` and `\p` without their digits are letters, `\0` and
 //! `\1`–`\9` past the group count are octal escapes (or the digits 8 and 9),
 //! and `\k` is the letter k when the pattern has no named groups.
+//!
+//! Without the `u` flag a pattern and its input are sequences of UTF-16
+//! code units, so `.` matches half of a character outside the Basic
+//! Multilingual Plane. The legacy dialect keeps that meaning: surrogate code
+//! units are mapped to private-use code points (see [`utf16_view`]), in the
+//! pattern by translation and in the input before matching.
 
 use std::fmt;
 
@@ -63,6 +69,56 @@ const SPACE_RANGES: &[(u32, u32)] = &[
     (0x3000, 0x3000),
     (0xFEFF, 0xFEFF),
 ];
+
+/// Where surrogate code units go in the legacy dialect: U+F0000 onwards,
+/// private-use code points that no UTF-16 view of a string contains as
+/// themselves (they are outside the Basic Multilingual Plane).
+const SURROGATE_BASE: u32 = 0xF0000;
+
+/// A UTF-16 code unit as a `char`: surrogates are mapped.
+fn unit(u: u32) -> char {
+    let v = if (0xD800..=0xDFFF).contains(&u) {
+        SURROGATE_BASE + (u - 0xD800)
+    } else {
+        u
+    };
+    char::from_u32(v).unwrap_or('\u{FFFD}')
+}
+
+/// The code unit a translated `char` stands for.
+fn unit_of(c: char) -> u32 {
+    let v = c as u32;
+    if (SURROGATE_BASE..SURROGATE_BASE + 0x800).contains(&v) {
+        v - SURROGATE_BASE + 0xD800
+    } else {
+        v
+    }
+}
+
+/// A character's UTF-16 code units, mapped.
+fn units(c: char) -> (char, Option<char>) {
+    let mut buf = [0u16; 2];
+    match c.encode_utf16(&mut buf) {
+        [u] => (unit(u32::from(*u)), None),
+        [h, l] => (unit(u32::from(*h)), Some(unit(u32::from(*l)))),
+        _ => (c, None),
+    }
+}
+
+/// A string as the legacy dialect sees it: each character outside the
+/// Basic Multilingual Plane becomes its two (mapped) surrogate code units.
+pub fn utf16_view(s: &str) -> std::borrow::Cow<'_, str> {
+    if s.chars().all(|c| (c as u32) <= 0xFFFF) {
+        return std::borrow::Cow::Borrowed(s);
+    }
+    let mut out = String::with_capacity(s.len() + 8);
+    for c in s.chars() {
+        let (h, l) = units(c);
+        out.push(h);
+        out.extend(l);
+    }
+    std::borrow::Cow::Owned(out)
+}
 
 /// Ranges of Unicode scalar values not in `ranges` (sorted, disjoint),
 /// skipping the surrogate block, which no `char` can hold.
@@ -170,6 +226,15 @@ pub fn translate_any_in(pattern: &str, dialect: Dialect) -> Result<(String, bool
     }
 }
 
+/// Whether a pattern is valid in ECMA-262's Unicode mode, which
+/// [`translate`] reads more loosely: it also takes identity escapes such as
+/// `\-` outside a class, which only the legacy grammar allows.
+pub fn is_strict_unicode(pattern: &str) -> bool {
+    let mut t = Translator::new(pattern, true, Dialect::Unicode);
+    t.strict_unicode = true;
+    t.run().is_ok()
+}
+
 /// Steps `fancy-regex` may take for one match before giving up.
 pub const BACKTRACK_LIMIT: usize = 100_000;
 
@@ -216,6 +281,10 @@ struct Translator<'a> {
     /// Capturing groups in the pattern, and whether any is named.
     groups: usize,
     named: bool,
+    /// The low surrogate of a character split into code units, read next.
+    pending: Option<char>,
+    /// Refuse identity escapes the `u` flag's grammar does not allow.
+    strict_unicode: bool,
 }
 
 /// Counts capturing groups, skipping escapes and classes.
@@ -256,7 +325,20 @@ impl<'a> Translator<'a> {
             legacy: dialect == Dialect::Legacy,
             groups,
             named,
+            pending: None,
+            strict_unicode: false,
         }
+    }
+
+    /// In the legacy dialect, a character outside the Basic Multilingual
+    /// Plane is two atoms: its high surrogate now and its low one next.
+    fn split(&mut self, c: char) -> char {
+        if !self.legacy {
+            return c;
+        }
+        let (h, l) = units(c);
+        self.pending = l;
+        h
     }
 
     /// Annex B B.1.2 LegacyOctalEscapeSequence: up to three octal digits,
@@ -309,6 +391,9 @@ impl Translator<'_> {
                     match atom {
                         ClassAtom::Char(c) => push_literal(&mut self.out, c),
                         ClassAtom::Set(s) => self.out.push_str(&s),
+                    }
+                    if let Some(l) = self.pending.take() {
+                        push_literal(&mut self.out, l);
                     }
                 }
                 '.' => self.out.push_str(r"[^\n\r\x{2028}\x{2029}]"),
@@ -379,7 +464,13 @@ impl Translator<'_> {
                 '}' => self.out.push_str(r"\}"),
                 ']' => self.out.push_str(r"\]"),
                 '^' | '$' | '|' | '*' | '+' | '?' => self.out.push(c),
-                c => push_literal(&mut self.out, c),
+                c => {
+                    let h = self.split(c);
+                    push_literal(&mut self.out, h);
+                    if let Some(l) = self.pending.take() {
+                        push_literal(&mut self.out, l);
+                    }
+                }
             }
         }
         if depth != 0 {
@@ -513,7 +604,10 @@ impl Translator<'_> {
                 _ => return self.fail(r"\c must be followed by an ASCII letter"),
             },
             'x' if self.legacy && self.peek_hex(2).is_none() => ClassAtom::Char('x'),
-            'u' if self.legacy && self.peek_hex(4).is_none() => ClassAtom::Char('u'),
+            'u' if self.legacy => match self.hex_digits(4) {
+                Some(u) => ClassAtom::Char(unit(u)),
+                None => ClassAtom::Char('u'),
+            },
             'p' | 'P' if self.legacy => ClassAtom::Char(c),
             'x' => {
                 let h = self
@@ -581,9 +675,14 @@ impl Translator<'_> {
                 return self.fail(r"unterminated \p{...}");
             }
             // Annex B IdentityEscape: any other character is itself.
-            c if self.legacy => ClassAtom::Char(c),
+            c if self.legacy => ClassAtom::Char(self.split(c)),
             c if c.is_ascii_alphanumeric() => {
                 return self.fail(format!("unknown escape \\{c}"));
+            }
+            // §22.2.1 IdentityEscape[+UnicodeMode]: only a SyntaxCharacter
+            // or `/`; `-` only inside a class (ClassEscape, read there).
+            c if self.strict_unicode && !"^$\\.*+?()[]{}|/".contains(c) => {
+                return self.fail(format!("\\{c} is not an identity escape in Unicode mode"));
             }
             c => ClassAtom::Char(c),
         })
@@ -627,6 +726,9 @@ impl Translator<'_> {
     }
 
     fn class_atom(&mut self) -> Result<Option<ClassAtom>, PatternError> {
+        if let Some(l) = self.pending.take() {
+            return Ok(Some(ClassAtom::Char(l)));
+        }
         match self.peek() {
             None => self.fail("unterminated character class"),
             Some(']') => Ok(None),
@@ -640,7 +742,7 @@ impl Translator<'_> {
             }
             Some(c) => {
                 self.i += 1;
-                Ok(Some(ClassAtom::Char(c)))
+                Ok(Some(ClassAtom::Char(self.split(c))))
             }
         }
     }
@@ -660,13 +762,33 @@ impl Translator<'_> {
             };
             any = true;
             // A range needs `-` followed by an atom other than `]`.
-            let is_range = self.peek() == Some('-') && self.peek_at(1).is_some_and(|c| c != ']');
+            let is_range = self.pending.is_none()
+                && self.peek() == Some('-')
+                && self.peek_at(1).is_some_and(|c| c != ']');
             if is_range {
                 self.i += 1;
                 let Some(second) = self.class_atom()? else {
                     return self.fail("unterminated character class");
                 };
                 match (first, second) {
+                    (ClassAtom::Char(a), ClassAtom::Char(b)) if self.legacy => {
+                        // A range of code units; its surrogate part is mapped.
+                        let (a, b) = (unit_of(a), unit_of(b));
+                        if a > b {
+                            return self.fail("character class range out of order");
+                        }
+                        for (lo, hi) in [
+                            (a, b.min(0xD7FF)),
+                            (a.max(0xD800), b.min(0xDFFF)),
+                            (a.max(0xE000), b),
+                        ] {
+                            if lo <= hi {
+                                push_class_char(&mut items, unit(lo));
+                                items.push('-');
+                                push_class_char(&mut items, unit(hi));
+                            }
+                        }
+                    }
                     (ClassAtom::Char(a), ClassAtom::Char(b)) => {
                         if a > b {
                             return self.fail("character class range out of order");
@@ -823,6 +945,58 @@ mod tests {
         for p in [r"\A", r"\c", r"\x4", r"\8", r"\k"] {
             assert!(translate_in(p, Dialect::Unicode).is_err(), "{p}");
         }
+    }
+
+    // Without the `u` flag, patterns and input are UTF-16 code units
+    // (ECMA-262 §22.2.2, [~UnicodeMode]).
+    #[test]
+    fn legacy_dialect_reads_utf16_code_units() {
+        let m = |p: &str, s: &str| {
+            build(&translate_in(p, Dialect::Legacy).unwrap_or_else(|e| panic!("{p}: {e}")))
+                .unwrap()
+                .is_match(&utf16_view(s))
+        };
+        assert!(!m("^.$", "😀"), "one dot is one code unit");
+        assert!(m("^..$", "😀"));
+        assert!(m("^.$", "é"));
+        assert!(m("^😀$", "😀"));
+        assert!(
+            !m("^😀+$", "😀😀"),
+            "the quantifier repeats the low surrogate only"
+        );
+        assert!(m(r"^\uD83D\uDE00$", "😀"));
+        assert!(m(r"^\uD83D.$", "😀"), "a lone surrogate escape");
+        assert!(m(r"^[\uD800-\uDBFF][\uDC00-\uDFFF]$", "😀"));
+        assert!(m(r"^[\u0000-\uFFFF]{2}$", "😀"));
+        assert!(!m(r"^[\u0000-\uFFFF]$", "😀"));
+        assert!(m("^[😀]{2}$", "😀"), "a class holds each code unit");
+        assert!(m(r"^[^a]{2}$", "😀"));
+        assert!(m(r"^\S\S$", "😀"));
+        assert!(
+            translate_in("[😀-x]", Dialect::Legacy).is_err(),
+            "low surrogate to x"
+        );
+        // The Unicode dialect matches characters.
+        assert!(compile("^.$").unwrap().is_match("😀"));
+    }
+
+    // ECMA-262 §22.2.1 IdentityEscape[+UnicodeMode]: a SyntaxCharacter or
+    // `/`, and `-` only in a class.
+    #[test]
+    fn unicode_dialect_identity_escapes() {
+        for c in "^$\\.*+?()[]{}|/".chars() {
+            let p = format!("^\\{c}$");
+            assert!(m(&p, &c.to_string()), "{p}");
+        }
+        assert!(m(r"^[\-]$", "-"));
+        assert!(m(r"^[a\-z]$", "-"));
+        assert!(is_strict_unicode(r"^[a\-z]\/\.$"));
+        // Others are read as the character, and flagged.
+        for p in [r"\-", r"a\-b", r"\é", r"\ ", r"\@", r"\'"] {
+            assert!(!is_strict_unicode(p), "{p}");
+            assert!(translate(p).is_ok(), "{p}");
+        }
+        assert!(m(r"^a\-b$", "a-b"));
     }
 
     #[test]
