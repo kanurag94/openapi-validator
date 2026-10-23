@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - An invalid percent-escape in an undeclared query parameter is reported (RFC 3986 §2.1).
 - A path parameter whose name the template repeats is checked at every place, not only the first.
 - `date-time` refuses a leap second that does not end a month in UTC (RFC 3339 §5.7).
+- `email` reads address literals by RFC 5321 §4.1.3: at most six IPv6 groups beside `::`, and IPv4 numbers with leading zeros.
 
 ## [0.2.0] - 2026-10-22
 

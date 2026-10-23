@@ -549,13 +549,58 @@ pub fn is_email(s: &str) -> bool {
         return false;
     }
     if let Some(lit) = domain.strip_prefix('[').and_then(|d| d.strip_suffix(']')) {
-        // RFC 5321 §4.1.3: the "IPv6:" tag is case-insensitive.
+        // RFC 5321 §4.1.3: the "IPv6:" tag is case-insensitive, and IPv6 is
+        // the only Standardized-tag registered with IANA.
         return match lit.get(..5).filter(|t| t.eq_ignore_ascii_case("IPv6:")) {
-            Some(_) => is_ipv6(&lit[5..]),
-            None => is_ipv4(lit),
+            Some(_) => is_smtp_ipv6(&lit[5..]),
+            None => is_smtp_ipv4(lit),
         };
     }
     is_hostname(domain)
+}
+
+/// RFC 5321 §4.1.3 `IPv4-address-literal`: four `Snum`, decimal 0 to 255
+/// in one to three digits.
+fn is_smtp_ipv4(s: &str) -> bool {
+    let parts: Vec<&str> = s.split('.').collect();
+    parts.len() == 4
+        && parts.iter().all(|p| {
+            (1..=3).contains(&p.len())
+                && p.bytes().all(|c| c.is_ascii_digit())
+                && p.parse::<u16>().is_ok_and(|v| v <= 255)
+        })
+}
+
+/// RFC 5321 §4.1.3 `IPv6-addr`: eight groups, or at most six beside `::`;
+/// six groups and an IPv4 literal, or at most four beside `::`.
+fn is_smtp_ipv6(s: &str) -> bool {
+    let groups = |t: &str| -> Option<usize> {
+        if t.is_empty() {
+            return Some(0);
+        }
+        t.split(':')
+            .all(|g| (1..=4).contains(&g.len()) && g.bytes().all(|c| c.is_ascii_hexdigit()))
+            .then(|| t.split(':').count())
+    };
+    let (hex, v4) = match s.rfind(':') {
+        Some(i) if s[i + 1..].contains('.') => {
+            if !is_smtp_ipv4(&s[i + 1..]) {
+                return false;
+            }
+            // Keep a "::" that ends just before the IPv4 part.
+            let head = &s[..i];
+            (if head.ends_with(':') { &s[..=i] } else { head }, true)
+        }
+        _ => (s, false),
+    };
+    let full = if v4 { 6 } else { 8 };
+    match hex.split_once("::") {
+        None => groups(hex) == Some(full),
+        Some((a, b)) if !b.contains("::") => {
+            matches!((groups(a), groups(b)), (Some(x), Some(y)) if x + y <= full - 2)
+        }
+        Some(_) => false,
+    }
 }
 
 // RFC 3986 §2 character classes.
@@ -999,6 +1044,28 @@ mod tests {
         assert!(is_email("joe@[127.0.0.1]"));
         assert!(is_email("joe@[IPv6:::1]"));
         assert!(is_email("joe@[ipv6:::1]"));
+        // RFC 5321 §4.1.3 address literals.
+        assert!(is_email("a@[IPv6:1:2:3:4:5:6:7:8]"));
+        assert!(is_email("a@[IPv6:1:2:3::4:5:6]"));
+        assert!(is_email("a@[IPv6:1:2:3:4:5:6:1.2.3.4]"));
+        assert!(is_email("a@[IPv6:1:2:3:4::1.2.3.4]"));
+        assert!(is_email("a@[IPv6:::1.2.3.4]"));
+        assert!(is_email("a@[IPv6:::]"));
+        assert!(is_email("a@[01.2.3.4]"), "Snum allows leading zeros");
+        assert!(
+            !is_email("a@[IPv6:1:2:3:4:5:6:7::]"),
+            "seven groups beside ::"
+        );
+        assert!(!is_email("a@[IPv6:1::2::3]"));
+        assert!(
+            !is_email("a@[IPv6:1:2:3:4:5::1.2.3.4]"),
+            "five groups beside :: and IPv4"
+        );
+        assert!(!is_email("a@[IPv6:1:2:3:4:5:6:7]"));
+        assert!(!is_email("a@[IPv6:hello]"));
+        assert!(!is_email("a@[IPv6:1:2:3:4:5:6:7:8%eth0]"));
+        assert!(!is_email("a@[256.1.1.1]"));
+        assert!(!is_email("a@[foo:bar]"), "an unregistered tag");
         assert!(!is_email("joe..bloggs@example.com"));
         assert!(!is_email("@example.com"));
         assert!(!is_email("joe@"));
