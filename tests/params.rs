@@ -470,3 +470,22 @@ fn parameter_must_violations_load_with_warnings() {
     bad(get(&s, "/q/1", "b=x", &[]), "query.b");
     bad(get(&s, "/q/1", "c=x", &[]), "query.c");
 }
+
+// RFC 3986 §2.1: an invalid percent-escape is reported once, at its
+// parameter, whether or not the parameter is declared.
+#[test]
+fn invalid_escapes_reported_once() {
+    let s = spec(
+        "/k",
+        r#"{"name": "q", "in": "query", "schema": {"type": "string"}}"#,
+    );
+    for query in ["q=%zz", "x=%zz", "q=1&x=%2"] {
+        let r = get(&s, "/k", query, &[]);
+        assert_eq!(r.problems().len(), 1, "{query}: {r}");
+        assert_eq!(
+            r.problems()[0].kind,
+            ProblemKind::MalformedQuery,
+            "{query}: {r}"
+        );
+    }
+}

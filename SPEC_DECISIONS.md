@@ -26,7 +26,7 @@ The defaults follow the specification text. Where the text leaves a reading open
 
 - **Typed values.** §4.8.12 defines serialization, not parsing. Text becomes a number only if it is a JSON number literal, and a boolean only if it is `true` or `false`. When a schema allows several types, the value is valid if any reading is valid.
 - **Plus signs in queries.** RFC 3986 gives `+` no meaning, but browsers send it for a space. It is read as a space by default; the option `query_plus_as_space` turns this off.
-- **Query separators.** Query strings are split on `&` only, so `;` stays inside values (RFC 3986 §3.4). An invalid percent-escape is reported, and there is no limit on the number of pairs.
+- **Query separators.** Query strings are split on `&` only, so `;` stays inside values (RFC 3986 §3.4). An invalid percent-escape is reported in any pair, declared or not (RFC 3986 §2.1), and there is no limit on the number of pairs.
 - **Exploded objects.** Only the schema's declared properties are taken from the query, as in the §4.8.12.4 style table. An object with none of them present is absent. An object that declares no properties is a map, and takes every pair no other parameter of the operation names (RFC 6570 §3.2.8).
 - **Nested values in exploded objects.** RFC 6570 leaves these undefined. Repeated pairs form an array, and an object may be sent as JSON text or as `name[key]=value` pairs.
 - **Nested deepObject keys.** §4.8.12.4 defines one level. Deeper keys such as `a[b][c]=v` nest, and `a[]=v` appends to an array.

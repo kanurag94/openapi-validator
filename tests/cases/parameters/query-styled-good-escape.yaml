@@ -1,0 +1,15 @@
+title: "Pairs read by deepObject and exploded object parameters are not reported as undeclared escapes"
+ref: "RFC 3986 §2.1, §3.4"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /k:
+      get:
+        parameters:
+          - {name: q, in: query, schema: {type: string}}
+          - {name: filter, in: query, style: deepObject, explode: true, schema: {type: object, properties: {n: {type: string}}}}
+          - {name: obj, in: query, explode: true, schema: {type: object, properties: {a: {type: string}}}}
+        responses: {"200": {description: ok}}
+request: {method: GET, path: /k, query: "filter%5Bn%5D=%41&a=%42"}
+expect: {valid: true}

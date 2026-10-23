@@ -641,6 +641,19 @@ impl Spec {
             }
         }
 
+        // RFC 3986 §2.1: a `%` begins a percent-encoded octet. Declared
+        // parameters report their own malformed values; the rest are here.
+        if !whole_query {
+            for q in pairs.iter().filter(|q| !used_query.contains(&q.name)) {
+                if decode(q.raw, plus).is_err() {
+                    report.push(
+                        ProblemKind::MalformedQuery,
+                        format!("query.{}", truncate(&q.name, 100)),
+                        "has an invalid percent-escape",
+                    );
+                }
+            }
+        }
         if !self.options.allow_unknown_query && !whole_query {
             for q in &pairs {
                 if !used_query.contains(&q.name) && !extra.query.contains(&q.name) {
