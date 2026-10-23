@@ -4,7 +4,7 @@ This document lists where OpenAPI, JSON Schema or the HTTP RFCs are silent, say 
 
 The guiding rule is to never refuse a valid call. Where reasonable people differ, the behaviour is an option. Section numbers refer to OpenAPI 3.1.1 unless stated otherwise. OpenAPI 3.0.4 numbers the same objects one level lower, and 3.2.0 without the `.8`: the Parameter Object is §4.8.12 in 3.1.1, §4.7.12 in 3.0.4 and §4.12 in 3.2.0.
 
-The defaults follow the specification text. `Options::gateway_profile()` switches on stricter, gateway-oriented choices that go beyond it; each is noted below.
+The defaults follow the specification text. Where the text leaves a reading open, the default lets the message through and `Options::strict_mode` refuses it; each such case names strict mode below. `Options::gateway_profile()` switches on strict mode and other gateway-oriented choices that go beyond the text; each is noted below.
 
 ## Routing
 
@@ -53,7 +53,7 @@ The defaults follow the specification text. `Options::gateway_profile()` switche
 
 ## Bodies
 
-- **Missing Content-Type.** If the operation declares exactly one media type that is not a range, it is assumed (RFC 9110 §8.3). Otherwise the problem is reported.
+- **Missing or undescribed Content-Type.** A body without `Content-Type`, or of a type `content` does not describe, is not checked. §4.8.13.1 and §4.8.17.1 list the media types described and make no other type invalid, and RFC 9110 §8.3 leaves an unlabelled body's type to the recipient. A `Content-Type` outside the RFC 9110 §8.3.1 grammar is reported. Strict mode reports both, and assumes the single declared type, if it is not a range, for a body without `Content-Type`.
 - **Media type matching.** The most specific key wins: `type/subtype`, then `type/*`, then `*/*`. Parameters such as `charset` do not prevent a match.
 - **Parsing.** Bodies are parsed by their actual media type: JSON (including `+json`, RFC 6839), form, multipart, XML and `text/*`. Other media types are not parsed.
 - **XML.** Bodies are mapped to JSON through the XML Object and checked against the schema (§4.8.26). Elements the schema does not declare are kept, so `additionalProperties` decides. Document type definitions are allowed, and nesting is bounded.

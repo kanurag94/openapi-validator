@@ -122,6 +122,7 @@ typedef struct {
     oav_security_hook security_hook;   /* optional */
     void *security_hook_data;
     int read_write_presence;           /* 0 allow (default), 1 refuse readOnly in requests, writeOnly in responses */
+    bool strict_mode;                  /* default false: refuse on readings the specifications leave open */
 } oav_options;
 
 typedef struct {

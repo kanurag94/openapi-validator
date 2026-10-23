@@ -1,0 +1,18 @@
+title: "Strict mode: a response Content-Type outside content is unsupported"
+ref: "OpenAPI 3.1.1 §4.8.17, OpenAPI 3.1.1 §4.8.14"
+options: {strict_mode: true}
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /r:
+      get:
+        responses:
+          "200":
+            description: ok
+            content:
+              application/json:
+                schema: {type: object}
+request: {"method": "GET", "path": "/r"}
+response: {"status": 200, "headers": [["Content-Type", "text/html"]], "body": "<p>"}
+expect: {"valid": false, "kind": "unsupported_media_type", "location": "header.content-type"}

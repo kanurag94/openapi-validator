@@ -110,6 +110,9 @@ pub struct OavOptions {
     /// 0 allow readOnly in requests and writeOnly in responses (default),
     /// 1 refuse them. Added after v0.1.0, so it comes last.
     pub read_write_presence: c_int,
+    /// Refuse on readings the specifications leave open. Added after
+    /// v0.2.0, so it comes last.
+    pub strict_mode: bool,
 }
 
 #[repr(C)]
@@ -205,6 +208,7 @@ pub unsafe extern "C" fn oav_options_default(opts: *mut OavOptions) -> c_int {
             max_body_depth: d.max_body_depth,
             security_hook: None,
             security_hook_data: std::ptr::null_mut(),
+            strict_mode: d.strict_mode,
         };
         // SAFETY: `opts` is non-null and points at writable storage.
         unsafe { opts.write(v) };
@@ -247,6 +251,7 @@ fn to_options(o: &OavOptions) -> Result<Options, c_int> {
             _ => return Err(OAV_ERR_RANGE),
         },
         strict_document: o.strict_document,
+        strict_mode: o.strict_mode,
         yaml_merge_keys: o.yaml_merge_keys,
         patterns: match o.patterns {
             0 => PatternEngine::Bounded,

@@ -1,4 +1,4 @@
-title: "A type/* range does not cover another top-level type"
+title: "A type/* range does not cover another top-level type, so the body is not checked"
 ref: "OpenAPI 3.1.1 §4.8.14, RFC 9110 §12.5.1"
 document: |
   openapi: 3.1.0
@@ -13,4 +13,4 @@ document: |
               schema: {type: string}
         responses: {"200": {description: ok}}
 request: {"method": "POST", "path": "/x", "headers": [["Content-Type", "application/json"]], "body": "{}"}
-expect: {"valid": false, "kind": "unsupported_media_type", "location": "header.content-type"}
+expect: {"valid": true}

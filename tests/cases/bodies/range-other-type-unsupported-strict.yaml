@@ -1,0 +1,17 @@
+title: "Strict mode: a type/* range does not cover another top-level type"
+ref: "OpenAPI 3.1.1 §4.8.14, RFC 9110 §12.5.1"
+options: {strict_mode: true}
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /x:
+      post:
+        requestBody:
+          required: true
+          content:
+            text/*:
+              schema: {type: string}
+        responses: {"200": {description: ok}}
+request: {"method": "POST", "path": "/x", "headers": [["Content-Type", "application/json"]], "body": "{}"}
+expect: {"valid": false, "kind": "unsupported_media_type", "location": "header.content-type"}

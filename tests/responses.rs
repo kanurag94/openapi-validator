@@ -249,9 +249,29 @@ fn undeclared_operation() {
 #[test]
 fn response_media_types() {
     let s = spec();
+    let html = respond(
+        &s,
+        "GET",
+        "/r",
+        200,
+        &[("Content-Type", "text/html"), ("X-Rate", "1")],
+        "<p>",
+    );
+    assert!(
+        html.is_valid(),
+        "an undescribed type is not checked:\n{html}"
+    );
+    let strict = Spec::load(
+        DOC.as_bytes(),
+        Options {
+            strict_mode: true,
+            ..Options::default()
+        },
+    )
+    .unwrap();
     bad(
         respond(
-            &s,
+            &strict,
             "GET",
             "/r",
             200,

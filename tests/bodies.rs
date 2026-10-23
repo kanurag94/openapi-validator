@@ -181,11 +181,23 @@ fn media_ranges() {
     ok(post(&s, Some("image/png"), b"\x89PNG"));
     let s = spec(r#""application/json": {"schema": {"type": "object"}}"#);
     ok(post(&s, Some("Application/JSON"), b"{}"));
-    ok(post(&s, None, b"{}"));
+    // A body with no Content-Type, or of an undescribed type, is not checked.
+    ok(post(&s, None, b"[]"));
+    ok(post(&s, Some("text/plain"), b"[]"));
+    let strict = spec_opts(
+        r#""application/json": {"schema": {"type": "object"}}"#,
+        true,
+        Options {
+            strict_mode: true,
+            ..Options::default()
+        },
+    );
+    bad(post(&strict, None, b"[]"), "body");
     kind(
-        &post(&s, Some("text/plain"), b"{}"),
+        &post(&strict, Some("text/plain"), b"{}"),
         ProblemKind::UnsupportedMediaType,
     );
+    // A Content-Type outside RFC 9110 §8.3.1's grammar is malformed.
     kind(
         &post(&s, Some("nonsense"), b"{}"),
         ProblemKind::UnsupportedMediaType,

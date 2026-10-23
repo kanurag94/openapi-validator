@@ -60,13 +60,19 @@ impl Spec {
         }
     }
 
-    /// The `content` entry for a message's `Content-Type`, or a problem.
+    /// The `content` entry for a message's `Content-Type`. A body without a
+    /// Content-Type, or of a type `content` does not describe, has no schema
+    /// to check: §4.8.13.1 and §4.8.17.1 list the media types described and
+    /// make no other type invalid, and RFC 9110 §8.3 leaves an unlabelled
+    /// body's type to the recipient. Strict mode refuses both, assuming a
+    /// single declared type for an unlabelled body.
     pub(crate) fn select_media<'b>(
         &self,
         content: &'b [(MediaType, MediaEntry)],
         content_type: Option<&str>,
         report: &mut Report,
     ) -> Option<(MediaType, &'b MediaEntry)> {
+        let strict = self.options.strict_mode;
         let accepted = || {
             content
                 .iter()
@@ -86,8 +92,7 @@ impl Spec {
                     return None;
                 }
             },
-            // RFC 9110 §8.3: without Content-Type the recipient may assume a
-            // type. With a single declared type, that one is assumed.
+            None if !strict => return None,
             None => match content {
                 [(mt, e)] if mt.ty != "*" && mt.sub != "*" => return Some((mt.clone(), e)),
                 _ => {
@@ -100,22 +105,20 @@ impl Spec {
                 }
             },
         };
-        match best_match(content, &actual) {
-            Some((_, e)) => Some((actual, e)),
-            None => {
-                report.push(
-                    ProblemKind::UnsupportedMediaType,
-                    "header.content-type",
-                    format!(
-                        "{}/{} is not accepted; accepted: {}",
-                        actual.ty,
-                        actual.sub,
-                        accepted()
-                    ),
-                );
-                None
-            }
+        let found = best_match(content, &actual);
+        if found.is_none() && strict {
+            report.push(
+                ProblemKind::UnsupportedMediaType,
+                "header.content-type",
+                format!(
+                    "{}/{} is not accepted; accepted: {}",
+                    actual.ty,
+                    actual.sub,
+                    accepted()
+                ),
+            );
         }
+        found.map(|(_, e)| (actual, e))
     }
 
     /// Checks the items of a sequential body: `itemSchema` each item, and

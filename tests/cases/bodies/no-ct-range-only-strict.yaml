@@ -1,0 +1,17 @@
+title: "Strict mode: with no Content-Type a lone range key does not name a type to assume"
+ref: "OpenAPI 3.1.1 §4.8.13, RFC 9110 §8.3"
+options: {strict_mode: true}
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /x:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/*:
+              schema: {type: object}
+        responses: {"200": {description: ok}}
+request: {"method": "POST", "path": "/x", "body": "{}"}
+expect: {"valid": false, "kind": "unsupported_media_type", "location": "header.content-type"}

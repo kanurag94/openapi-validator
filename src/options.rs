@@ -171,6 +171,10 @@ pub struct Options {
     /// load warning becomes a load error). Default false: such documents
     /// load, with warnings.
     pub strict_document: bool,
+    /// Refuse requests and responses on readings the specifications leave
+    /// open, listed under "strict mode" in SPEC_DECISIONS.md. Default false:
+    /// only what the text makes invalid is refused.
+    pub strict_mode: bool,
     /// Read YAML `<<` keys as merge keys, as most YAML tools do. Default
     /// true; false gives the YAML 1.2 reading (an ordinary key).
     pub yaml_merge_keys: bool,
@@ -204,6 +208,7 @@ impl Default for Options {
             read_write_presence: ReadWritePresence::default(),
             patterns: PatternEngine::default(),
             strict_document: false,
+            strict_mode: false,
             yaml_merge_keys: true,
             query_plus_as_space: true,
         }
@@ -216,9 +221,11 @@ impl Options {
     /// discriminator enforced, OpenAPI 3.0 integers read lexically, and
     /// readOnly/writeOnly relaxing `required` in 3.1 as in 3.0 and refused
     /// where they SHOULD NOT be sent, and patterns that need backtracking
-    /// refused at load. Each goes beyond what the specifications require.
+    /// refused at load, and strict mode. Each goes beyond what the
+    /// specifications require.
     pub fn gateway_profile() -> Options {
         Options {
+            strict_mode: true,
             formats: FormatAssertion::Always,
             discriminator: DiscriminatorMode::Enforce,
             integers: IntegerSemantics::LexicalIn30,
@@ -255,6 +262,7 @@ impl fmt::Debug for Options {
             .field("read_write_presence", &self.read_write_presence)
             .field("patterns", &self.patterns)
             .field("strict_document", &self.strict_document)
+            .field("strict_mode", &self.strict_mode)
             .field("yaml_merge_keys", &self.yaml_merge_keys)
             .field("query_plus_as_space", &self.query_plus_as_space)
             .finish()

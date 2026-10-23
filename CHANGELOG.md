@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `Options::strict_mode`, also in the C ABI, to refuse messages on readings the specifications leave open. The gateway profile turns it on.
+
+### Changed
+
+- A request or response body without `Content-Type`, or of a media type its `content` does not describe, is no longer reported; it is passed without a schema check. Strict mode keeps the old behaviour.
+
 ## [0.2.0] - 2026-10-22
 
 ### Added

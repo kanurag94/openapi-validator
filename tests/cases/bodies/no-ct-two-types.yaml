@@ -1,4 +1,4 @@
-title: "With no Content-Type and two declared types the body type is unknown"
+title: "A body with no Content-Type is not checked when two types are declared"
 ref: "OpenAPI 3.1.1 §4.8.13, RFC 9110 §8.3"
 document: |
   openapi: 3.1.0
@@ -20,4 +20,4 @@ document: |
               schema: {type: object}
         responses: {"200": {description: ok}}
 request: {"method": "POST", "path": "/x", "body": "{}"}
-expect: {"valid": false, "kind": "unsupported_media_type", "location": "header.content-type"}
+expect: {"valid": true}

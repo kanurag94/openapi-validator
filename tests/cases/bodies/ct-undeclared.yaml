@@ -1,4 +1,4 @@
-title: "A Content-Type not among the content keys is unsupported"
+title: "A Content-Type not among the content keys is not checked"
 ref: "OpenAPI 3.1.1 §4.8.14"
 document: |
   openapi: 3.1.0
@@ -17,4 +17,4 @@ document: |
                   age: {type: integer}
         responses: {"200": {description: ok}}
 request: {"method": "POST", "path": "/x", "headers": [["Content-Type", "text/plain"]], "body": "hello"}
-expect: {"valid": false, "kind": "unsupported_media_type", "location": "header.content-type"}
+expect: {"valid": true}

@@ -1,4 +1,4 @@
-title: "With no Content-Type the single declared media type is assumed"
+title: "A body with no Content-Type is not checked against the single declared type"
 ref: "OpenAPI 3.1.1 §4.8.13"
 document: |
   openapi: 3.1.0
@@ -17,4 +17,4 @@ document: |
                   age: {type: integer}
         responses: {"200": {description: ok}}
 request: {"method": "POST", "path": "/x", "body": "{\"age\": \"old\"}"}
-expect: {"valid": false, "kind": "schema_violation", "location": "body/age"}
+expect: {"valid": true}

@@ -1,4 +1,4 @@
-title: "A response Content-Type outside content is unsupported"
+title: "A response body of a type outside content is not checked"
 ref: "OpenAPI 3.1.1 §4.8.17, OpenAPI 3.1.1 §4.8.14"
 document: |
   openapi: 3.1.0
@@ -14,4 +14,4 @@ document: |
                 schema: {type: object}
 request: {"method": "GET", "path": "/r"}
 response: {"status": 200, "headers": [["Content-Type", "text/html"]], "body": "<p>"}
-expect: {"valid": false, "kind": "unsupported_media_type", "location": "header.content-type"}
+expect: {"valid": true}

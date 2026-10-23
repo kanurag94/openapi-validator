@@ -434,7 +434,8 @@ fn request_body_basics() {
         body: b"a,b",
         ..Request::default()
     });
-    assert_eq!(r.problems()[0].kind, ProblemKind::UnsupportedMediaType);
+    // A media type `content` does not describe is not checked.
+    assert!(r.is_valid(), "{r}");
 }
 
 // Recursive anyOf must not cost 2^depth, valid or not.
