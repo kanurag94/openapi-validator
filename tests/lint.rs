@@ -362,3 +362,23 @@ fn schema_keywords_outside_30() {
         "\"if\" is not",
     );
 }
+
+// OpenAPI 3.1.1 §4.8.12.4, §4.8.14.1 and §4.8.21: `example` and `examples`
+// are mutually exclusive on a parameter, a media type and a header.
+#[test]
+fn example_and_examples_are_exclusive() {
+    let both = "example: x, examples: {e: {value: y}}";
+    for v in ["3.0.4", "3.1.0", "3.2.0"] {
+        let head = format!("openapi: {v}\ninfo: {{title: t, version: '1'}}\n");
+        for doc in [
+            format!("{head}paths:\n  /x:\n    get:\n      parameters: [{{name: a, in: query, schema: {{type: string}}, {both}}}]\n      responses: {{'200': {{description: ok}}}}\n"),
+            format!("{head}paths:\n  /x:\n    get:\n      parameters: [{{name: a, in: query, content: {{application/json: {{{both}}}}}}}]\n      responses: {{'200': {{description: ok}}}}\n"),
+            format!("{head}paths:\n  /x:\n    post:\n      requestBody: {{content: {{application/json: {{schema: {{type: string}}, {both}}}}}}}\n      responses: {{'200': {{description: ok}}}}\n"),
+            format!("{head}paths:\n  /x:\n    get:\n      responses: {{'200': {{description: ok, headers: {{X-A: {{schema: {{type: string}}, {both}}}}}}}}}\n"),
+        ] {
+            warns(&doc, "mutually exclusive");
+        }
+        let one = format!("{head}paths:\n  /x:\n    get:\n      parameters: [{{name: a, in: query, schema: {{type: string}}, example: x}}]\n      responses: {{'200': {{description: ok}}}}\n");
+        assert!(warnings(&one).is_empty(), "{:?}", warnings(&one));
+    }
+}

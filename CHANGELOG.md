@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `Options::strict_mode`, also in the C ABI, to refuse messages on readings the specifications leave open. The gateway profile turns it on.
+- A lint warning for `example` and `examples` together on a parameter, media type or header, which the specifications make mutually exclusive.
 
 ### Changed
 

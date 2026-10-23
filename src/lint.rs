@@ -43,10 +43,24 @@ impl<'a> Lint<'a> {
         doc::deref(self.root, v, ptr).ok()
     }
 
+    /// §4.8.12.4, §4.8.14.1, §4.8.21: `example` and `examples` are
+    /// mutually exclusive.
+    fn examples(&mut self, v: &Value, ptr: &str) {
+        if v.get("example").is_some() && v.get("examples").is_some() {
+            self.warn(ptr, "`example` and `examples` are mutually exclusive");
+        }
+    }
+
     fn parameter(&mut self, v: &'a Value, ptr: &str, header_object: bool) {
         let Some((p, ptr)) = self.deref(v, ptr) else {
             return;
         };
+        self.examples(p, &ptr);
+        if let Some(content) = p.get("content").and_then(Value::as_object) {
+            for (k, m) in content {
+                self.examples(m, &doc::join(&doc::join(&ptr, "content"), k));
+            }
+        }
         if header_object {
             for k in ["name", "in"] {
                 if p.get(k).is_some() {
@@ -129,6 +143,7 @@ impl<'a> Lint<'a> {
             } else {
                 (m, mptr)
             };
+            self.examples(m, &mptr);
             if self.version >= Version::V32 {
                 self.positional(&k, m, &mptr);
             }
