@@ -69,8 +69,10 @@ impl Decimal {
                 i += 1;
             }
             let s = i;
+            // Clamped far beyond MAX_EXPONENT, which refuses such values
+            // below, so that the arithmetic after it cannot overflow.
             while let Some(c) = b.get(i).filter(|c| c.is_ascii_digit()) {
-                exp = exp.saturating_mul(10).saturating_add(i64::from(c - b'0'));
+                exp = (exp * 10 + i64::from(c - b'0')).min(1 << 40);
                 i += 1;
             }
             if i == s {
@@ -319,6 +321,12 @@ mod tests {
         assert!(Decimal::parse("1e1000000000").is_none());
         assert!(Decimal::parse("1e-99999999999999999999").is_none());
         assert!(Decimal::parse("0e8000").is_some_and(|z| z.is_zero()));
+        // Exponents past i64 (found by fuzzing): refused, never overflowing.
+        let big = "6".repeat(48);
+        assert!(Decimal::parse(&format!("60000004e{big}")).is_none());
+        assert!(Decimal::parse(&format!("10e{big}")).is_none());
+        assert!(Decimal::parse(&format!("1.5e-{big}")).is_none());
+        assert!(Decimal::parse(&format!("0e{big}")).is_some_and(|z| z.is_zero()));
         let digits = |n: usize| "1".repeat(n);
         assert!(Decimal::parse(&digits(MAX_DIGITS)).is_some());
         assert!(Decimal::parse(&digits(MAX_DIGITS + 1)).is_none());
