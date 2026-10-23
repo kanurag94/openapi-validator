@@ -11,7 +11,7 @@ use std::collections::{HashMap, HashSet};
 
 use serde_json::Value;
 
-use super::{DirStore, SchemaStore, PATTERN_UTF16};
+use super::{DirStore, SchemaStore, PATTERN_UTF16, SHARED_REF};
 use crate::doc;
 use crate::format;
 use crate::number::{self, Decimal};
@@ -353,6 +353,7 @@ impl<'a> Explainer<'a> {
         }
         if let Some((p, t)) = m
             .get("$ref")
+            .or_else(|| m.get(SHARED_REF))
             .and_then(Value::as_str)
             .and_then(|r| self.resolve_ref(r, sptr))
         {
@@ -394,7 +395,7 @@ impl<'a> Explainer<'a> {
             // Built only when a keyword needs its pointer.
             let kp = std::cell::LazyCell::new(|| doc::join(sptr, k));
             match k.as_str() {
-                "$ref" => match kv.as_str().and_then(|r| self.resolve_ref(r, sptr)) {
+                "$ref" | SHARED_REF => match kv.as_str().and_then(|r| self.resolve_ref(r, sptr)) {
                     Some((target_ptr, t)) => self.node(t, &target_ptr, inst, ipath, depth + 1),
                     None => opaque = true,
                 },
@@ -894,6 +895,7 @@ impl<'a> Explainer<'a> {
         for _ in 0..doc::MAX_REF_CHAIN {
             match s
                 .get("$ref")
+                .or_else(|| s.get(SHARED_REF))
                 .and_then(Value::as_str)
                 .and_then(|r| doc::lookup_ref(self.resource, r))
             {

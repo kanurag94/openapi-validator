@@ -1,0 +1,19 @@
+title: "A problem deep in a recursive value is located through each reference"
+ref: "JSON Schema Core 2020-12 §8.2.3.1"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /x:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Root"}
+        responses: {"200": {description: ok}}
+  components:
+    schemas:
+      Root: {type: object, properties: {v: {type: integer}, c: {$ref: "#/components/schemas/Root"}}}
+request: {method: POST, path: /x, headers: [["Content-Type", "application/json"]], body: '{"v": 1, "c": {"v": 2, "c": {"v": "x"}}}'}
+expect: {valid: false, kind: schema_violation, location: body/c/c/v}

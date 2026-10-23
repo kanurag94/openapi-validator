@@ -108,3 +108,55 @@ fn typical_documents_keep_the_full_body_depth() {
     });
     assert!(r.is_valid(), "{r}");
 }
+
+/// Many operations reaching one densely linked set of schemas, as large
+/// public APIs have: each schema is compiled once, not once per operation.
+#[test]
+fn operations_share_the_schemas_they_reach() {
+    if cfg!(debug_assertions) {
+        return;
+    }
+    let (n, ops) = (150, 400);
+    let mut comps = Vec::new();
+    for i in 0..n {
+        let props: Vec<String> = (0..25)
+            .map(|j| {
+                let to = (i * 7 + j * 13) % n;
+                format!(r##""p{j}": {{"anyOf": [{{"type": "string"}}, {{"$ref": "#/components/schemas/C{to}"}}]}}"##)
+            })
+            .collect();
+        comps.push(format!(
+            r#""C{i}": {{"type": "object", "properties": {{{}}}}}"#,
+            props.join(",")
+        ));
+    }
+    let paths: Vec<String> = (0..ops)
+        .map(|i| {
+            format!(r##""/o{i}": {{"get": {{"responses": {{"200": {{"description": "ok", "content": {{"application/json": {{"schema": {{"$ref": "#/components/schemas/C{}"}}}}}}}}}}}}}}"##, i % n)
+        })
+        .collect();
+    let d = format!(
+        r#"{{"openapi": "3.1.0", "info": {{"title": "t", "version": "1"}}, "paths": {{{}}}, "components": {{"schemas": {{{}}}}}}}"#,
+        paths.join(","),
+        comps.join(",")
+    );
+    let s = Spec::load(d.as_bytes(), Options::default()).unwrap();
+    let body = br#"{"p0": "x", "p1": {"p2": "y"}}"#;
+    let t = std::time::Instant::now();
+    for i in 0..ops {
+        let path = format!("/o{i}");
+        let req = Request {
+            method: "GET",
+            path: &path,
+            ..Request::default()
+        };
+        let resp = openapi_validator::Response {
+            status: 200,
+            headers: &[("Content-Type", "application/json")],
+            body,
+        };
+        let r = s.validate_response(&req, &resp);
+        assert!(r.is_valid(), "{r}");
+    }
+    assert!(t.elapsed().as_millis() < 500, "took {:?}", t.elapsed());
+}

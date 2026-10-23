@@ -148,6 +148,8 @@ struct Translator<'a> {
     synthetic: Vec<(String, Value)>,
     pattern_cache: HashMap<String, String>,
     needs_backtracking: bool,
+    /// Some schema has `$id` or a dynamic reference.
+    scoped: bool,
     anchors: Option<HashSet<String>>,
     /// Absolute `$id` (without fragment) to the pointer of its schema.
     ids: Option<HashMap<String, String>>,
@@ -172,11 +174,15 @@ pub fn translate(
         synthetic: Vec::new(),
         pattern_cache: HashMap::new(),
         needs_backtracking: false,
+        scoped: false,
         anchors: None,
         ids: None,
     };
     t.find_discriminators();
     let mut skeleton = Value::Object(Map::new());
+    // Placed once every schema is translated, when it is known whether
+    // references can be shared (see `share_in`).
+    let mut done: Vec<(String, Value)> = Vec::new();
     let mut seen = HashSet::new();
     while let Some(ptr) = t.pending.pop() {
         if !seen.insert(ptr.clone()) || t.covered(&ptr) {
@@ -192,7 +198,7 @@ pub fn translate(
             inherited: HashMap::new(),
         };
         let out = t.schema(src, &ptr, &ctx)?;
-        place(&mut skeleton, root, &ptr, out);
+        done.push((ptr.clone(), out));
         t.done_roots.insert(ptr);
     }
     // Copies of discriminator bases without their dispatch.
@@ -227,12 +233,24 @@ pub fn translate(
                 inherited: HashMap::new(),
             };
             let out = t.schema(src, &p, &ctx)?;
-            place(&mut skeleton, root, &p, out);
+            done.push((p.clone(), out));
             t.done_roots.insert(p);
         }
     }
+    // `$id` and dynamic references have scopes that would cross shared
+    // validators.
+    let share = !t.scoped;
+    for (ptr, mut out) in done {
+        if share {
+            super::share_in(&mut out, false, true, 0);
+        }
+        place(&mut skeleton, root, &ptr, out);
+    }
     let mut synth = Map::new();
-    for (ptr, v) in std::mem::take(&mut t.synthetic) {
+    for (ptr, mut v) in std::mem::take(&mut t.synthetic) {
+        if share {
+            super::share_in(&mut v, false, true, 0);
+        }
         if let Some(name) = ptr.strip_prefix("#/x-oav-nodisc/") {
             synth.insert(name.to_owned(), v);
         }
@@ -542,6 +560,12 @@ impl Translator<'_> {
         for (k, val) in m {
             if v30 && !OAS30_KEYWORDS.contains(&k.as_str()) {
                 continue;
+            }
+            match k.as_str() {
+                "$id" | "$dynamicRef" | "$dynamicAnchor" | "$recursiveRef" | "$recursiveAnchor" => {
+                    self.scoped = true
+                }
+                _ => {}
             }
             let kp = doc::join(ptr, k);
             match k.as_str() {

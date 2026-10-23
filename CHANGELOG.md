@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- A schema that many operations reach through `$ref` is compiled once and shared, instead of once per operation: Stripe's description peaks at 114 MB instead of 3.5 GB, and its first calls take 29 ms instead of 3 s.
 - A request or response body without `Content-Type`, or of a media type its `content` does not describe, is no longer reported; it is passed without a schema check. Strict mode keeps the old behaviour.
 - In OpenAPI 3.0, a `requestBody` on OPTIONS or TRACE is ignored, as on GET, HEAD and DELETE (3.0.4 §4.7.10.1).
 

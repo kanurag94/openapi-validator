@@ -1,0 +1,21 @@
+title: "propertyNames through a reference checks every name"
+ref: "JSON Schema Core 2020-12 §10.3.2.4"
+document: |
+  openapi: 3.1.0
+  info: {title: t, version: "1"}
+  paths:
+    /x:
+      post:
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Root"}
+        responses: {"200": {description: ok}}
+  components:
+    schemas:
+      Root: {type: object, properties: {o: {$ref: "#/components/schemas/Names"}}}
+      Names: {type: object, propertyNames: {$ref: "#/components/schemas/Name"}}
+      Name: {type: string, pattern: "^[a-z]+$"}
+request: {method: POST, path: /x, headers: [["Content-Type", "application/json"]], body: '{"o": {"ok": 1, "fine": 2, "BAD": 3, "also": 4}}'}
+expect: {valid: false, kind: schema_violation}

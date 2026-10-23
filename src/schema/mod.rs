@@ -53,14 +53,24 @@ pub(crate) struct DirStore {
     pub(crate) assert_formats: bool,
 }
 
-pub(crate) struct SchemaStore {
+/// What compiling a validator needs. Every validator it compiles checks a
+/// [`SHARED_REF`] through it, so the target is compiled once per direction.
+struct Compiler {
     registry: Registry<'static>,
+    /// Some pattern needs the bounded backtracking engine.
+    backtracking: bool,
+    /// Validators of [`SHARED_REF`] targets by pointer: requests, responses.
+    shared: [RwLock<HashMap<String, Arc<SharedSlot>>>; 2],
+}
+
+type SharedSlot = OnceLock<Result<Validator, String>>;
+
+pub(crate) struct SchemaStore {
+    compiler: Arc<Compiler>,
     request: DirStore,
     response: DirStore,
     /// Compiled patterns by translated text, shared by both directions.
     patterns: RwLock<HashMap<String, Arc<crate::pattern::Matcher>>>,
-    /// Some pattern needs the bounded backtracking engine.
-    backtracking: bool,
     /// Longest in-place applicator chain in the document.
     in_place_depth: usize,
     /// `(pointer, absolute URI)` of every schema resource with its own `$id`,
@@ -182,6 +192,172 @@ impl<'i> Keyword<'i> for PatternUtf16 {
         match (instance, &self.0) {
             (Value::String(s), Some(m)) => m.is_match(&crate::pattern::utf16_view(s)) == Some(true),
             _ => true,
+        }
+    }
+}
+
+/// The keyword a local `$ref` is rewritten to (see [`share_in`]): the
+/// value is checked by the target's validator, compiled once and shared.
+pub(crate) const SHARED_REF: &str = "x-oav-ref";
+
+/// Holds only weak references, so dropping a `Spec` frees validators that
+/// refer to one another.
+struct SharedRef {
+    compiler: std::sync::Weak<Compiler>,
+    slot: std::sync::Weak<SharedSlot>,
+    dir: Direction,
+    assert_formats: bool,
+    pointer: String,
+}
+
+impl SharedRef {
+    /// Out of line: building a validator takes a large frame, which must
+    /// not sit on the stack at every level of a deep value.
+    #[cold]
+    #[inline(never)]
+    fn compile_into<'s>(
+        &self,
+        c: &Arc<Compiler>,
+        slot: &'s SharedSlot,
+    ) -> &'s Result<Validator, String> {
+        slot.get_or_init(|| c.compile(self.dir, self.assert_formats, &self.pointer))
+    }
+}
+
+impl<'i> Keyword<'i> for SharedRef {
+    fn validate(&self, instance: &'i Value) -> Result<(), ValidationError<'i>> {
+        if self.is_valid(instance) {
+            Ok(())
+        } else {
+            Err(ValidationError::custom(
+                "does not match the referenced schema",
+            ))
+        }
+    }
+
+    /// A reference reached again for the same value, with no value
+    /// consumed in between, is an in-place cycle such as `{anyOf: [S]}`
+    /// inside S; it holds, as `jsonschema` decides such cycles.
+    fn is_valid(&self, instance: &'i Value) -> bool {
+        let (Some(c), Some(slot)) = (self.compiler.upgrade(), self.slot.upgrade()) else {
+            return false;
+        };
+        let key = (
+            Arc::as_ptr(&slot) as usize,
+            instance as *const Value as usize,
+        );
+        let known = CHECKS.with(|c| {
+            let c = c.borrow();
+            c.done
+                .get(&key)
+                .copied()
+                .or(c.active.contains(&key).then_some(true))
+        });
+        if let Some(ok) = known {
+            return ok;
+        }
+        CHECKS.with(|c| c.borrow_mut().active.push(key));
+        let compiled = match slot.get() {
+            Some(v) => v,
+            None => self.compile_into(&c, &slot),
+        };
+        let ok = compiled.as_ref().is_ok_and(|v| v.is_valid(instance));
+        CHECKS.with(|c| {
+            let mut c = c.borrow_mut();
+            c.active.pop();
+            if c.active.is_empty() {
+                c.done.clear();
+            } else if instance.is_object() || instance.is_array() {
+                c.done.insert(key, ok);
+            }
+        });
+        ok
+    }
+}
+
+/// Shared references being checked on this thread, and the outcomes found
+/// so far within the outermost one, by (slot, value) address. Objects and
+/// arrays are parts of the checked value, which does not move during a
+/// check, so their addresses identify them until it ends; strings may be
+/// temporaries (`propertyNames`), so they are not remembered. The memo keeps
+/// recursive `anyOf` and `oneOf` linear, as `jsonschema` does for the
+/// references it resolves itself.
+#[derive(Default)]
+struct Checks {
+    active: Vec<(usize, usize)>,
+    done: HashMap<(usize, usize), bool>,
+}
+
+thread_local! {
+    static CHECKS: std::cell::RefCell<Checks> = std::cell::RefCell::new(Checks::default());
+}
+
+/// Rewrites `$ref`s to local pointers in a translated schema as
+/// [`SHARED_REF`]. `jsonschema` inlines what a `$ref` reaches into each
+/// validator, so a schema that many operations reach was compiled once per
+/// operation; shared, it is compiled once.
+///
+/// Only references below a child value (`properties`, `items`, ...) are
+/// shared: each shared step then checks a smaller value, so the stack grows
+/// with the value's depth, as it does for `jsonschema`'s own references,
+/// while in-place chains (`allOf`, `$ref` on the same value) stay inlined
+/// within the limits the loader measures. A shared reference reports no
+/// annotations, so one is not shared when a schema between it and the
+/// child boundary has `unevaluatedProperties` or `unevaluatedItems`. The
+/// translator does not call this for documents with `$id` or dynamic
+/// references, whose scopes would cross validators.
+///
+/// `below`: a child boundary lies between the root schema and `v`. `clean`:
+/// no schema since the last boundary has `unevaluated*`.
+pub(crate) fn share_in(v: &mut Value, below: bool, clean: bool, depth: usize) {
+    let Value::Object(m) = v else {
+        return;
+    };
+    if depth > 512 {
+        return;
+    }
+    let clean =
+        clean && !m.contains_key("unevaluatedProperties") && !m.contains_key("unevaluatedItems");
+    if below
+        && clean
+        && m.get("$ref")
+            .and_then(Value::as_str)
+            .is_some_and(|r| r.starts_with("#/"))
+    {
+        if let Some(r) = m.remove("$ref") {
+            m.insert(SHARED_REF.into(), r);
+        }
+    }
+    for (k, sub) in m.iter_mut() {
+        // (below and clean for the subschemas, value is a map of schemas)
+        let (below, clean, map) = match k.as_str() {
+            "properties" | "patternProperties" => (true, true, true),
+            // Definitions apply only where they are referenced.
+            "$defs" | "definitions" => (false, true, true),
+            "dependentSchemas" => (below, clean, true),
+            "additionalProperties"
+            | "items"
+            | "prefixItems"
+            | "contains"
+            | "propertyNames"
+            | "unevaluatedProperties"
+            | "unevaluatedItems"
+            | "additionalItems" => (true, true, false),
+            "allOf" | "anyOf" | "oneOf" | "not" | "if" | "then" | "else" => (below, clean, false),
+            _ => continue,
+        };
+        match sub {
+            Value::Object(o) if map => {
+                for x in o.values_mut() {
+                    share_in(x, below, clean, depth + 1);
+                }
+            }
+            Value::Array(a) => {
+                for x in a {
+                    share_in(x, below, clean, depth + 1);
+                }
+            }
+            x => share_in(x, below, clean, depth + 1),
         }
     }
 }
@@ -483,9 +659,10 @@ impl SchemaStore {
         // not schema keywords, so the registry would not find them while
         // indexing the document; each outermost one is added on its own.
         let embedded = outermost_ids(&t.resource);
+        let resource = t.resource;
         let registry = Registry::new()
             .draft(Draft::Draft202012)
-            .add(DOC_URI, t.resource)
+            .add(DOC_URI, resource)
             .and_then(|b| b.extend(embedded))
             .and_then(|b| b.prepare())
             .map_err(|e| LoadError::Invalid {
@@ -494,11 +671,14 @@ impl SchemaStore {
             })?;
         Ok((
             SchemaStore {
-                registry,
+                compiler: Arc::new(Compiler {
+                    registry,
+                    backtracking: t.needs_backtracking,
+                    shared: [RwLock::new(HashMap::new()), RwLock::new(HashMap::new())],
+                }),
                 request: DirStore::new(Direction::Request, request_roots, opts.assert_formats),
                 response: DirStore::new(Direction::Response, response_roots, opts.assert_formats),
                 patterns: RwLock::new(HashMap::new()),
-                backtracking: t.needs_backtracking,
                 in_place_depth: m.depth,
                 ids: OnceLock::new(),
             },
@@ -549,6 +729,16 @@ impl SchemaStore {
     }
 
     pub(crate) fn resource(&self) -> Option<&Value> {
+        self.compiler.resource()
+    }
+
+    fn compile(&self, dir: &DirStore, pointer: &str) -> Result<Validator, String> {
+        self.compiler.compile(dir.dir, dir.assert_formats, pointer)
+    }
+}
+
+impl Compiler {
+    fn resource(&self) -> Option<&Value> {
         let base = jsonschema::uri::from_str(DOC_URI).ok()?;
         self.registry
             .resolver(base)
@@ -557,14 +747,47 @@ impl SchemaStore {
             .map(|r| r.contents())
     }
 
-    fn compile(&self, dir: &DirStore, pointer: &str) -> Result<Validator, String> {
-        let key = dir_key(dir.dir);
+    /// The slot of the shared validator for `pointer`.
+    fn slot(&self, dir: Direction, pointer: &str) -> Arc<SharedSlot> {
+        let map = &self.shared[dir as usize];
+        if let Some(s) = map.read().ok().and_then(|m| m.get(pointer).cloned()) {
+            return s;
+        }
+        let mut m = map.write().unwrap_or_else(|e| e.into_inner());
+        Arc::clone(m.entry(pointer.to_owned()).or_default())
+    }
+
+    fn compile(
+        self: &Arc<Self>,
+        dir: Direction,
+        assert_formats: bool,
+        pointer: &str,
+    ) -> Result<Validator, String> {
+        let key = dir_key(dir);
+        let weak = Arc::downgrade(self);
         let mut opts = jsonschema::options()
             .with_draft(Draft::Draft202012)
             .with_registry(&self.registry)
             .offline()
-            .should_validate_formats(dir.assert_formats)
+            .should_validate_formats(assert_formats)
             .should_ignore_unknown_formats(true)
+            .with_keyword(SHARED_REF, move |_: &Map<String, Value>, v: &Value, _| {
+                let pointer = v
+                    .as_str()
+                    .and_then(crate::doc::canonical_pointer)
+                    .unwrap_or_default();
+                let slot = weak
+                    .upgrade()
+                    .map(|c| Arc::downgrade(&c.slot(dir, &pointer)))
+                    .unwrap_or_default();
+                Ok(Box::new(SharedRef {
+                    compiler: weak.clone(),
+                    slot,
+                    dir,
+                    assert_formats,
+                    pointer,
+                }) as Box<dyn for<'i> Keyword<'i>>)
+            })
             .with_keyword(PATTERN_UTF16, |_: &Map<String, Value>, v: &Value, _| {
                 let m = v.as_str().and_then(|t| {
                     crate::pattern::build_any(t, false)
@@ -706,7 +929,9 @@ impl SchemaStore {
         }
         format!("{base_text}#{}", fragment(&format!("#/{}", rest.join("/"))))
     }
+}
 
+impl SchemaStore {
     fn root_validator<'d>(
         &self,
         dir: &'d DirStore,
