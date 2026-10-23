@@ -1,0 +1,18 @@
+title: "A form-data part read in order still needs a form-data disposition"
+ref: "RFC 7578 §4.2, OpenAPI 3.2.1 §4.14.5.1"
+document: |
+  openapi: 3.2.0
+  info: {title: t, version: "1"}
+  paths:
+    /x:
+      post:
+        requestBody:
+          required: true
+          content:
+            multipart/form-data:
+              schema:
+                type: array
+                items: {type: object}
+        responses: {"200": {description: ok}}
+request: {"method": "POST", "path": "/x", "headers": [["Content-Type", "multipart/form-data; boundary=B"]], "body": "--B\r\nContent-Disposition: attachment; name=\"id\"\r\n\r\n1\r\n--B--\r\n"}
+expect: {"valid": false, "kind": "malformed_body", "location": "body"}

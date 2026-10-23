@@ -220,6 +220,8 @@ pub(crate) fn form(
 pub(crate) struct Part<'a> {
     /// The `Content-Disposition` name; positional parts need none.
     pub name: Option<String>,
+    /// The `Content-Disposition` type is `form-data`.
+    pub form_data: bool,
     pub content_type: Option<MediaType>,
     pub headers: Vec<(String, String)>,
     pub file: bool,
@@ -287,6 +289,7 @@ pub(crate) fn parts<'a>(body: &'a [u8], boundary: &str) -> Result<Vec<Part<'a>>,
         let head = std::str::from_utf8(head)
             .map_err(|_| "multipart part headers are not UTF-8".to_string())?;
         let mut name = None;
+        let mut form_data = false;
         let mut content_type = None;
         let mut headers = Vec::new();
         let mut file = false;
@@ -297,6 +300,11 @@ pub(crate) fn parts<'a>(body: &'a [u8], boundary: &str) -> Result<Vec<Part<'a>>,
             let k = k.trim();
             headers.push((k.to_owned(), v.trim().to_owned()));
             if k.eq_ignore_ascii_case("content-disposition") {
+                // RFC 6266 §4.2: the disposition type is case-insensitive.
+                form_data = v
+                    .split(';')
+                    .next()
+                    .is_some_and(|t| t.trim().eq_ignore_ascii_case("form-data"));
                 for param in v.split(';').skip(1) {
                     let Some((pk, pv)) = param.split_once('=') else {
                         continue;
@@ -314,12 +322,25 @@ pub(crate) fn parts<'a>(body: &'a [u8], boundary: &str) -> Result<Vec<Part<'a>>,
         }
         out.push(Part {
             name,
+            form_data,
             content_type,
             headers,
             file,
             data,
         });
         pos = next;
+    }
+}
+
+/// RFC 7578 §4.2: each part of a multipart/form-data body MUST have a
+/// `Content-Disposition` of type `form-data` with a `name` parameter.
+pub(crate) fn form_data_name<'p>(part: &'p Part<'_>) -> Result<&'p str, String> {
+    match (&part.name, part.form_data) {
+        (Some(n), true) => Ok(n),
+        (_, false) => {
+            Err("a multipart/form-data part's Content-Disposition is not form-data".into())
+        }
+        (None, true) => Err("a multipart part has no name in Content-Disposition".into()),
     }
 }
 
@@ -362,9 +383,7 @@ pub(crate) fn multipart(
     let mut m = Map::new();
     let mut infos = Vec::new();
     for part in parts(body, boundary)? {
-        let Some(name) = part.name.clone() else {
-            return Err("a multipart part has no name in Content-Disposition".into());
-        };
+        let name = form_data_name(&part)?.to_owned();
         let part = NamedPart { name, part };
         infos.push(PartInfo {
             name: part.name.clone(),

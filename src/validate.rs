@@ -959,6 +959,9 @@ impl Spec {
         let parts = body::parts(bytes, body::boundary(media)?)?;
         let mut out = Vec::with_capacity(parts.len());
         for (i, part) in parts.iter().enumerate() {
+            if media.is_multipart_form() {
+                body::form_data_name(part)?;
+            }
             let at = format!("{location}/{i}");
             let enc = prefix.get(i).or(item);
             if let Some(enc) = enc {

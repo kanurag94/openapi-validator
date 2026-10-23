@@ -65,6 +65,7 @@ The defaults follow the specification text. Where the text leaves a reading open
 - **Text charsets.** UTF-8, US-ASCII and ISO-8859-1 are supported; other charsets are reported as malformed.
 - **Undeclared form fields.** They are kept as properties of the body, so `additionalProperties` decides whether they are allowed.
 - **Reserved characters in form values.** Unencoded reserved characters are accepted even when `allowReserved` is false, since the specification only says they SHOULD be encoded.
+- **Form-data dispositions.** Each `multipart/form-data` part needs a `Content-Disposition` of type `form-data`, in any case, with a `name` (RFC 7578 §4.2).
 - **Multipart parts.** Following §4.8.15.1, object properties default to JSON and arrays take their items' type. File parts are read as text, and line breaks without a carriage return are accepted.
 - **Empty optional bodies.** These are accepted whatever the `Content-Type` (§4.8.13).
 - **Bodies on methods without body semantics.** In 3.0 a `requestBody` SHALL be ignored where RFC 7231 gives a body no defined meaning (3.0.4 §4.7.10.1): GET, HEAD, DELETE, OPTIONS (RFC 7231 §4.3.7) and TRACE (§4.3.8). PATCH bodies are checked, since RFC 5789 defines their meaning for HTTP/1.1. 3.1 and later check a body on every method.
