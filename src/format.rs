@@ -214,7 +214,35 @@ pub fn is_date_time(s: &str) -> bool {
     let Some(t) = rest.strip_prefix(['T', 't']) else {
         return false;
     };
-    is_date(d) && is_time(t)
+    if !is_date(d) {
+        return false;
+    }
+    let Some(t) = parse_time(t) else {
+        return false;
+    };
+    if t.second == 60 {
+        // RFC 3339 §5.7: a leap second falls at the end of a month, in UTC.
+        // The local date is one day either side of the UTC date when the
+        // offset crosses midnight.
+        let (y, m, day) = (
+            digits(&d[0..4], 4).unwrap_or(0),
+            digits(&d[5..7], 2).unwrap_or(0),
+            digits(&d[8..10], 2).unwrap_or(0),
+        );
+        let shift = (t.hour as i32 * 60 + t.minute as i32 - t.offset_minutes).div_euclid(24 * 60);
+        let last = days_in_month(y, m);
+        let month_end = match shift {
+            0 => day == last,
+            // The UTC date is the day before: the local date is the 1st.
+            -1 => day == 1,
+            // The UTC date is the day after: only reachable on the eve.
+            _ => day + 1 == last,
+        };
+        if !month_end {
+            return false;
+        }
+    }
+    true
 }
 
 /// RFC 4122 §3 string representation.
@@ -913,6 +941,14 @@ mod tests {
         assert!(is_date_time("1985-04-12t23:20:50z"));
         assert!(!is_date_time("1985-04-12 23:20:50Z"));
         assert!(!is_date_time("1985-04-12T23:20:50"));
+        // §5.7: a leap second ends a month, in UTC.
+        assert!(is_date_time("1998-12-31T23:59:60Z"));
+        assert!(is_date_time("1990-12-31T15:59:60-08:00"));
+        assert!(is_date_time("2017-01-01T00:59:60+01:00"));
+        assert!(is_date_time("2015-06-30T23:59:60Z"));
+        assert!(!is_date_time("1998-12-30T23:59:60Z"));
+        assert!(!is_date_time("1998-12-31T00:59:60+01:00"));
+        assert!(!is_date_time("1998-12-31T22:59:60Z"));
     }
 
     #[test]

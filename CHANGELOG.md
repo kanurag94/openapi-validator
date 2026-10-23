@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A `multipart/form-data` part whose `Content-Disposition` type is not `form-data` is reported as malformed (RFC 7578 §4.2).
 - An invalid percent-escape in an undeclared query parameter is reported (RFC 3986 §2.1).
 - A path parameter whose name the template repeats is checked at every place, not only the first.
+- `date-time` refuses a leap second that does not end a month in UTC (RFC 3339 §5.7).
 
 ## [0.2.0] - 2026-10-22
 
