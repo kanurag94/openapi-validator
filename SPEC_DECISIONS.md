@@ -67,7 +67,7 @@ The defaults follow the specification text. Where the text leaves a reading open
 - **Reserved characters in form values.** Unencoded reserved characters are accepted even when `allowReserved` is false, since the specification only says they SHOULD be encoded.
 - **Multipart parts.** Following §4.8.15.1, object properties default to JSON and arrays take their items' type. File parts are read as text, and line breaks without a carriage return are accepted.
 - **Empty optional bodies.** These are accepted whatever the `Content-Type` (§4.8.13).
-- **Bodies on GET, HEAD and DELETE.** In 3.0 a `requestBody` on these methods SHALL be ignored (3.0.4 §4.7.10.1), so it is not checked. 3.1 and later check it.
+- **Bodies on methods without body semantics.** In 3.0 a `requestBody` SHALL be ignored where RFC 7231 gives a body no defined meaning (3.0.4 §4.7.10.1): GET, HEAD, DELETE, OPTIONS (RFC 7231 §4.3.7) and TRACE (§4.3.8). PATCH bodies are checked, since RFC 5789 defines their meaning for HTTP/1.1. 3.1 and later check a body on every method.
 - **Encoding styles in multipart.** In 3.1 and later, an Encoding Object that writes `style`, `explode` or `allowReserved` serializes its part in that style (§4.8.15.1), so an unexploded array or object part is one delimited value. 3.0 applies these fields to `application/x-www-form-urlencoded` only.
 - **Size.** Bodies larger than `max_body_bytes` (16 MiB by default) are reported and not parsed.
 

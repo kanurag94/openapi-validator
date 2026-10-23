@@ -1,0 +1,12 @@
+title: "In 3.0 a requestBody on PATCH is checked (RFC 5789 defines its meaning)"
+ref: "OpenAPI 3.0.4 §4.7.10.1, RFC 5789 §2"
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /p:
+      patch:
+        requestBody: {content: {application/json: {schema: {type: object, required: [a]}}}}
+        responses: {'200': {description: ok}}
+request: {method: PATCH, path: /p, headers: [["Content-Type","application/json"]], body: "{}"}
+expect: {valid: false, kind: schema_violation, location: body/a}

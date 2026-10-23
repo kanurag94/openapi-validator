@@ -1,0 +1,12 @@
+title: "In 3.0 a requestBody on TRACE SHALL be ignored"
+ref: "OpenAPI 3.0.4 §4.7.10.1, RFC 7231 §4.3.8"
+document: |
+  openapi: 3.0.3
+  info: {title: t, version: "1"}
+  paths:
+    /p:
+      trace:
+        requestBody: {content: {application/json: {schema: {type: object, required: [a]}}}}
+        responses: {'200': {description: ok}}
+request: {method: TRACE, path: /p, headers: [["Content-Type","application/json"]], body: "{}"}
+expect: {valid: true}

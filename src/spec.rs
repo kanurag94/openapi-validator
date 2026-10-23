@@ -196,11 +196,16 @@ impl<'r> Ctx<'r> {
         reached: Reached,
     ) -> Result<usize, LoadError> {
         let (op, op_ptr) = (it.op, &it.ptr);
-        // OpenAPI 3.0.4 §4.7.10.1: on GET, HEAD and DELETE, where HTTP gives a
-        // body no defined meaning, requestBody SHALL be ignored. 3.1 and
-        // later describe such bodies.
-        let ignored =
-            self.version == Version::V30 && matches!(it.key.as_str(), "get" | "head" | "delete");
+        // OpenAPI 3.0.4 §4.7.10.1: where RFC 7231 gives a body no defined
+        // meaning, requestBody SHALL be ignored: GET, HEAD and DELETE, OPTIONS
+        // (§4.3.7 defines no use) and TRACE (§4.3.8: a client MUST NOT send
+        // one). PATCH bodies have the meaning RFC 5789 defines for HTTP/1.1.
+        // 3.1 and later describe a body on every method.
+        let ignored = self.version == Version::V30
+            && matches!(
+                it.key.as_str(),
+                "get" | "head" | "delete" | "options" | "trace"
+            );
         let body = if ignored {
             None
         } else {
